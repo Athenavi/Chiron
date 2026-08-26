@@ -409,22 +409,84 @@ async function copyShareUrl() {
 
 // ── 批量上传（拖拽 + 多文件） ──
 const uploadFileList = ref<any[]>([])
+const uploadingFiles = ref<Map<string, { progress: number; status: 'uploading' | 'success' | 'error'; error?: string }>>(new Map())
 
 function handleUploadRequest(options: any) {
   const { file, onProgress, onSuccess, onError } = options
+  const fileId = `${file.name}-${file.size}-${file.lastModified}`
+  
+  // 初始化上传状态
+  uploadingFiles.value.set(fileId, { progress: 0, status: 'uploading' })
+  
   // 全局分片上传（断点续传）
   createChunkUpload(file, { purpose: 'media', parentId: currentParentId.value })
     .then((handle) => {
-      handle.onProgress((p) => onProgress?.({ percent: p }))
+      handle.onProgress((p) => {
+        onProgress?.({ percent: p })
+        // 更新详细进度
+        const current = uploadingFiles.value.get(fileId)
+        if (current) {
+          uploadingFiles.value.set(fileId, { ...current, progress: p })
+        }
+      })
       handle.done
-        .then(() => { onSuccess?.(null); message.success(`上传成功: ${file.name}`) })
+        .then(() => { 
+          onSuccess?.(null)
+          uploadingFiles.value.set(fileId, { progress: 100, status: 'success' })
+          message.success(`上传成功: ${file.name}`)
+          // 3秒后移除成功记录
+          setTimeout(() => uploadingFiles.value.delete(fileId), 3000)
+        })
         .catch((err: any) => {
           onError?.(err)
+          uploadingFiles.value.set(fileId, { 
+            progress: 0, 
+            status: 'error', 
+            error: err?.message || '未知错误' 
+          })
           message.error(`上传失败: ${file.name} — ${err?.message || '未知错误'}`)
         })
         .finally(() => { fetchItems() })
     })
-    .catch(() => { message.error(`上传失败: ${file.name} — 初始化失败`) })
+    .catch((err: any) => { 
+      uploadingFiles.value.set(fileId, { 
+        progress: 0, 
+        status: 'error', 
+        error: err?.message || '初始化失败' 
+      })
+      message.error(`上传失败: ${file.name} — 初始化失败`) 
+    })
+}
+
+// 暂停所有上传
+function pauseAllUploads() {
+  // 注意: 这里需要修改 uploader.ts 暴露暂停接口
+  message.info('暂停功能开发中')
+}
+
+// 重试失败的上传
+async function retryFailedUploads() {
+  const failedFiles = Array.from(uploadingFiles.value.entries())
+    .filter(([_, state]) => state.status === 'error')
+    .map(([key]) => key)
+  
+  if (failedFiles.length === 0) {
+    message.info('没有失败的上传任务')
+    return
+  }
+  
+  message.info(`正在重试 ${failedFiles.length} 个失败的上传...`)
+  // TODO: 实现重试逻辑
+}
+
+// 清除已完成的上传记录
+function clearCompletedUploads() {
+  for (const [key, state] of uploadingFiles.value.entries()) {
+    if (state.status === 'success') {
+      uploadingFiles.value.delete(key)
+    }
+  }
+  message.success('已清除完成的上传记录')
 }
 
 // ── 批量选择 ──
@@ -433,6 +495,24 @@ function toggleSelect(item: MediaItem, e: Event) {
   const next = new Set(selectedIds.value)
   if (next.has(item.id)) next.delete(item.id)
   else next.add(item.id)
+  selectedIds.value = next
+}
+
+function selectAll() {
+  selectedIds.value = new Set(items.value.map(i => i.id))
+}
+
+function deselectAll() {
+  selectedIds.value = new Set()
+}
+
+function invertSelection() {
+  const next = new Set<string>()
+  for (const item of items.value) {
+    if (!selectedIds.value.has(item.id)) {
+      next.add(item.id)
+    }
+  }
   selectedIds.value = next
 }
 
@@ -451,6 +531,211 @@ async function batchDelete() {
     message.error(e.response?.data?.error || '批量删除失败')
   } finally {
     batchDeleting.value = false
+  }
+}
+
+// ── 批量移动 ──
+const showBatchMove = ref(false)
+const batchMoveParentId = ref('')
+const batchMoving = ref(false)
+
+async function openBatchMove() {
+  if (selectedIds.value.size === 0) { message.warning('请先选择文件'); return }
+  batchMoveParentId.value = currentParentId.value
+  try {
+    const res = await api.get('/v1/media/folders')
+    const folders: { id: string; name: string; parent_id: string }[] = res.data?.data || []
+    moveTreeData.value = buildMoveTree(folders)
+  } catch {
+    moveTreeData.value = []
+  }
+  showBatchMove.value = true
+}
+
+async function submitBatchMove() {
+  if (selectedIds.value.size === 0) return
+  batchMoving.value = true
+  let successCount = 0
+  let failCount = 0
+  const ids = Array.from(selectedIds.value)
+  
+  for (const id of ids) {
+    try {
+      await api.put(`/v1/media/${id}`, { parent_id: batchMoveParentId.value })
+      successCount++
+    } catch {
+      failCount++
+    }
+  }
+  
+  batchMoving.value = false
+  showBatchMove.value = false
+  
+  if (successCount > 0) {
+    message.success(`成功移动 ${successCount} 个文件`)
+  }
+  if (failCount > 0) {
+    message.error(`${failCount} 个文件移动失败`)
+  }
+  fetchItems()
+}
+
+// ── 批量重命名 ──
+const showBatchRename = ref(false)
+const renamePrefix = ref('')
+const renameSuffix = ref('')
+const renameFindText = ref('')
+const renameReplaceText = ref('')
+const batchRenaming = ref(false)
+
+function openBatchRename() {
+  if (selectedIds.value.size === 0) { message.warning('请先选择文件'); return }
+  renamePrefix.value = ''
+  renameSuffix.value = ''
+  renameFindText.value = ''
+  renameReplaceText.value = ''
+  showBatchRename.value = true
+}
+
+async function submitBatchRename() {
+  if (selectedIds.value.size === 0) return
+  batchRenaming.value = true
+  let successCount = 0
+  let failCount = 0
+  const ids = Array.from(selectedIds.value)
+  
+  for (const id of ids) {
+    const item = items.value.find(i => i.id === id)
+    if (!item) continue
+    
+    let newName = item.name
+    // 应用查找替换
+    if (renameFindText.value) {
+      newName = newName.replace(new RegExp(renameFindText.value, 'g'), renameReplaceText.value)
+    }
+    // 应用前缀和后缀
+    newName = `${renamePrefix.value}${newName}${renameSuffix.value}`
+    
+    try {
+      await api.put(`/v1/media/${id}`, { name: newName })
+      successCount++
+    } catch {
+      failCount++
+    }
+  }
+  
+  batchRenaming.value = false
+  showBatchRename.value = false
+  
+  if (successCount > 0) {
+    message.success(`成功重命名 ${successCount} 个文件`)
+  }
+  if (failCount > 0) {
+    message.error(`${failCount} 个文件重命名失败`)
+  }
+  fetchItems()
+}
+
+// ── 批量标签管理 ──
+const showBatchTags = ref(false)
+const batchTagInput = ref('')
+const batchTagging = ref(false)
+
+function openBatchTags() {
+  if (selectedIds.value.size === 0) { message.warning('请先选择文件'); return }
+  batchTagInput.value = ''
+  showBatchTags.value = true
+}
+
+async function submitBatchTags() {
+  if (selectedIds.value.size === 0 || !batchTagInput.value.trim()) return
+  batchTagging.value = true
+  let successCount = 0
+  let failCount = 0
+  const tagToAdd = batchTagInput.value.trim()
+  const ids = Array.from(selectedIds.value)
+  
+  for (const id of ids) {
+    const item = items.value.find(i => i.id === id)
+    if (!item) continue
+    
+    const currentTags = item.tags || []
+    if (currentTags.includes(tagToAdd)) continue // 已有该标签，跳过
+    
+    const newTags = [...currentTags, tagToAdd]
+    try {
+      await api.put(`/v1/media/${id}`, { tags: newTags })
+      successCount++
+    } catch {
+      failCount++
+    }
+  }
+  
+  batchTagging.value = false
+  showBatchTags.value = false
+  
+  if (successCount > 0) {
+    message.success(`成功为 ${successCount} 个文件添加标签`)
+  }
+  if (failCount > 0) {
+    message.error(`${failCount} 个文件添加标签失败`)
+  }
+  fetchItems()
+}
+
+// ── 批量下载 ──
+async function batchDownload() {
+  const ids = Array.from(selectedIds.value)
+  if (ids.length === 0) return
+  
+  const files = items.value.filter(i => selectedIds.value.has(i.id) && !isFolder(i))
+  if (files.length === 0) {
+    message.warning('选中的项目中没有可下载的文件')
+    return
+  }
+  
+  let successCount = 0
+  let failCount = 0
+  
+  for (const file of files) {
+    try {
+      const url = await resolveMediaUrl({ id: file.id, file_url: file.file_url })
+      const link = document.createElement('a')
+      link.href = normalizeResolved(url, file)
+      link.download = file.name
+      link.click()
+      successCount++
+      // 添加小延迟避免浏览器阻止多个下载
+      await new Promise(resolve => setTimeout(resolve, 200))
+    } catch {
+      failCount++
+    }
+  }
+  
+  if (successCount > 0) {
+    message.success(`开始下载 ${successCount} 个文件`)
+  }
+  if (failCount > 0) {
+    message.error(`${failCount} 个文件下载失败`)
+  }
+}
+
+// ── 键盘快捷键 ──
+function handleKeyboardShortcut(e: KeyboardEvent) {
+  // Ctrl+A: 全选
+  if (e.ctrlKey && e.key === 'a') {
+    e.preventDefault()
+    selectAll()
+  }
+  // Delete: 删除选中项
+  if (e.key === 'Delete' && selectedIds.value.size > 0) {
+    e.preventDefault()
+    batchDelete()
+  }
+  // Escape: 取消选择
+  if (e.key === 'Escape' && selectedIds.value.size > 0) {
+    e.preventDefault()
+    deselectAll()
   }
 }
 
@@ -510,10 +795,12 @@ watch([page, pageSize], () => { fetchItems() })
 onMounted(() => {
   fetchItems()
   window.addEventListener('keydown', onLightboxKey)
+  window.addEventListener('keydown', handleKeyboardShortcut)
 })
 
 onUnmounted(() => {
   window.removeEventListener('keydown', onLightboxKey)
+  window.removeEventListener('keydown', handleKeyboardShortcut)
 })
 </script>
 
@@ -561,10 +848,16 @@ onUnmounted(() => {
     </div>
 
     <div v-if="selectedIds.size > 0" class="batch-bar">
-      <span class="batch-count">已选择 {{ selectedIds.size }} 项</span>
+      <span class="batch-count">已选择 {{ selectedIds.size }} / {{ items.length }} 项</span>
+      <Button size="small" @click="selectAll">全选</Button>
+      <Button size="small" @click="deselectAll">取消选择</Button>
+      <Button size="small" @click="invertSelection">反选</Button>
       <Button size="small" danger :loading="batchDeleting" @click="batchDelete">批量删除</Button>
+      <Button size="small" @click="openBatchMove">批量移动</Button>
+      <Button size="small" @click="openBatchRename">批量重命名</Button>
+      <Button size="small" @click="openBatchTags">批量标签</Button>
+      <Button size="small" @click="batchDownload">批量下载</Button>
       <Button size="small" @click="openKbModal">添加到知识库</Button>
-      <Button size="small" type="text" @click="selectedIds = new Set()">取消选择</Button>
     </div>
 
     <!-- 加载骨架（替代 Spin 空白） -->
@@ -784,18 +1077,57 @@ onUnmounted(() => {
       </div>
     </Modal>
     <!-- 上传（拖拽 + 多文件 + 进度） -->
-    <Modal v-model:open="showUpload" title="上传文件" :width="520" :footer="null" destroy-on-close>
-      <Upload
-        :file-list="uploadFileList"
-        :multiple="true"
-        :custom-request="handleUploadRequest"
-        drag
-        style="width: 100%"
-      >
-        <p class="ant-upload-drag-icon"><CloudUploadOutlined /></p>
-        <p class="ant-upload-text">拖拽文件到此处，或点击选择</p>
-        <p class="ant-upload-hint">支持多文件上传，单文件不超过 50MB</p>
-      </Upload>
+    <Modal v-model:open="showUpload" title="上传文件" :width="640" :footer="null" destroy-on-close>
+      <div class="upload-container">
+        <Upload
+          :file-list="uploadFileList"
+          :multiple="true"
+          :custom-request="handleUploadRequest"
+          drag
+          style="width: 100%"
+        >
+          <p class="ant-upload-drag-icon"><CloudUploadOutlined /></p>
+          <p class="ant-upload-text">拖拽文件到此处，或点击选择</p>
+          <p class="ant-upload-hint">支持多文件上传，单文件不超过 50MB</p>
+        </Upload>
+        
+        <!-- 上传进度列表 -->
+        <div v-if="uploadingFiles.size > 0" class="upload-progress-list">
+          <h4 style="margin: 16px 0 8px; font-size: 14px;">上传进度</h4>
+          <div 
+            v-for="[fileId, state] in uploadingFiles" 
+            :key="fileId"
+            class="upload-item"
+          >
+            <div class="upload-item-header">
+              <span class="upload-filename">{{ fileId.split('-')[0] }}</span>
+              <span 
+                class="upload-status" 
+                :class="state.status"
+              >
+                {{ state.status === 'uploading' ? `${state.progress}%` : 
+                   state.status === 'success' ? '✓ 完成' : 
+                   `✗ ${state.error}` }}
+              </span>
+            </div>
+            <Progress 
+              v-if="state.status === 'uploading'"
+              :percent="state.progress" 
+              :stroke-color="state.progress < 30 ? '#ff4d4f' : state.progress < 70 ? '#faad14' : '#52c41a'"
+              size="small"
+            />
+            <div v-else-if="state.status === 'error'" class="upload-error-detail">
+              {{ state.error }}
+            </div>
+          </div>
+          
+          <!-- 批量操作按钮 -->
+          <div class="upload-actions" style="margin-top: 12px; display: flex; gap: 8px; justify-content: flex-end;">
+            <Button size="small" @click="clearCompletedUploads">清除已完成</Button>
+            <Button size="small" type="primary" @click="retryFailedUploads">重试失败</Button>
+          </div>
+        </div>
+      </div>
     </Modal>
 
     <!-- 添加到知识库 -->
@@ -813,6 +1145,60 @@ onUnmounted(() => {
         <Button type="primary" :loading="uploadingToKb" :disabled="!selectedKbId" @click="uploadToKnowledgeBase">
           开始上传
         </Button>
+      </div>
+    </Modal>
+
+    <!-- 批量移动 -->
+    <Modal v-model:open="showBatchMove" title="批量移动到" :width="400" :confirm-loading="batchMoving" @ok="submitBatchMove">
+      <p>将移动 <strong>{{ selectedIds.size }}</strong> 个选中项</p>
+      <div class="move-tree">
+        <Tree
+          :tree-data="[{ key: '', title: '根目录', children: moveTreeData }]"
+          :default-expand-all="false"
+          :selected-keys="batchMoveParentId ? [batchMoveParentId] : ['']"
+          @select="(keys: any[]) => { if (keys.length) batchMoveParentId = String(keys[0]) }"
+        />
+      </div>
+    </Modal>
+
+    <!-- 批量重命名 -->
+    <Modal v-model:open="showBatchRename" title="批量重命名" :width="500" :confirm-loading="batchRenaming" @ok="submitBatchRename">
+      <p>将为 <strong>{{ selectedIds.size }}</strong> 个文件应用以下规则：</p>
+      <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 12px;">
+        <div>
+          <label style="display: block; margin-bottom: 4px; font-size: 13px; color: var(--text-muted);">前缀</label>
+          <Input v-model:value="renamePrefix" placeholder="例如: [项目A]_" />
+        </div>
+        <div>
+          <label style="display: block; margin-bottom: 4px; font-size: 13px; color: var(--text-muted);">后缀</label>
+          <Input v-model:value="renameSuffix" placeholder="例如: _v2" />
+        </div>
+        <div>
+          <label style="display: block; margin-bottom: 4px; font-size: 13px; color: var(--text-muted);">查找文本</label>
+          <Input v-model:value="renameFindText" placeholder="要替换的文本（支持正则）" />
+        </div>
+        <div>
+          <label style="display: block; margin-bottom: 4px; font-size: 13px; color: var(--text-muted);">替换为</label>
+          <Input v-model:value="renameReplaceText" placeholder="替换后的文本" />
+        </div>
+      </div>
+      <div style="margin-top: 12px; padding: 8px; background: var(--bg-secondary); border-radius: 4px; font-size: 12px; color: var(--text-tertiary);">
+        <strong>示例：</strong>原文件名 "report.pdf" → 前缀 "[2024]_" + 后缀 "_final" = "[2024]_report_final.pdf"
+      </div>
+    </Modal>
+
+    <!-- 批量标签 -->
+    <Modal v-model:open="showBatchTags" title="批量添加标签" :width="400" :confirm-loading="batchTagging" @ok="submitBatchTags">
+      <p>将为 <strong>{{ selectedIds.size }}</strong> 个文件添加标签：</p>
+      <div style="margin-top: 16px;">
+        <Input
+          v-model:value="batchTagInput"
+          placeholder="输入标签名称，回车确认"
+          @press-enter="submitBatchTags"
+        />
+      </div>
+      <div style="margin-top: 8px; font-size: 12px; color: var(--text-tertiary);">
+        提示：如果文件已有该标签，将自动跳过
       </div>
     </Modal>
   </div>
@@ -892,4 +1278,50 @@ onUnmounted(() => {
   .media-total { margin-left: 0; }
 }
 .modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+
+/* 上传进度列表样式 */
+.upload-container { display: flex; flex-direction: column; gap: 12px; }
+.upload-progress-list { max-height: 400px; overflow-y: auto; }
+.upload-item { 
+  padding: 10px; 
+  margin-bottom: 8px; 
+  border: 1px solid var(--border); 
+  border-radius: var(--radius-md); 
+  background: var(--bg-secondary);
+}
+.upload-item-header { 
+  display: flex; 
+  justify-content: space-between; 
+  align-items: center; 
+  margin-bottom: 6px; 
+}
+.upload-filename { 
+  font-size: 13px; 
+  color: var(--text-primary); 
+  white-space: nowrap; 
+  overflow: hidden; 
+  text-overflow: ellipsis; 
+  max-width: 70%;
+}
+.upload-status { 
+  font-size: 12px; 
+  font-weight: 500;
+}
+.upload-status.uploading { color: var(--primary); }
+.upload-status.success { color: #52c41a; }
+.upload-status.error { color: #ff4d4f; }
+.upload-error-detail { 
+  margin-top: 6px; 
+  font-size: 12px; 
+  color: #ff4d4f; 
+  padding: 4px 8px; 
+  background: rgba(255, 77, 79, 0.1); 
+  border-radius: 4px;
+}
+.upload-actions { 
+  margin-top: 12px; 
+  display: flex; 
+  gap: 8px; 
+  justify-content: flex-end; 
+}
 </style>
