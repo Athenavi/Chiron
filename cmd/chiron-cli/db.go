@@ -39,7 +39,7 @@ func getDSN() string {
 	if dsn := os.Getenv("POSTGRES_DSN"); dsn != "" {
 		return dsn
 	}
-	return "postgres://chiron:chiron@localhost:5432/chiron?sslmode=disable"
+	return "postgres://postgres:123456@localhost:5432/chiron0827?sslmode=disable"
 }
 
 // sanitizeDSN 隐藏连接串中的密码，避免打印泄漏

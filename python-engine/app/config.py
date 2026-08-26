@@ -243,7 +243,7 @@ _allowed = set(Settings.model_fields.keys())
 _merged = {k: v for k, v in _db_overrides.items() if k in _allowed}
 
 # 如果网关配置失败且 postgres_dsn 仍为空，尝试从 install.lock 解密获取
-if not _merged and not settings.postgres_dsn and settings.app_secret:
+if not settings.postgres_dsn and settings.app_secret:
     try:
         import json
         import base64

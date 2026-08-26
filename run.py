@@ -57,17 +57,7 @@ SERVICES = {
 }
 
 DEFAULT_ENV = {
-    "LOG_LEVEL": "info",
-    # 生产部署必须通过 .env 显式设置 JWT_SECRET（≥32 字符，随机生成）
-    # 未配置时服务将拒绝启动（Go 网关 config.go 会检测并 fail-fast）
-    "JWT_SECRET": "",  # 必须通过 .env 设置，空值时 Go 网关会拒绝启动 (fail-fast)
-    "POSTGRES_DSN": "postgres://chiron:chiron@localhost:5432/chiron?sslmode=disable",
     "REDIS_ADDR": "localhost:6379",
-    "PYTHON_ENGINE_ADDRESS": "localhost:8000",
-    # 插件 per-user 配置目录：与 Go 网关 PLUGIN_DATA_DIR 指向同一位置
-    "PLUGIN_DATA_DIR": str(BASE_DIR / "data" / "plugins"),
-    # 内部端点共享密钥（Go 网关 LLM_GATEWAY_KEY，插件 reload 等校验）
-    "LLM_GATEWAY_KEY": "",
 }
 
 
@@ -176,7 +166,7 @@ def kill_process(pid: int):
     try:
         if is_windows():
             subprocess.run(["taskkill", "/F", "/PID", str(pid)],
-                          capture_output=True, timeout=5)
+                           capture_output=True, timeout=5)
         else:
             os.kill(pid, signal.SIGTERM)
             time.sleep(1)
@@ -315,7 +305,6 @@ class ServiceManager:
         # 编译 Go
         if not self.build():
             return False
-
 
         # 检查 Python 依赖
         print("  检查 Python 依赖...")

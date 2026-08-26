@@ -3,16 +3,16 @@
   postgres:
     image: pgvector/pgvector:pg16-alpine
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-chiron}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
       # P1 瀹夊叏锛氱敓浜у繀椤昏缃己瀵嗙爜锛涘紑鍙戠幆澧冮粯璁や粎鏈湴鍙闂?
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chiron_dev_change_in_production}
-      POSTGRES_DB: chiron
+      POSTGRES_DB: chiron0827
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U chiron" ]
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -38,8 +38,8 @@
     environment:
       - DB=postgres12
       - DB_PORT=5432
-      - POSTGRES_USER=chiron
-      - POSTGRES_PWD=chiron
+      - POSTGRES_USER=postgres
+      - POSTGRES_PWD=chiron_dev_change_in_production
       - POSTGRES_SEEDS=postgres
     depends_on:
       postgres:
