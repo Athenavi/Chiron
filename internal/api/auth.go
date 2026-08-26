@@ -320,7 +320,7 @@ func (h *AuthHandler) Profile(w http.ResponseWriter, r *http.Request) {
 
 	var settings map[string]interface{}
 	if err := db.ReadPool().QueryRow(r.Context(),
-		`SELECT COALESCE(settings, '{}'::jsonb) FROM users WHERE id = $1`, claims.UserID).Scan(&settings); err != nil {
+		`SELECT COALESCE(settings::jsonb, '{}'::jsonb) FROM users WHERE id = $1`, claims.UserID).Scan(&settings); err != nil {
 		settings = map[string]interface{}{}
 	}
 	OK(w, map[string]interface{}{
@@ -374,7 +374,7 @@ func (h *AuthHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// 局部合并：settings = settings || $n（jsonb 合并保留未提及键）
-		setClauses += fmt.Sprintf("settings = COALESCE(settings, '{}'::jsonb) || $%d::jsonb, ", argIdx)
+		setClauses += fmt.Sprintf("settings = COALESCE(settings::jsonb, '{}'::jsonb) || $%d::jsonb, ", argIdx)
 		args = append(args, string(settingsJSON))
 		argIdx++
 	}

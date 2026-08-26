@@ -64,14 +64,20 @@ func handleActivities(w http.ResponseWriter, r *http.Request) {
 	// Single combined query: UNION ALL across all three tables
 	// Each sub-query returns (workstation, route, title, status, ts)
 	const combinedSQL = `
-		SELECT 'agent'::text, '/agents'::text, COALESCE(name,''), status, created_at FROM agent_sessions
-			WHERE tenant_id = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT $3
+		SELECT * FROM (
+			SELECT 'agent'::text as workstation, '/agents'::text as route, COALESCE(name,'') as title, status, created_at as ts FROM agent_sessions
+				WHERE tenant_id = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT $3
+		) AS agents_sub
 		UNION ALL
-		SELECT 'dialogue'::text, '/chat'::text, COALESCE(title,''), 'active'::text, updated_at FROM sessions
-			WHERE tenant_id = $1 AND user_id = $2 ORDER BY updated_at DESC LIMIT $3
+		SELECT * FROM (
+			SELECT 'dialogue'::text, '/chat'::text, COALESCE(title,''), 'active'::text, updated_at FROM sessions
+				WHERE tenant_id = $1 AND user_id = $2 ORDER BY updated_at DESC LIMIT $3
+		) AS sessions_sub
 		UNION ALL
-		SELECT 'knowledge'::text, '/knowledge'::text, COALESCE(name,''), status, created_at FROM knowledge_documents
-			WHERE tenant_id = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT $3
+		SELECT * FROM (
+			SELECT 'knowledge'::text, '/knowledge'::text, COALESCE(name,''), status, created_at FROM knowledge_documents
+				WHERE tenant_id = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT $3
+		) AS knowledge_sub
 		ORDER BY 5 DESC
 		LIMIT $3
 	`
