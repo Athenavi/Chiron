@@ -338,22 +338,22 @@ func NewGatewayRouter(
 	adminHandler.rateLimiter = distLimiter
 	adminHandler.appSecret = cfg.AppSecret
 
-	// 鈹€鈹€ Route registration by functional domain 鈹€鈹€
+	//€ Route registration by functional domain 鈹€鈹€
 
 	registerPublicEndpoints(mux, authMW, rlMW, publicMW, searchHandler, shareHandler, systemHandler, cfg)
 	registerAgentRoutes(mux, authMW, rlMW, publicMW, sanitizeMW, submitHandler, billingMgr, agentSem, eventHub, sessionMgr, authenticator, rpaHub, cfg.InternalToken)
 	registerAuthRoutes(mux, authHandler, authMW, rlMW)
 
-	// 鈹€鈹€ SSO 涓夋柟鐧诲綍锛堝叕寮€娴佺▼ rlMW锛涚敤鎴疯嚜鍔?authMW锛涚鐞?authMW + sso:manage锛夆攢鈹€
+	//€ SSO 涓夋柟鐧诲綍锛堝叕寮€娴佺▼ rlMW锛涚敤鎴疯嚜鍔?authMW锛涚鐞?authMW + sso:manage锛夆攢鈹€
 	ssoHandler.RegisterPublicRoutes(mux, rlMW)
 	ssoHandler.RegisterUserRoutes(mux, authMW)
 	ssoHandler.RegisterAdminRoutes(mux, authMW)
 
-	// 鈹€鈹€ 浜烘満楠岃瘉锛氬叕寮€閰嶇疆涓嬪彂锛堢櫥褰曢〉鎷夊彇锛? 绠＄悊閰嶇疆 鈹€鈹€
+	//€ 浜烘満楠岃瘉锛氬叕寮€閰嶇疆涓嬪彂锛堢櫥褰曢〉鎷夊彇锛? 绠＄悊閰嶇疆 鈹€鈹€
 	captchaHandler.RegisterPublicRoutes(mux, rlMW)
 	captchaHandler.RegisterAdminRoutes(mux, authMW)
 
-	// 鈹€鈹€ 鐭俊楠岃瘉鐮佺櫥褰曪紙鍏紑娴佺▼ rlMW锛涚敤鎴疯嚜鍔?authMW锛涚鐞?authMW + sso:manage锛夆攢鈹€
+	//€ 鐭俊楠岃瘉鐮佺櫥褰曪紙鍏紑娴佺▼ rlMW锛涚敤鎴疯嚜鍔?authMW锛涚鐞?authMW + sso:manage锛夆攢鈹€
 	smsHandler.RegisterPublicRoutes(mux, rlMW)
 	smsHandler.RegisterUserRoutes(mux, authMW)
 	smsHandler.RegisterAdminRoutes(mux, authMW)
@@ -433,7 +433,7 @@ func NewGatewayRouter(
 	return publicMW(mux)
 }
 
-// 鈹€鈹€ Public endpoints 鈹€鈹€
+//€ Public endpoints 鈹€鈹€
 
 func registerPublicEndpoints(
 	mux *http.ServeMux,
@@ -460,7 +460,7 @@ func registerPublicEndpoints(
 	mux.Handle("GET /v1/internal/engine-config", rlMW(internalTokenMW(cfg, EngineConfig(cfg))))
 }
 
-// 鈹€鈹€ Agent submit/cancel/events 鈹€鈹€
+//€ Agent submit/cancel/events 鈹€鈹€
 
 func registerAgentRoutes(
 	mux *http.ServeMux,
@@ -554,7 +554,7 @@ func registerAgentRoutes(
 	mux.Handle("GET /v1/rpa/clients", rlMW(http.HandlerFunc(RPAClientsHandler(rpaHub, internalToken))))
 }
 
-// 鈹€鈹€ Auth (login / register / logout) 鈹€鈹€
+//€ Auth (login / register / logout) 鈹€鈹€
 
 func registerAuthRoutes(mux *http.ServeMux, authHandler *AuthHandler, authMW, rlMW routeMiddleware) {
 	// Auth (public, rate limited)
@@ -568,7 +568,7 @@ func registerAuthRoutes(mux *http.ServeMux, authHandler *AuthHandler, authMW, rl
 	mux.Handle("PUT /v1/auth/profile", authMW(rlMW(http.HandlerFunc(authHandler.UpdateProfile))))
 }
 
-// 鈹€鈹€ System (install / editor / tools / health / trace) 鈹€鈹€
+//€ System (install / editor / tools / health / trace) 鈹€鈹€
 
 func registerSystemRoutes(
 	mux *http.ServeMux,
@@ -611,7 +611,7 @@ func registerSystemRoutes(
 	}
 }
 
-// 鈹€鈹€ Conversations 鈹€鈹€
+//€ Conversations 鈹€鈹€
 
 func registerConversationRoutes(
 	mux *http.ServeMux,
@@ -632,7 +632,7 @@ func registerConversationRoutes(
 	mux.Handle("DELETE /v1/conversations/{id}/share", authMW(rlMW(http.HandlerFunc(shareHandler.Revoke))))
 }
 
-// 鈹€鈹€ Media 鈹€鈹€
+//€ Media 鈹€鈹€
 
 func registerMediaRoutes(
 	mux *http.ServeMux,
@@ -678,7 +678,7 @@ func registerUserMarketRoutes(mux *http.ServeMux, h *UserMarketHandler, authMW, 
 	mux.Handle("POST /v1/market/{type}/{itemID}/install", authMW(rlMW(http.HandlerFunc(h.Install))))
 }
 
-// 鈹€鈹€ Plugins 鈹€鈹€
+//€ Plugins 鈹€鈹€
 
 func registerPluginRoutes(mux *http.ServeMux, pluginHandler *PluginHandler, authMW, rlMW routeMiddleware) {
 	// Plugins (auth + rate limited)
@@ -689,7 +689,7 @@ func registerPluginRoutes(mux *http.ServeMux, pluginHandler *PluginHandler, auth
 	mux.Handle("DELETE /v1/plugins/{name}", authMW(rlMW(http.HandlerFunc(pluginHandler.Uninstall))))
 }
 
-// 鈹€鈹€ Billing 鈹€鈹€
+//€ Billing 鈹€鈹€
 
 func registerBillingRoutes(mux *http.ServeMux, billingHandler *BillingHandler, authMW, rlMW routeMiddleware) {
 	// Billing (auth + rate limited)
@@ -705,7 +705,7 @@ func registerBillingRoutes(mux *http.ServeMux, billingHandler *BillingHandler, a
 	mux.Handle("GET /v1/billing/usage", authMW(rlMW(http.HandlerFunc(billingHandler.GetUsage))))
 }
 
-// 鈹€鈹€ Python engine proxy routes (graphs / workflows / knowledge base) 鈹€鈹€
+//€ Python engine proxy routes (graphs / workflows / knowledge base) 鈹€鈹€
 
 func registerProxyRoutes(
 	mux *http.ServeMux,
@@ -866,7 +866,7 @@ func registerProxyRoutes(
 	mux.Handle("DELETE /v1/memory/conflicts/{conflict_id}", authMW(rlMW(memP(pathParamNamed("/v1/memory/conflicts", "conflict_id", "")))))
 }
 
-// 鈹€鈹€ Admin 鈹€鈹€
+//€ Admin 鈹€鈹€
 
 func registerAdminRoutes(
 	mux *http.ServeMux,

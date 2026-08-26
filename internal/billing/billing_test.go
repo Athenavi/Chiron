@@ -49,7 +49,7 @@ func (m *mockStore) AtomicAddBalance(ctx context.Context, userID string, amount 
 	return m.balance, nil
 }
 
-// 鈹€鈹€ PaymentStore锛堟祴璇曠┖瀹炵幇锛?鈹€鈹€
+//€ PaymentStore锛堟祴璇曠┖瀹炵幇锛?鈹€鈹€
 func (m *mockStore) CreatePayment(ctx context.Context, p *Payment) error { return nil }
 func (m *mockStore) GetPayment(ctx context.Context, id string) (*Payment, error) {
 	return nil, nil

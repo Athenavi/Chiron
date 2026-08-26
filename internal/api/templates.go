@@ -12,9 +12,6 @@ import (
 	"github.com/athenavi/chiron/internal/id"
 )
 
-// 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
-// 妯℃澘甯傚満锛氬伐浣滄祦 / Agent / 鎶€鑳?涓€閿?浣跨敤"澶嶅埗鍒拌嚜宸辩殑宸ヤ綔鍙?// 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
-
 type TemplateHandler struct {
 	pythonClient *engine.PythonClient
 }
@@ -108,7 +105,6 @@ func (h *TemplateHandler) Use(w http.ResponseWriter, r *http.Request) {
 	case "agent":
 		h.useAgent(w, r, claims, m)
 	case "workflow":
-		// 宸ヤ綔娴佹ā鏉匡細杩斿洖 payload锛屽墠绔姞杞借繘鐢诲竷
 		OK(w, map[string]interface{}{"type": "workflow", "payload": m, "name": t.Name, "description": t.Description})
 	case "skill":
 		h.useSkill(w, r, claims, m)

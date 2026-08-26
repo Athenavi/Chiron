@@ -19,7 +19,7 @@ import (
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
-	// CheckOrigin 涓ユ牸鏍￠獙锛欳ORS_ORIGINS 鏈厤缃垯鎷掔粷鎵€鏈夊甫 Origin 鐨勬祻瑙堝櫒璇锋眰锛?	// 浠呮斁琛屾棤 Origin 鐨勯潪娴忚鍣紙curl/python websockets锛夊鎴风銆?	// 鐢熶骇閮ㄧ讲蹇呴』鏄惧紡閰嶇疆 CORS_ORIGINS 涓哄墠绔煙鍚嶇櫧鍚嶅崟銆?	CheckOrigin: func(r *http.Request) bool {
+	CheckOrigin: func(r *http.Request) bool {
 		origin := r.Header.Get("Origin")
 		if origin == "" {
 			return true // curl / 鏈嶅姟绔?ws 瀹㈡埛绔棤 Origin
@@ -115,9 +115,6 @@ func (h *WebSocketHub) connCount(sessionID string) int {
 	return len(h.conns[sessionID])
 }
 
-// WebSocketHandler handles WebSocket upgrade and message loop.
-// If eventHub is non-nil, messages are bridged through Redis Pub/Sub for cross-instance delivery.
-// 杩炴帴鍓嶆牎楠?JWT锛?token= / cookie / Authorization锛夊苟楠岃瘉 session 褰掑睘锛圫 瀹夊叏淇锛?// 鍘熷疄鐜版棤璁よ瘉锛屼换鎰忓鎴风鍙闃呬换鎰?session 鐨勪簨浠舵祦锛夈€
 func WebSocketHandler(hub *WebSocketHub, eventHub *broadcast.Hub, authenticator *auth.Authenticator, sessionMgr *session.Manager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sessionID := r.PathValue("sessionId")
@@ -129,7 +126,6 @@ func WebSocketHandler(hub *WebSocketHub, eventHub *broadcast.Hub, authenticator 
 			return
 		}
 
-		// 璁よ瘉锛氫笌 SSE/AuthMiddleware 鍚屾簮锛?token= 渚?ws 瀹㈡埛绔娇鐢級
 		tokenStr := r.URL.Query().Get("token")
 		if tokenStr == "" {
 			if c, err := r.Cookie("chiron_token"); err == nil && c.Value != "" {

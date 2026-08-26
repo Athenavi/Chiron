@@ -15,9 +15,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// 鈹€鈹€ 鑳藉姏甯傚満锛氱被鍨嬩笌甯搁噺 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
-
-// MarketItem 瀵瑰簲 ent_catalog_items 琛紙甯傚満鐩綍鏉＄洰锛歱lugin/skill锛夈€?
 type MarketItem struct {
 	ID         string          `json:"id"`
 	Type       string          `json:"type"` // plugin / skill
@@ -30,7 +27,6 @@ type MarketItem struct {
 	UpdatedAt  time.Time       `json:"updated_at"`
 }
 
-// MarketGrant 瀵瑰簲 ent_catalog_installs 琛紙绉熸埛瀹夎/鍚敤璁板綍锛夈€?
 type MarketGrant struct {
 	ItemID      string    `json:"item_id"`
 	TenantID    string    `json:"tenant_id"`
@@ -38,15 +34,12 @@ type MarketGrant struct {
 	InstalledAt time.Time `json:"installed_at"`
 }
 
-// 鍚堟硶鏋氫妇锛堜笌杩佺Щ CHECK 绾︽潫涓€鑷达級
 var (
 	validMarketItemTypes = map[string]bool{"plugin": true, "skill": true, "agent": true, "mcp": true}
 )
 
 var validMarketItemName = regexp.MustCompile(`^[a-zA-Z0-9_.-]{1,128}$`)
 
-// canCatalogTransition 鐘舵€佹満鏍￠獙锛氫粎鍏佽 draft鈫抪ublished鈫抮etired锛?
-// retired 涓虹粓鎬佷笉鍙洖 published銆?
 func canCatalogTransition(from, to string) bool {
 	switch {
 	case from == "draft" && to == "published":
@@ -58,19 +51,10 @@ func canCatalogTransition(from, to string) bool {
 	}
 }
 
-// 鈹€鈹€ Handler 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
-
-// MarketHandler 鎻愪緵浼佷笟鑳藉姏甯傚満 API锛堢洰褰曟潯鐩?CRUD / 鍙戝竷鐘舵€佹満 / 绉熸埛鎺堟潈锛夈€?
-// 璺敱娉ㄥ唽鐢遍泦鎴愪换鍔＄粺涓€鎺ュ叆锛堟湰浠诲姟涓嶆敞鍐岋級锛?
-//
-//	marketHandler := api.NewMarketHandler()
-//	marketHandler.RegisterRoutes(mux, authMW)
 type MarketHandler struct{}
 
 // NewMarketHandler 鍒涘缓甯傚満 handler銆?
 func NewMarketHandler() *MarketHandler { return &MarketHandler{} }
-
-// RegisterRoutes 鎸傝浇甯傚満璺敱锛坅uthMW + RequireEntPerm("market:manage")锛夈€?
 func (h *MarketHandler) RegisterRoutes(mux *http.ServeMux, authMW func(http.Handler) http.Handler) {
 	permMW := RequireEntPerm("market:manage")
 	handle := func(pattern string, hf http.HandlerFunc) {
@@ -88,11 +72,6 @@ func (h *MarketHandler) RegisterRoutes(mux *http.ServeMux, authMW func(http.Hand
 	handle("PUT /v1/ent/market/grants/{itemID}/{tenantID}", h.UpdateGrant)
 	handle("DELETE /v1/ent/market/grants/{itemID}/{tenantID}", h.DeleteGrant)
 }
-
-// 鈹€鈹€ 闂ㄦ帶鍑芥暟锛堝鍑虹粰 plugin/skill 闆嗘垚鐐癸紝鐙珛鍙祴锛?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
-
-// marketItemLookup 鏌ヨ甯傚満鏉＄洰鐘舵€侊紱娴嬭瘯鍙暣浣撴浛鎹€?
-// 杩斿洖 (鏄惁瀛樺湪鍚屽悕 published 鏉＄洰, 璇ョ鎴锋槸鍚﹀凡瀹夎涓斿惎鐢? error)銆?
 var marketItemLookup = func(ctx context.Context, itemType, itemName, tenantID string) (bool, bool, error) {
 	pool := db.ReadPool()
 	if pool == nil {
@@ -121,10 +100,6 @@ var marketItemLookup = func(ctx context.Context, itemType, itemName, tenantID st
 	return true, enabled, nil
 }
 
-// IsItemEnabledForTenant 鍒ゆ柇绉熸埛鏄惁鍙娇鐢ㄦ寚瀹氬競鍦鸿兘鍔涳紙plugin/skill 闂ㄦ帶锛夛細
-//   - 甯傚満鏃犱换浣曞悓鍚?published 鏉＄洰 鈫?true锛堟湭涓婃灦鑳藉姏涓嶅彈甯傚満绠℃帶褰卞搷锛夛紱
-//   - 鏈夊悓鍚?published 鏉＄洰 鈫?璇ョ鎴峰凡瀹夎涓?enabled 鎵?true锛?
-//   - 鏌ヨ澶辫触 鈫?fail-open锛坱rue + slog.Warn锛夛紝淇濊瘉甯傚満鍩虹璁炬柦鏁呴殰涓嶉樆鏂兘鍔涗娇鐢ㄣ€?
 func IsItemEnabledForTenant(ctx context.Context, itemType, itemName, tenantID string) (bool, error) {
 	published, enabled, err := marketItemLookup(ctx, itemType, itemName, tenantID)
 	if err != nil {
@@ -138,8 +113,6 @@ func IsItemEnabledForTenant(ctx context.Context, itemType, itemName, tenantID st
 	return enabled, nil
 }
 
-// ListEnabledMarketItems 杩斿洖绉熸埛宸插畨瑁呬笖鍚敤鐨?published 甯傚満鏉＄洰
-// 锛堜緵鎻掍欢/鎶€鑳藉垪琛ㄥ彔鍔犲競鍦哄凡鎺堟潈椤癸級銆?
 func ListEnabledMarketItems(ctx context.Context, itemType, tenantID string) ([]MarketItem, error) {
 	pool := db.ReadPool()
 	if pool == nil {
@@ -166,8 +139,6 @@ func ListEnabledMarketItems(ctx context.Context, itemType, tenantID string) ([]M
 	return items, rows.Err()
 }
 
-// 鈹€鈹€ 鍐呴儴杈呭姪 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
-
 const catalogItemColumns = `id, type, name, version, manifest, status, created_by, created_at, updated_at`
 
 func scanMarketItem(row interface{ Scan(...any) error }) (*MarketItem, error) {
@@ -179,15 +150,12 @@ func scanMarketItem(row interface{ Scan(...any) error }) (*MarketItem, error) {
 	return &it, nil
 }
 
-// marketTenantID 涓庣瓥鐣?handler 涓€鑷寸殑绉熸埛瑙ｆ瀽锛坈laims 浼樺厛锛屽洖閫€榛樿绉熸埛锛夈€?
 func marketTenantID(claims *auth.Claims) string {
 	if claims != nil && claims.TenantID != "" {
 		return claims.TenantID
 	}
 	return DefaultTenantID
 }
-
-// 鈹€鈹€ 鐩綍鏉＄洰 CRUD 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 // ListItems GET /v1/ent/market/items?type=&status=
 func (h *MarketHandler) ListItems(w http.ResponseWriter, r *http.Request) {
@@ -240,7 +208,7 @@ func (h *MarketHandler) ListItems(w http.ResponseWriter, r *http.Request) {
 	OK(w, items)
 }
 
-// CreateItem POST /v1/ent/market/items锛堝垵濮嬬姸鎬?draft锛夈€?
+// CreateItem POST /v1/ent/market/items
 func (h *MarketHandler) CreateItem(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	if claims == nil {
@@ -319,8 +287,6 @@ func (h *MarketHandler) GetItem(w http.ResponseWriter, r *http.Request) {
 	OK(w, it)
 }
 
-// UpdateItem PUT /v1/ent/market/items/{id}锛堜粎 name/version/manifest锛?
-// 鐘舵€佹祦杞彧缁?publish/retire 绔偣锛夈€?
 func (h *MarketHandler) UpdateItem(w http.ResponseWriter, r *http.Request) {
 	if claims := auth.GetClaims(r.Context()); claims == nil {
 		Unauthorized(w, ErrAuthRequired)
@@ -352,7 +318,6 @@ func (h *MarketHandler) UpdateItem(w http.ResponseWriter, r *http.Request) {
 		BadRequest(w, "manifest must be valid JSON")
 		return
 	}
-	// jsonb 鍒楀弬鏁颁互 string 浼犻€掞紙[]byte 浼氳 pgx 缂栫爜涓?bytea锛夛紱nil 鈫?NULL
 	var manifest any
 	if body.Manifest != nil {
 		manifest = string(*body.Manifest)
@@ -380,7 +345,6 @@ func (h *MarketHandler) UpdateItem(w http.ResponseWriter, r *http.Request) {
 	OK(w, updated)
 }
 
-// DeleteItem DELETE /v1/ent/market/items/{id}锛堢骇鑱斿垹闄ゅ畨瑁呰褰曪級銆?
 func (h *MarketHandler) DeleteItem(w http.ResponseWriter, r *http.Request) {
 	if claims := auth.GetClaims(r.Context()); claims == nil {
 		Unauthorized(w, ErrAuthRequired)
@@ -407,7 +371,6 @@ func (h *MarketHandler) DeleteItem(w http.ResponseWriter, r *http.Request) {
 	NoContent(w)
 }
 
-// transitionItem 璇诲彇褰撳墠鐘舵€佸苟鏍￠獙鐘舵€佹満杩佺Щ锛岄€氳繃鍚庡師瀛?UPDATE銆?
 func (h *MarketHandler) transitionItem(w http.ResponseWriter, r *http.Request, to string) {
 	if claims := auth.GetClaims(r.Context()); claims == nil {
 		Unauthorized(w, ErrAuthRequired)
@@ -444,7 +407,6 @@ func (h *MarketHandler) transitionItem(w http.ResponseWriter, r *http.Request, t
 		 WHERE id = $1 AND status = $3 RETURNING `+catalogItemColumns, id, to, from))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			// 骞跺彂涓嬬姸鎬佸凡琚叾浠栬姹傚彉鏇?
 			JSON(w, http.StatusConflict, APIResponse{
 				Success: false,
 				Error:   "invalid status transition (concurrent update)",
@@ -457,17 +419,13 @@ func (h *MarketHandler) transitionItem(w http.ResponseWriter, r *http.Request, t
 	OK(w, updated)
 }
 
-// PublishItem POST /v1/ent/market/items/{id}/publish锛坉raft 鈫?published锛夈€?
 func (h *MarketHandler) PublishItem(w http.ResponseWriter, r *http.Request) {
 	h.transitionItem(w, r, "published")
 }
 
-// RetireItem POST /v1/ent/market/items/{id}/retire锛坧ublished 鈫?retired锛夈€?
 func (h *MarketHandler) RetireItem(w http.ResponseWriter, r *http.Request) {
 	h.transitionItem(w, r, "retired")
 }
-
-// 鈹€鈹€ 绉熸埛鎺堟潈锛堝畨瑁呰褰曪級 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 func scanMarketGrant(row interface{ Scan(...any) error }) (*MarketGrant, error) {
 	var g MarketGrant
@@ -553,7 +511,6 @@ func (h *MarketHandler) GrantItem(w http.ResponseWriter, r *http.Request) {
 		ServiceUnavailable(w, ErrDBUnavailable)
 		return
 	}
-	// 鏉＄洰蹇呴』瀛樺湪锛堝閿厹搴曪紝鎻愬墠缁欏嚭鍙嬪ソ 404锛?
 	var exists bool
 	if err := db.Pool.QueryRow(r.Context(),
 		`SELECT EXISTS(SELECT 1 FROM ent_catalog_items WHERE id = $1)`, body.ItemID).Scan(&exists); err != nil {
@@ -577,7 +534,6 @@ func (h *MarketHandler) GrantItem(w http.ResponseWriter, r *http.Request) {
 	Created(w, g)
 }
 
-// UpdateGrant PUT /v1/ent/market/grants/{itemID}/{tenantID}锛堜粎鍒囨崲 enabled锛夈€?
 func (h *MarketHandler) UpdateGrant(w http.ResponseWriter, r *http.Request) {
 	if claims := auth.GetClaims(r.Context()); claims == nil {
 		Unauthorized(w, ErrAuthRequired)

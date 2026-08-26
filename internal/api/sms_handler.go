@@ -18,7 +18,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// 鈹€鈹€ 鐭俊楠岃瘉鐮佺櫥褰?+ 鎵嬫満鍙风粦瀹?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ 鐭俊楠岃瘉鐮佺櫥褰?+ 鎵嬫満鍙风粦瀹?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 //
 // 闃叉互鐢ㄥ洓淇濋櫓锛堝鐢ㄦ棦鏈夎鏂斤級锛?
 //  1. 浜烘満楠岃瘉鏍呮爮锛氬彂鐮?鐧诲綍鍧囪繃 CaptchaHandler.Enforce锛堝惎鐢?澶辫触鍗囩骇寮哄埗锛夛紱
@@ -199,7 +199,7 @@ func (h *SmsHandler) RegisterAdminRoutes(mux *http.ServeMux, authMW func(http.Ha
 	mux.Handle("PUT /v1/ent/sms/config", guard(h.UpdateConfig))
 }
 
-// 鈹€鈹€ 鍏紑璺敱 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ 鍏紑璺敱 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 // PublicStatus GET /v1/auth/sms/status
 // 鍓嶇鎹鍐冲畾鏄惁灞曠ず"鐭俊鐧诲綍"鏍囩椤点€?
@@ -482,7 +482,7 @@ func (h *SmsHandler) verifyCode(w http.ResponseWriter, r *http.Request, phone, c
 	return true
 }
 
-// 鈹€鈹€ 鐢ㄦ埛鑷姪锛氭墜鏈哄彿缁戝畾 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ 鐢ㄦ埛鑷姪锛氭墜鏈哄彿缁戝畾 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 // GetBind GET /v1/auth/sms/bind锛坅uthMW锛夎繑鍥炲綋鍓嶇粦瀹氭墜鏈哄彿銆?
 func (h *SmsHandler) GetBind(w http.ResponseWriter, r *http.Request) {
@@ -601,7 +601,7 @@ func (h *SmsHandler) Unbind(w http.ResponseWriter, r *http.Request) {
 	OK(w, map[string]string{"status": "unbound"})
 }
 
-// 鈹€鈹€ 绠＄悊绔厤缃?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ 绠＄悊绔厤缃?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 // GetConfig GET /v1/ent/sms/config锛坰ecret 鑴辨晱锛夈€?
 func (h *SmsHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
@@ -806,7 +806,7 @@ func (h *SmsHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 	OK(w, h.configResponse(updated, true))
 }
 
-// 鈹€鈹€ 鍐呴儴 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ 鍐呴儴 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 func (h *SmsHandler) loadConfig(ctx context.Context) (*smsConfigRow, error) {
 	var row smsConfigRow

@@ -15,7 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// 鈹€鈹€ 浜烘満楠岃瘉閰嶇疆绠＄悊 + 鐧诲綍闃叉互鐢ㄦ爡鏍?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ 浜烘満楠岃瘉閰嶇疆绠＄悊 + 鐧诲綍闃叉互鐢ㄦ爡鏍?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 //
 // 闃叉互鐢ㄥ弻淇濋櫓锛?
 //  1. 绠＄悊鍛樺惎鐢ㄩ獙璇佺爜鍚庯紝鐧诲綍/娉ㄥ唽蹇呴』鎼哄甫鏈夋晥 captcha token锛?
@@ -115,7 +115,7 @@ func (h *CaptchaHandler) RegisterAdminRoutes(mux *http.ServeMux, authMW func(htt
 	mux.Handle("PUT /v1/ent/captcha/config", guard(h.UpdateConfig))
 }
 
-// 鈹€鈹€ 鍏紑閰嶇疆涓嬪彂 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ 鍏紑閰嶇疆涓嬪彂 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 // PublicConfig GET /v1/auth/captcha/config
 // 浠呬笅鍙戝墠绔覆鏌撻獙璇佺爜缁勪欢鎵€闇€鐨勯潪鏁忔劅瀛楁锛涙湭鍚敤/鏈厤缃繑鍥?enabled=false銆?
@@ -137,7 +137,7 @@ func (h *CaptchaHandler) PublicConfig(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// 鈹€鈹€ 绠＄悊绔?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ 绠＄悊绔?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 // GetConfig GET /v1/ent/captcha/config锛坰ecret 鑴辨晱锛夈€?
 func (h *CaptchaHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
@@ -282,7 +282,7 @@ func (h *CaptchaHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// 鈹€鈹€ 闃叉互鐢ㄦ爡鏍忥紙鐧诲綍/娉ㄥ唽璋冪敤锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ 闃叉互鐢ㄦ爡鏍忥紙鐧诲綍/娉ㄥ唽璋冪敤锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 // Enforce 鍦ㄧ櫥褰?娉ㄥ唽绛夋晱鎰熸帴鍙ｇ殑鍑嵁鏍￠獙鍓嶆墽琛岋細
 //   - 鏈惎鐢ㄤ笖鏈揪澶辫触闃堝€?鈫?nil 鏀捐锛?
@@ -376,7 +376,7 @@ func (h *CaptchaHandler) failureCount(ctx context.Context, ip string) int {
 	return h.counter.get(ctx, ip)
 }
 
-// 鈹€鈹€ 鍐呴儴 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ 鍐呴儴 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 func (h *CaptchaHandler) loadConfig(ctx context.Context) (*captchaConfigRow, error) {
 	var row captchaConfigRow

@@ -140,7 +140,7 @@ func (h *PluginHandler) resolveTenant(r *http.Request) string {
 	return DefaultTenantID
 }
 
-// 鈹€鈹€ List 鈹€鈹€
+//€ List 鈹€鈹€
 
 func (h *PluginHandler) List(w http.ResponseWriter, r *http.Request) {
 	userID := h.resolveUser(r)
@@ -207,7 +207,7 @@ func (h *PluginHandler) overlayMarketPlugins(r *http.Request, plugins []MCPPlugi
 	return plugins
 }
 
-// 鈹€鈹€ Install 鈹€鈹€
+//€ Install 鈹€鈹€
 
 func (h *PluginHandler) Install(w http.ResponseWriter, r *http.Request) {
 	userID := h.resolveUser(r)
@@ -288,7 +288,7 @@ func (h *PluginHandler) Install(w http.ResponseWriter, r *http.Request) {
 	OK(w, plugin)
 }
 
-// 鈹€鈹€ Uninstall 鈹€鈹€
+//€ Uninstall 鈹€鈹€
 
 func (h *PluginHandler) Uninstall(w http.ResponseWriter, r *http.Request) {
 	userID := h.resolveUser(r)
@@ -340,7 +340,7 @@ func (h *PluginHandler) Uninstall(w http.ResponseWriter, r *http.Request) {
 	OK(w, map[string]string{"status": "deleted", "name": name})
 }
 
-// 鈹€鈹€ Update 鈹€鈹€
+//€ Update 鈹€鈹€
 
 func (h *PluginHandler) Update(w http.ResponseWriter, r *http.Request) {
 	userID := h.resolveUser(r)
@@ -435,7 +435,7 @@ func (h *PluginHandler) Update(w http.ResponseWriter, r *http.Request) {
 	OK(w, map[string]string{"name": name, "updated": "true"})
 }
 
-// 鈹€鈹€ Test 鈹€鈹€
+//€ Test 鈹€鈹€
 
 func (h *PluginHandler) Test(w http.ResponseWriter, r *http.Request) {
 	// P0-S7 淇锛氭墽琛岀敤鎴疯嚜瀹氫箟鍛戒护鐨勬祴璇曠鐐逛粎闄?owner/admin
@@ -540,7 +540,7 @@ func (h *PluginHandler) Test(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// 鈹€鈹€ Internal helpers 鈹€鈹€
+//€ Internal helpers 鈹€鈹€
 
 func (h *PluginHandler) readPlugins(userID string) ([]MCPPlugin, error) {
 	data, err := os.ReadFile(h.userPluginPath(userID))

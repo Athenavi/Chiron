@@ -14,7 +14,7 @@ import (
 	"github.com/athenavi/chiron/internal/settings"
 )
 
-// 鈹€鈹€ Queue Stats 鈹€鈹€
+//€ Queue Stats 鈹€鈹€
 
 type QueueStats struct {
 	TaskQueueLength int         `json:"task_queue_length"`
@@ -91,7 +91,7 @@ func (h *AdminHandler) PauseQueue(w http.ResponseWriter, r *http.Request) {
 	OK(w, map[string]interface{}{"paused": body.Pause})
 }
 
-// 鈹€鈹€ Cache Stats 鈹€鈹€
+//€ Cache Stats 鈹€鈹€
 
 type CacheStats struct {
 	L1HitRate     float64    `json:"l1_hit_rate"`
@@ -136,7 +136,7 @@ func (h *AdminHandler) GetCacheStats(w http.ResponseWriter, r *http.Request) {
 	OK(w, stats)
 }
 
-// 鈹€鈹€ Performance Stats 鈹€鈹€
+//€ Performance Stats 鈹€鈹€
 
 type PerformanceStats struct {
 	Gateway GatewayStats `json:"gateway"`
@@ -202,7 +202,7 @@ func (h *AdminHandler) GetPerformance(w http.ResponseWriter, r *http.Request) {
 	OK(w, stats)
 }
 
-// 鈹€鈹€ API Keys 鈹€鈹€
+//€ API Keys 鈹€鈹€
 
 type ApiKey struct {
 	ID         string `json:"id"`
@@ -279,7 +279,7 @@ func (h *AdminHandler) DeleteApiKey(w http.ResponseWriter, r *http.Request) {
 	h.pythonClient.ForwardRequest(w, r, "/v1/admin/api-keys/"+id)
 }
 
-// 鈹€鈹€ Settings 鈹€鈹€
+//€ Settings 鈹€鈹€
 
 // settingsCategories 鍚庡彴銆岀郴缁熻缃€嶅厑璁哥殑閰嶇疆鍒嗙粍銆?// 鏁忔劅閿紙password/secret/api_key/dsn/token 绛夛級鐢?settings.Store 鐢?APP_SECRET
 // 娲剧敓瀵嗛挜鍔犲瘑钀藉簱锛涢潪鏁忔劅閰嶇疆鏄庢枃瀛樺偍銆備笂绾ч厤缃粡 DB 鎸佷箙鍖栵紝env 浣滀负榛樿鍊笺€?var settingsCategories = []string{

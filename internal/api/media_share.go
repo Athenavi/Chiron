@@ -10,7 +10,7 @@ import (
 	"github.com/athenavi/chiron/internal/storage"
 )
 
-// 鈹€鈹€ Download 鈹€鈹€
+//€ Download 鈹€鈹€
 
 // Download redirects to the asset's storage URL.
 func (h *MediaHandler) Download(w http.ResponseWriter, r *http.Request) {
@@ -35,7 +35,7 @@ func (h *MediaHandler) Download(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, fileURL, http.StatusFound)
 }
 
-// 鈹€鈹€ Share 鈹€鈹€
+//€ Share 鈹€鈹€
 
 // Share returns a time-limited presigned download URL (S3 backend only).
 func (h *MediaHandler) Share(w http.ResponseWriter, r *http.Request) {

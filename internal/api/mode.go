@@ -9,7 +9,7 @@ import (
 	"github.com/athenavi/chiron/internal/broadcast"
 )
 
-// 鈹€鈹€ Mode constants 鈹€鈹€
+//€ Mode constants 鈹€鈹€
 
 const (
 	ModeAsk  = "ask"
@@ -19,7 +19,7 @@ const (
 
 var validModes = map[string]bool{ModeAsk: true, ModeAuto: true, ModeYOLO: true}
 
-// 鈹€鈹€ ModeStore 鈹€鈹€
+//€ ModeStore 鈹€鈹€
 
 type ModeStore struct {
 	mu    sync.RWMutex
@@ -53,7 +53,7 @@ func (s *ModeStore) Delete(sessionID string) {
 	delete(s.modes, sessionID)
 }
 
-// 鈹€鈹€ Permission Manager 鈹€鈹€
+//€ Permission Manager 鈹€鈹€
 
 type PermissionRequest struct {
 	SessionID string `json:"session_id"`
@@ -127,7 +127,7 @@ func (pm *PermissionManager) Reject(taskID string) bool {
 	return true
 }
 
-// 鈹€鈹€ HTTP Handlers 鈹€鈹€
+//€ HTTP Handlers 鈹€鈹€
 
 type ModeHandler struct {
 	store    *ModeStore

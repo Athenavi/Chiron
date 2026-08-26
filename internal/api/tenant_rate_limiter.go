@@ -14,13 +14,6 @@ import (
 	"github.com/athenavi/chiron/internal/db"
 )
 
-// tenantBucketLua 鍘熷瓙鍦板畬鎴?token bucket 鍙栦护鐗岋細
-// KEYS[1] = bucket key
-// ARGV[1] = capacity (burst)
-// ARGV[2] = refill per second (tokens/sec, 脳1000 鈫?ms 绮惧害鐢辨湇鍔＄璁＄畻绠€鍖栦负绉?
-// ARGV[3] = now (unix seconds, float)
-// ARGV[4] = requested tokens (1.0)
-// 杩斿洖: 1 鍏佽锛? 鎷掔粷
 const tenantBucketLua = `
 local key = KEYS[1]
 local capacity = tonumber(ARGV[1])
@@ -50,13 +43,11 @@ redis.call("EXPIRE", key, 300)
 return tostring(allowed)
 `
 
-// TenantRateLimiter 鎻愪緵 per-tenant 璧勬簮绾?QPS 闄愬埗銆?// Redis 鍙敤鏃惰蛋 Lua 鍘熷瓙鑴氭湰锛堝瀹炰緥鐘舵€佷竴鑷达級锛?// Redis 涓嶅彲鐢ㄦ椂 fail-close锛堜笌 DistributedRateLimiter 绛栫暐涓€鑷达級銆
 type TenantRateLimiter struct {
 	rdb       db.RedisClient
 	maxBurst  int
 	refillPerSec float64
-
-	// 鏈湴闄嶇骇缂撳瓨锛氫粎鍦?Redis fail-close 鏃剁敤浜庤閬跨┖鎸囬拡锛涗笉浣滀负闄愭祦鐪熷疄鐘舵€?	mu     sync.Mutex
+	mu     sync.Mutex
 	tokens map[string]*tokenBucketLocal
 }
 
@@ -65,7 +56,6 @@ type tokenBucketLocal struct {
 	lastRefill time.Time
 }
 
-// NewTenantRateLimiter 鍒涘缓鍩轰簬 Redis 鐨?token bucket 闄愭祦鍣ㄣ€
 func NewTenantRateLimiter(rdb db.RedisClient, maxQPS, burst int) *TenantRateLimiter {
 	return &TenantRateLimiter{
 		rdb:          rdb,
@@ -75,7 +65,6 @@ func NewTenantRateLimiter(rdb db.RedisClient, maxQPS, burst int) *TenantRateLimi
 	}
 }
 
-// Allow 妫€鏌ヨ姹傛槸鍚﹁鍏佽銆傝繑鍥?(allowed, retryAfterSeconds)銆?// fail-close锛歊edis 涓嶅彲鐢ㄦ垨鍑洪敊鏃舵嫆缁濊姹傘€
 func (rl *TenantRateLimiter) Allow(ctx context.Context, resource, tenantID string) (bool, float64) {
 	if rl.rdb == nil {
 		return false, 1 // fail-close
@@ -101,7 +90,7 @@ func (rl *TenantRateLimiter) Allow(ctx context.Context, resource, tenantID strin
 	return false, 1
 }
 
-// Middleware 杩斿洖 HTTP 涓棿浠讹紝鎸?tenant_id + 璧勬簮绫诲瀷闄愭祦銆
+// Middleware 返回 HTTP 处理程序，用于 tenant_id + 策略参数
 func (rl *TenantRateLimiter) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		claims := auth.GetClaims(r.Context())
@@ -124,7 +113,6 @@ func (rl *TenantRateLimiter) Middleware(next http.Handler) http.Handler {
 	})
 }
 
-// extractResource 浠?URL 璺緞鎻愬彇璧勬簮鍚嶃€
 func extractResource(path string) string {
 	trimmed := strings.Trim(path, "/")
 	if trimmed == "" {

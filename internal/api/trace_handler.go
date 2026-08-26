@@ -56,15 +56,11 @@ func (h *TraceHandler) GetTrace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 鈹€鈹€ SaaS 瀹夊叏: 涓ユ牸鐨勭鎴烽殧绂绘牎楠?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
-	// 浠?JWT claims 鎻愬彇 tenant_id (寮哄埗瑕佹眰澶氱鎴锋ā寮?
 	tenantID := claims.TenantID
 	if tenantID == "" {
-		// Fallback: 鍗曠鎴锋ā寮忎笅浣跨敤 user_id 浣滀负 tenant_id
 		tenantID = claims.UserID
 	}
 
-	// 鈹€鈹€ 鏌ヨ璇ョ鎴蜂笅鐨?trace 鏁版嵁 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 	spans, err := h.queryTraces(traceID, tenantID)
 	if err != nil {
 		slog.Error("trace query failed", "trace_id", traceID, "tenant", tenantID, "error", err)
@@ -73,12 +69,10 @@ func (h *TraceHandler) GetTrace(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(spans) == 0 {
-		// 涓嶅尯鍒?"涓嶅瓨鍦? 杩樻槸 "鏃犳潈闄?, 缁熶竴杩斿洖 404 (闃叉淇℃伅娉勯湶)
 		NotFound(w, "trace not found")
 		return
 	}
 
-	// 鈹€鈹€ 浜屾楠岃瘉: 鎵€鏈?span 鐨?tenant_id 蹇呴』涓?claims 涓€鑷?鈹€鈹€鈹€鈹€鈹€鈹€
 	for _, span := range spans {
 		if span.TenantID != tenantID && span.TenantID != "" {
 			slog.Warn("trace span tenant mismatch (possible cross-tenant leak)",
@@ -164,7 +158,6 @@ func (h *TraceHandler) ListTraces(w http.ResponseWriter, r *http.Request) {
 	// Convert to list
 	traces := make([]any, 0, len(traceMap))
 	for _, span := range traceMap {
-		// 鈹€鈹€ 杩囨护鎺?tenant_id 涓嶅尮閰嶇殑 span (闃插尽鎬ф牎楠? 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 		if span.TenantID != "" && span.TenantID != tenantID {
 			slog.Warn("skipping cross-tenant trace entry",
 				"trace_id", span.TraceID,

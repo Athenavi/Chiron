@@ -23,7 +23,7 @@ const maskedSecret = "********"
 // ssoStateTTL 鏄?SSO state 浠ょ墝鏈夋晥鏈燂紙闃查噸鏀剧獥鍙ｏ級銆?
 const ssoStateTTL = 10 * time.Minute
 
-// 鈹€鈹€ 鏁版嵁妯″瀷 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ 鏁版嵁妯″瀷 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 type ssoProvider struct {
 	ID              string
@@ -142,7 +142,7 @@ func scanSSOProvider(row scanner) (*ssoProvider, error) {
 	return &p, nil
 }
 
-// 鈹€鈹€ Handler 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ Handler 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 // SSOHandler 璐熻矗 OIDC/OAuth2 SSO 鍏紑娴佺▼銆佺敤鎴疯嚜鍔╃粦瀹氫笌绠＄悊绔?CRUD銆?
 // db 鎶借薄涓?entQuerier 渚夸簬娴嬭瘯娉ㄥ叆 fake锛沞xchanger 鎶借薄 IdP 浜や簰銆?
@@ -206,7 +206,7 @@ func (h *SSOHandler) RegisterAdminRoutes(mux *http.ServeMux, authMW func(http.Ha
 	mux.Handle("DELETE /v1/ent/sso/providers/{id}", sso(h.DeleteProvider))
 }
 
-// 鈹€鈹€ 鍏紑璺敱 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ 鍏紑璺敱 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 // ListPublicProviders GET /v1/auth/sso/providers
 // 杩斿洖 enabled provider 鐨勫睍绀哄瓧娈碉紙涓嶅惈浠讳綍鏁忔劅淇℃伅锛夛紝鎸?sort_order 鎺掑簭銆?
@@ -469,7 +469,7 @@ func (h *SSOHandler) handleBindCallback(w http.ResponseWriter, r *http.Request, 
 	http.Redirect(w, r, h.bindURL, http.StatusFound)
 }
 
-// 鈹€鈹€ 鐢ㄦ埛鑷姪锛氱粦瀹氬垪琛?/ 瑙ｇ粦 / 璁剧疆瀵嗙爜 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ 鐢ㄦ埛鑷姪锛氱粦瀹氬垪琛?/ 瑙ｇ粦 / 璁剧疆瀵嗙爜 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 // ListIdentities GET /v1/auth/sso/identities锛坅uthMW锛?
 func (h *SSOHandler) ListIdentities(w http.ResponseWriter, r *http.Request) {
@@ -649,7 +649,7 @@ func (h *SSOHandler) SetPassword(w http.ResponseWriter, r *http.Request) {
 	OK(w, map[string]string{"status": "updated"})
 }
 
-// 鈹€鈹€ 绠＄悊璺敱锛坅uthMW + sso:manage锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ 绠＄悊璺敱锛坅uthMW + sso:manage锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 // ListProviders GET /v1/ent/sso/providers
 func (h *SSOHandler) ListProviders(w http.ResponseWriter, r *http.Request) {
@@ -1069,7 +1069,7 @@ func (h *SSOHandler) DeleteProvider(w http.ResponseWriter, r *http.Request) {
 	OK(w, map[string]string{"status": "deleted"})
 }
 
-// 鈹€鈹€ 鍐呴儴杈呭姪 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ 鍐呴儴杈呭姪 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 func (h *SSOHandler) getProvider(ctx context.Context, id string) (*ssoProvider, error) {
 	return scanSSOProvider(h.db.QueryRow(ctx,

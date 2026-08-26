@@ -25,7 +25,7 @@ const (
 // Redis 涓嶅彲鐢ㄦ垨璇诲彇澶辫触鏃堕檷绾х洿鏌?DB锛坰log.Warn锛屼笉杩斿洖閿欒锛夛紱
 // DB 鏌ヨ澶辫触杩斿洖 error锛堢敱璋冪敤鏂瑰喅瀹?fail-open/fail-close 绛栫暐锛夈€
 func LoadEffectivePerms(ctx context.Context, userID string) ([]string, error) {
-	// 鈹€鈹€ 1. 缂撳瓨璇诲彇锛堝懡涓洿鎺ヨ繑鍥烇級鈹€鈹€
+	//€ 1. 缂撳瓨璇诲彇锛堝懡涓洿鎺ヨ繑鍥烇級鈹€鈹€
 	cacheKey := permsCacheKeyPrefix + userID
 	if rdb := db.Redis; rdb != nil {
 		cached, err := rdb.Get(ctx, cacheKey).Result()
@@ -46,7 +46,7 @@ func LoadEffectivePerms(ctx context.Context, userID string) ([]string, error) {
 		slog.Warn("ent rbac: redis unavailable, falling back to DB", "user_id", userID)
 	}
 
-	// 鈹€鈹€ 2. PG 鑱氬悎鏌ヨ 鈹€鈹€
+	//€ 2. PG 鑱氬悎鏌ヨ 鈹€鈹€
 	perms, hasRoles, err := queryEffectivePerms(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -55,7 +55,7 @@ func LoadEffectivePerms(ctx context.Context, userID string) ([]string, error) {
 		// 鏃?ent 瑙掕壊璁板綍锛氫笉缂撳瓨锛坣il 璇箟锛夛紝浜ょ敱璋冪敤鏂瑰洖閫€鏃ф潈闄愪綋绯?		return nil, nil
 	}
 
-	// 鈹€鈹€ 3. 鍥炲啓缂撳瓨锛堝惈绌哄垏鐗囷細"[]" 淇濊瘉"鏄庣‘鏃犳潈闄?璇箟鍙紦瀛橈級鈹€鈹€
+	//€ 3. 鍥炲啓缂撳瓨锛堝惈绌哄垏鐗囷細"[]" 淇濊瘉"鏄庣‘鏃犳潈闄?璇箟鍙紦瀛橈級鈹€鈹€
 	if rdb := db.Redis; rdb != nil {
 		if encoded, err := encodePerms(perms); err == nil {
 			if err := rdb.Set(ctx, cacheKey, encoded, permsCacheTTL).Err(); err != nil {

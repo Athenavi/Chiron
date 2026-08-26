@@ -66,7 +66,7 @@ func TestGenerateSmsCode(t *testing.T) {
 	}
 }
 
-// 鈹€鈹€ custom 濂戠害 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ custom 濂戠害 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 func TestHTTPSmsSender_Custom(t *testing.T) {
 	sender := NewHTTPSmsSender()
@@ -110,7 +110,7 @@ func TestHTTPSmsSender_Custom(t *testing.T) {
 	}
 }
 
-// 鈹€鈹€ 闃块噷浜?POP V1 绛惧悕锛堟湇鍔＄澶嶇畻楠岃瘉锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ 闃块噷浜?POP V1 绛惧悕锛堟湇鍔＄澶嶇畻楠岃瘉锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 func TestHTTPSmsSender_AliyunSignature(t *testing.T) {
 	const secret = "aliyun-secret"
@@ -171,7 +171,7 @@ func TestHTTPSmsSender_AliyunRejected(t *testing.T) {
 	}
 }
 
-// 鈹€鈹€ 鑵捐浜?TC3 绛惧悕锛堟湇鍔＄澶嶇畻楠岃瘉锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ 鑵捐浜?TC3 绛惧悕锛堟湇鍔＄澶嶇畻楠岃瘉锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 func TestHTTPSmsSender_Tencent(t *testing.T) {
 	const (

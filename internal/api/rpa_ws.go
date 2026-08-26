@@ -16,7 +16,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// 鈹€鈹€ RPA 娑堟伅绫诲瀷 鈹€鈹€
+//€ RPA 娑堟伅绫诲瀷 鈹€鈹€
 
 type RPAMessageType string
 
@@ -61,7 +61,7 @@ type RPAResult struct {
 	Error  *RPAError
 }
 
-// 鈹€鈹€ RPA 瀹㈡埛绔?鈹€鈹€
+//€ RPA 瀹㈡埛绔?鈹€鈹€
 
 type RPAClient struct {
 	ID       string
@@ -93,7 +93,7 @@ func (c *RPAClient) SendMessage(msg RPAMessage) error {
 	return c.Conn.WriteJSON(msg)
 }
 
-// 鈹€鈹€ RPAHub 鈹€鈹€
+//€ RPAHub 鈹€鈹€
 
 type RPAHub struct {
 	mu      sync.RWMutex
@@ -256,7 +256,7 @@ func (h *RPAHub) ConnectedClientIDs() []string {
 	return ids
 }
 
-// 鈹€鈹€ RPA WebSocket Handler 鈹€鈹€
+//€ RPA WebSocket Handler 鈹€鈹€
 
 var rpaUpgrader = websocket.Upgrader{
 	ReadBufferSize:  4096,
@@ -396,7 +396,7 @@ func RPAWebSocketHandler(hub *RPAHub, authenticator *auth.Authenticator) http.Ha
 	}
 }
 
-// 鈹€鈹€ RPA HTTP Bridge锛圥ython engine 鈫?Go gateway 鈫?娴忚鍣ㄦ彃浠讹級 鈹€鈹€
+//€ RPA HTTP Bridge锛圥ython engine 鈫?Go gateway 鈫?娴忚鍣ㄦ彃浠讹級 鈹€鈹€
 
 // rpaInternalTokenOK 甯搁噺鏃堕棿姣旇緝 X-Internal-Token锛堢綉鍏斥啍寮曟搸浜掍俊锛夈€
 func rpaInternalTokenOK(r *http.Request, internalToken string) bool {

@@ -15,7 +15,7 @@ import (
 	"github.com/athenavi/chiron/internal/storage"
 )
 
-// 鈹€鈹€ Upload (multipart file) 鈹€鈹€
+//€ Upload (multipart file) 鈹€鈹€
 
 func (h *MediaHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
@@ -105,7 +105,7 @@ func (h *MediaHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// 鈹€鈹€ PresignUpload 鈥?returns a presigned URL for client-side direct upload 鈹€鈹€
+//€ PresignUpload 鈥?returns a presigned URL for client-side direct upload 鈹€鈹€
 
 func (h *MediaHandler) PresignUpload(w http.ResponseWriter, r *http.Request) {
 	var body struct {
@@ -161,7 +161,7 @@ func (h *MediaHandler) PresignUpload(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// 鈹€鈹€ CompleteUpload 鈥?called by client after presigned upload is done 鈹€鈹€
+//€ CompleteUpload 鈥?called by client after presigned upload is done 鈹€鈹€
 
 func (h *MediaHandler) CompleteUpload(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
@@ -232,7 +232,7 @@ func (h *MediaHandler) CompleteUpload(w http.ResponseWriter, r *http.Request) {
 	OK(w, map[string]string{"id": assetID, "name": body.Name, "file_url": body.FileURL})
 }
 
-// 鈹€鈹€ Upload helpers 鈹€鈹€
+//€ Upload helpers 鈹€鈹€
 
 func detectType(mime string) string {
 	if strings.HasPrefix(mime, "image/") {

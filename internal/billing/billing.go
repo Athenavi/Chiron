@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// 鈹€鈹€ Types 鈹€鈹€
+//€ Types 鈹€鈹€
 
 // CreditChange records a credit transaction.
 type CreditChange struct {
@@ -230,7 +230,7 @@ func (m *Manager) GetHistory(ctx context.Context, userID string, limit int) ([]C
 	return m.store.GetHistory(ctx, userID, limit)
 }
 
-// 鈹€鈹€ 鏀粯璁㈠崟锛坉elegate 鍒?PaymentStore锛?鈹€鈹€
+//€ 鏀粯璁㈠崟锛坉elegate 鍒?PaymentStore锛?鈹€鈹€
 
 // CreatePayment 鍒涘缓涓€绗?pending 鏀粯璁㈠崟銆
 func (m *Manager) CreatePayment(ctx context.Context, p *Payment) error {

@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-// 鈹€鈹€ OAuth2 Exchanger锛圙itHub / 寰俊 / 閽夐拤 / 椋炰功 / QQ锛夆攢鈹€
+//€ OAuth2 Exchanger锛圙itHub / 寰俊 / 閽夐拤 / 椋炰功 / QQ锛夆攢鈹€
 //
 // 瀹炵幇 OIDCExchanger 鍚屼竴鎺ュ彛锛歋SOHandler 鎸?provider.protocol 鍒嗘淳鍒?
 // OIDC锛坓o-oidc 鍙戠幇锛夋垨鏈疄鐜帮紙鏄惧紡绔偣 + provider 鐗规湁韬唤鎶藉彇锛夈€?
@@ -495,7 +495,7 @@ func (e *OAuth2Exchanger) identityQQ(ctx context.Context, p *OIDCProviderConfig,
 	}, nil
 }
 
-// 鈹€鈹€ HTTP 杈呭姪 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ HTTP 杈呭姪 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 func (e *OAuth2Exchanger) do(ctx context.Context, method, rawURL, contentType string, body io.Reader, headers map[string]string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, method, rawURL, body)

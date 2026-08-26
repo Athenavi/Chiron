@@ -222,7 +222,7 @@ func (h *UserMarketHandler) installMCP(w http.ResponseWriter, r *http.Request, c
 	OK(w, map[string]interface{}{"success": true, "type": "mcp", "name": pName})
 }
 
-// 鈹€鈹€ 灏忓伐鍏?鈹€鈹€
+//€ 灏忓伐鍏?鈹€鈹€
 
 func mustJSON(v interface{}) string {
 	b, _ := json.Marshal(v)

@@ -17,9 +17,9 @@ import (
 	"github.com/athenavi/chiron/internal/id"
 )
 
-// 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 // /admin 鍏ㄦ爤瀹炶锛氱鎴?/ 鍩熷悕 / 鏁版嵁搴?/ Redis / 妯″瀷 / 瀹氭椂浠诲姟
-// 鎵€鏈夋暟鎹潎鏉ヨ嚜鐪熷疄瀛樺偍锛堟棤 mock锛夛紝璇诲啓缁?admin 鏉冮檺璺敱锛坅dminReadMW/adminWriteMW锛夈€?// 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+// 鎵€鏈夋暟鎹潎鏉ヨ嚜鐪熷疄瀛樺偍锛堟棤 mock锛夛紝璇诲啓缁?admin 鏉冮檺璺敱锛坅dminReadMW/adminWriteMW锛夈€?//€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 // registerOpsRoutes 鎸傝浇杩愮淮绫荤鐞嗙鐐癸紙鍦?adminMux 鍐咃紝缁?StripPrefix /v1/admin锛夈€
 func (h *AdminHandler) registerOpsRoutes(r *http.ServeMux) {
@@ -66,7 +66,7 @@ func (h *AdminHandler) registerOpsRoutes(r *http.ServeMux) {
 	r.HandleFunc("POST /cron-jobs/{id}/trigger", h.HandleCronTrigger)
 }
 
-// 鈹€鈹€ 绉熸埛绠＄悊 鈹€鈹€
+//€ 绉熸埛绠＄悊 鈹€鈹€
 
 type tenantRow struct {
 	ID        string    `json:"id"`
@@ -212,7 +212,7 @@ func (h *AdminHandler) TenantUsage(w http.ResponseWriter, r *http.Request) {
 	OK(w, u)
 }
 
-// 鈹€鈹€ 鍩熷悕绠＄悊 鈹€鈹€
+//€ 鍩熷悕绠＄悊 鈹€鈹€
 
 type domainRow struct {
 	ID        string    `json:"id"`
@@ -336,7 +336,7 @@ func (h *AdminHandler) RenewDomainSSL(w http.ResponseWriter, r *http.Request) {
 	OK(w, map[string]interface{}{"ssl_status": "active", "note": "璇佷功绛惧彂鐢遍儴缃蹭晶 CA 鎺ュ叆鐐瑰鐞?})
 }
 
-// 鈹€鈹€ 鏁版嵁搴撶鐞?鈹€鈹€
+//€ 鏁版嵁搴撶鐞?鈹€鈹€
 
 func (h *AdminHandler) DatabaseConfigs(w http.ResponseWriter, r *http.Request) {
 	rows, err := db.ReadPool().Query(r.Context(),
@@ -528,7 +528,7 @@ func quoteIdent(s string) string {
 	return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
 }
 
-// 鈹€鈹€ Redis 绠＄悊锛堝崟瀹炰緥鐪熷疄鎿嶄綔锛夆攢鈹€
+//€ Redis 绠＄悊锛堝崟瀹炰緥鐪熷疄鎿嶄綔锛夆攢鈹€
 
 func (h *AdminHandler) redisDo(ctx context.Context, args ...interface{}) (interface{}, error) {
 	if db.Redis == nil {
@@ -566,7 +566,7 @@ func (h *AdminHandler) RedisFlushAll(w http.ResponseWriter, r *http.Request) {
 	OK(w, map[string]interface{}{"status": "flushed"})
 }
 
-// 鈹€鈹€ 妯″瀷娉ㄥ唽琛?鈹€鈹€
+//€ 妯″瀷娉ㄥ唽琛?鈹€鈹€
 
 type modelRow struct {
 	ID            string    `json:"id"`
@@ -710,7 +710,7 @@ func ListUserModels(w http.ResponseWriter, r *http.Request) {
 	OK(w, map[string]interface{}{"models": out})
 }
 
-// 鈹€鈹€ 瀹氭椂浠诲姟 鈹€鈹€
+//€ 瀹氭椂浠诲姟 鈹€鈹€
 
 type cronRow struct {
 	ID         string     `json:"id"`
@@ -826,7 +826,7 @@ func (h *AdminHandler) DeleteCronJob(w http.ResponseWriter, r *http.Request) {
 	OK(w, map[string]string{"status": "deleted"})
 }
 
-// 鈹€鈹€ 宸ュ叿 鈹€鈹€
+//€ 宸ュ叿 鈹€鈹€
 
 // runPGDump 钀界洏 pg_dump锛堝鐢?extractDSN锛夈€
 func runPGDump(ctx context.Context, target string) error {

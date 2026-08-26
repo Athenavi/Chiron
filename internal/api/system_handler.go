@@ -67,8 +67,6 @@ func (h *SystemHandler) Metrics(w http.ResponseWriter, r *http.Request) {
 	OK(w, monitor.Snapshot())
 }
 
-// PrometheusMetrics 杈撳嚭 Prometheus 鏂囨湰鏍煎紡鎸囨爣锛堜緵 Prometheus 鎶撳彇锛夈€?
-// 绔偣 /metrics 鍏紑鏆撮湶锛堢敓浜ч儴缃插缓璁姞鍐呯綉闄愬埗鎴?basicauth锛夈€?
 func (h *SystemHandler) PrometheusMetrics(w http.ResponseWriter, r *http.Request) {
 	s := monitor.Snapshot()
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")

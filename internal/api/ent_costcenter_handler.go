@@ -15,7 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// 鈹€鈹€ 浼佷笟鎴愭湰涓績锛氱被鍨嬩笌閿欒 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ 浼佷笟鎴愭湰涓績锛氱被鍨嬩笌閿欒 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 // EntQuotaPool 瀵瑰簲 ent_quota_pools 琛ㄣ€?
 type EntQuotaPool struct {
@@ -52,7 +52,7 @@ var (
 	validTargetTypes   = map[string]bool{"group": true, "user": true}
 )
 
-// 鈹€鈹€ 姹囨€荤粨鏋滅被鍨?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ 姹囨€荤粨鏋滅被鍨?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 type entCostSummaryRow struct {
 	Key          string `json:"key"`
@@ -90,7 +90,7 @@ type entGroupCost struct {
 	Records []entGroupCostRow `json:"records"`
 }
 
-// 鈹€鈹€ 鏁版嵁璁块棶鎺ュ彛锛圥G 瀹炵幇 + 娴嬭瘯 fake 鍙浛鎹級 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ 鏁版嵁璁块棶鎺ュ彛锛圥G 瀹炵幇 + 娴嬭瘯 fake 鍙浛鎹級 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 // EntCostStore 鏄紒涓氭垚鏈腑蹇冪殑鏁版嵁璁块棶鎺ュ彛銆?
 type EntCostStore interface {
@@ -130,7 +130,7 @@ func isUniqueViolation(err error) bool {
 	return false
 }
 
-// 鈹€鈹€ CostSummary锛歜illing_records + credit_transactions + payments 璺ㄧ鎴锋眹鎬?鈹€鈹€
+//€ CostSummary锛歜illing_records + credit_transactions + payments 璺ㄧ鎴锋眹鎬?鈹€鈹€
 
 func (s *pgEntCostStore) CostSummary(ctx context.Context, from, to time.Time, groupBy string) (*entCostSummary, error) {
 	var keyExpr, groupExpr string
@@ -259,7 +259,7 @@ func (s *pgEntCostStore) CostSummary(ctx context.Context, from, to time.Time, gr
 	return summary, nil
 }
 
-// 鈹€鈹€ GroupCost锛氱兢缁勮璐瑰綊闆嗘槑缁?+ 鍚堣 鈹€鈹€
+//€ GroupCost锛氱兢缁勮璐瑰綊闆嗘槑缁?+ 鍚堣 鈹€鈹€
 
 func (s *pgEntCostStore) GroupCost(ctx context.Context, groupID string, from, to time.Time) (*entGroupCost, error) {
 	out := &entGroupCost{GroupID: groupID, Records: []entGroupCostRow{}}
@@ -296,7 +296,7 @@ func (s *pgEntCostStore) GroupCost(ctx context.Context, groupID string, from, to
 	return out, nil
 }
 
-// 鈹€鈹€ 閰嶉姹?CRUD 鈹€鈹€
+//€ 閰嶉姹?CRUD 鈹€鈹€
 
 const quotaPoolColumns = `id, tenant_id, resource_type, total_amount, period, created_at, updated_at`
 
@@ -392,7 +392,7 @@ func (s *pgEntCostStore) DeleteQuotaPool(ctx context.Context, id string) error {
 	return nil
 }
 
-// 鈹€鈹€ 閰嶉鍒嗛厤 鈹€鈹€
+//€ 閰嶉鍒嗛厤 鈹€鈹€
 
 func (s *pgEntCostStore) ListAllocations(ctx context.Context, poolID string) ([]EntQuotaAllocation, error) {
 	rows, err := db.ReadPool().Query(ctx,
@@ -445,7 +445,7 @@ func (s *pgEntCostStore) DeleteAllocation(ctx context.Context, poolID, id string
 	return tag.RowsAffected() > 0, nil
 }
 
-// 鈹€鈹€ quota 寮哄埗 / 鐢ㄩ噺鏀拺鏌ヨ 鈹€鈹€
+//€ quota 寮哄埗 / 鐢ㄩ噺鏀拺鏌ヨ 鈹€鈹€
 
 func (s *pgEntCostStore) TenantTokenPools(ctx context.Context, tenantID string) ([]EntQuotaPool, error) {
 	rows, err := db.ReadPool().Query(ctx,
@@ -485,7 +485,7 @@ func (s *pgEntCostStore) ResolveTenantID(ctx context.Context, userID string) (st
 	return tenantID, nil
 }
 
-// 鈹€鈹€ Handler 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ Handler 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 // EntCostCenterHandler 鎻愪緵浼佷笟鎴愭湰涓績 API锛堟垚鏈眹鎬?/ 缇ょ粍褰掗泦 / 閰嶉姹?CRUD / 鍒嗛厤 / 鐢ㄩ噺锛夈€?
 // 璺敱娉ㄥ唽鐢遍泦鎴愪换鍔＄粺涓€鎺ュ叆锛堟湰浠诲姟涓嶆敞鍐岋級锛?

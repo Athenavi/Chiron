@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// 鈹€鈹€ Duration Histogram 鈹€鈹€
+//€ Duration Histogram 鈹€鈹€
 
 // Histogram tracks duration percentiles (p50/p95/p99) for operations.
 // Uses a fixed-size ring buffer to avoid slice reallocations on every Record call.
@@ -158,7 +158,7 @@ func Init() {
 	slog.Info("monitor initialized", "started_at", Global.StartTime.Format(time.RFC3339))
 }
 
-// 鈹€鈹€ Per-session cost tracking (in-memory) 鈹€鈹€
+//€ Per-session cost tracking (in-memory) 鈹€鈹€
 
 var (
 	costMu          sync.Mutex

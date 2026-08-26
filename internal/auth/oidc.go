@@ -18,7 +18,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// 鈹€鈹€ state / nonce 缂栬В鐮?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ state / nonce 缂栬В鐮?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 //
 // state 浠ょ墝鏍煎紡: base64url(JSON payload) + "." + base64url(HMAC-SHA256(payload))銆?
 // payload 鎼哄甫 provider_id / nonce / 杩囨湡鏃堕棿锛岄槻 CSRF锛圚MAC 涓嶅彲浼€狅級涓庨噸鏀撅紙鐭?TTL锛夈€?
@@ -151,7 +151,7 @@ func RandomNonce() (string, error) {
 	return hex.EncodeToString(buf), nil
 }
 
-// 鈹€鈹€ OIDC IdP 浜や簰 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ OIDC IdP 浜や簰 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 // OIDCProviderConfig 鏄彂璧?OIDC 娴佺▼鎵€闇€鐨?provider 閰嶇疆锛坰ecret 宸茶В瀵嗭級銆?
 // protocol=oauth2 鏃?Issuer 鍙负绌猴紝鏀圭敤 AuthURL/TokenURL/UserinfoURL銆?
@@ -162,7 +162,7 @@ type OIDCProviderConfig struct {
 	Scopes       []string
 	RedirectURL  string
 
-	// 鈹€鈹€ OAuth2 鎵╁睍锛坧rotocol=oauth2 鏃剁敓鏁堬級鈹€鈹€
+	//€ OAuth2 鎵╁睍锛坧rotocol=oauth2 鏃剁敓鏁堬級鈹€鈹€
 	Protocol     string            // "oidc" | "oauth2"锛涚┖瑙嗕负 oidc
 	ProviderType string            // github/wechat/dingtalk/feishu/qq/custom
 	AuthURL      string            // 鎺堟潈绔偣锛堟ā鏉跨己鐪佽嚜鍔ㄥ～鍏咃級

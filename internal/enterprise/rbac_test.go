@@ -9,7 +9,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// 鈹€鈹€ unionPerms锛氬苟闆嗗幓閲?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ unionPerms锛氬苟闆嗗幓閲?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 func TestUnionPerms(t *testing.T) {
 	tests := []struct {
@@ -44,7 +44,7 @@ func TestUnionPerms(t *testing.T) {
 	}
 }
 
-// 鈹€鈹€ encodePerms / decodePerms锛歯il vs 绌哄垏鐗囧簭鍒楀寲璇箟 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ encodePerms / decodePerms锛歯il vs 绌哄垏鐗囧簭鍒楀寲璇箟 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 func TestEncodeDecodePerms(t *testing.T) {
 	tests := []struct {
@@ -90,7 +90,7 @@ func TestDecodePerms_CorruptedOrNilPayload(t *testing.T) {
 	}
 }
 
-// 鈹€鈹€ 缂撳瓨閿笌 TTL 绾﹀畾 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ 缂撳瓨閿笌 TTL 绾﹀畾 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 func TestCacheKeyAndTTL(t *testing.T) {
 	if got := permsCacheKeyPrefix + "user-1"; got != "ent:rbac:perms:user-1" {
@@ -101,7 +101,7 @@ func TestCacheKeyAndTTL(t *testing.T) {
 	}
 }
 
-// 鈹€鈹€ fake RedisClient锛氱紦瀛樺懡涓?/ 鏈懡涓矾寰?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ fake RedisClient锛氱紦瀛樺懡涓?/ 鏈懡涓矾寰?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 // fakeRedis 浠呭疄鐜版祴璇曟墍闇€鐨?Get/Set/Del锛屽叾浣欐柟娉曢€氳繃宓屽叆鎺ュ彛
 // 淇濇寔 nil锛堟祴璇曡矾寰勪笉浼氳Е杈撅級銆
@@ -237,7 +237,7 @@ func TestLoadEffectivePerms_RedisUnavailable(t *testing.T) {
 	}
 }
 
-// 鈹€鈹€ InvalidateUserPerms / InvalidateGroupMembersPerms 闄嶇骇琛屼负 鈹€鈹€鈹€
+//€ InvalidateUserPerms / InvalidateGroupMembersPerms 闄嶇骇琛屼负 鈹€鈹€鈹€
 
 func TestInvalidate_NoRedis_NoPanic(t *testing.T) {
 	swapRedis(t, nil)

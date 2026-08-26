@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-// 鈹€鈹€ 鐭俊楠岃瘉鐮侊紙SMS锛夌櫥褰?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ 鐭俊楠岃瘉鐮侊紙SMS锛夌櫥褰?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 //
 // 鏀寔鐨勭煭淇℃湇鍔″晢锛?
 //   - aliyun : 闃块噷浜戠煭淇★紙dysmsapi锛孭OP RPC 绛惧悕 V1锛?
@@ -108,7 +108,7 @@ func (s *HTTPSmsSender) Send(ctx context.Context, cfg *SmsConfig, phone, code st
 	}
 }
 
-// 鈹€鈹€ 闃块噷浜戠煭淇★紙POP RPC 绛惧悕 V1锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ 闃块噷浜戠煭淇★紙POP RPC 绛惧悕 V1锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 // aliyunPercentEncode 鏄樋閲屼簯 POP 鍗忚鐨?RFC3986 鐧惧垎鍙风紪鐮併€?
 func aliyunPercentEncode(s string) string {
@@ -192,7 +192,7 @@ func (s *HTTPSmsSender) sendAliyun(ctx context.Context, cfg *SmsConfig, phone, c
 	return nil
 }
 
-// 鈹€鈹€ 鑵捐浜戠煭淇★紙TC3-HMAC-SHA256 绛惧悕锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ 鑵捐浜戠煭淇★紙TC3-HMAC-SHA256 绛惧悕锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 func hmacSHA256(key, data []byte) []byte {
 	mac := hmac.New(sha256.New, key)
@@ -373,7 +373,7 @@ func (s *HTTPSmsSender) postStatus(ctx context.Context, endpoint, contentType st
 	return data, resp.StatusCode, nil
 }
 
-// 鈹€鈹€ 鍙风爜涓庨獙璇佺爜宸ュ叿锛堢函鍑芥暟锛屼究浜庡崟娴嬶級鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ 鍙风爜涓庨獙璇佺爜宸ュ叿锛堢函鍑芥暟锛屼究浜庡崟娴嬶級鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 // ValidateSmsPhone 鏍￠獙鎵嬫満鍙凤細鍙€?"+" 鍓嶇紑 + 5-20 浣嶆暟瀛椼€?
 // 褰掍竴鍖栦粎鍘婚櫎棣栧熬绌虹櫧锛涗笉鍋氬浗瀹剁爜鎺ㄦ柇锛堝悇鏈嶅姟鍟嗘牸寮忚嚜瀹氾級銆?

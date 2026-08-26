@@ -101,7 +101,8 @@ func TestConfirmPaymentIdempotent(t *testing.T) {
 		t.Fatalf("balance = %d, want 1000", bal)
 	}
 
-	// 绗簩娆＄‘璁わ紙閲嶅鍥炶皟锛夛細骞傜瓑锛屼笉鍐嶅叆璐?	_, credited2, err := mgr.ConfirmPayment(context.Background(), p.ID, "trade-1")
+	// 绗簩娆＄‘璁わ紙閲嶅鍥炶皟锛夛細骞傜瓑锛屼笉鍐嶅叆璐
+	_, credited2, err := mgr.ConfirmPayment(context.Background(), p.ID, "trade-1")
 	if err != nil || credited2 {
 		t.Fatalf("second ConfirmPayment = credited=%v err=%v (want false, nil)", credited2, err)
 	}
@@ -165,7 +166,7 @@ func (s *orderAwareStore) UpdatePaymentProvider(ctx context.Context, id, qrCode,
 	return nil
 }
 
-// 鈹€鈹€ 娴嬭瘯瀵嗛挜瀵?鈹€鈹€
+//€ 娴嬭瘯瀵嗛挜瀵?鈹€鈹€
 
 var cachedKeyPair []string
 

@@ -59,7 +59,7 @@ func baseCfg(ts *oauth2TestServer) *OIDCProviderConfig {
 	}
 }
 
-// 鈹€鈹€ AuthURL 鏋勯€?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ AuthURL 鏋勯€?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 func TestOAuth2AuthURL_GitHub(t *testing.T) {
 	ts := newOAuth2TestServer(nil)
@@ -119,7 +119,7 @@ func TestOAuth2AuthURL_DingTalk_Prompt(t *testing.T) {
 	}
 }
 
-// 鈹€鈹€ GitHub 鍏ㄦ祦绋?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ GitHub 鍏ㄦ祦绋?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 func TestOAuth2Exchange_GitHub(t *testing.T) {
 	ts := newOAuth2TestServer(map[string]func(http.ResponseWriter, *http.Request){
@@ -157,7 +157,7 @@ func TestOAuth2Exchange_GitHub(t *testing.T) {
 	}
 }
 
-// 鈹€鈹€ 寰俊鍏ㄦ祦绋嬶紙unionid 浼樺厛锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ 寰俊鍏ㄦ祦绋嬶紙unionid 浼樺厛锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 func TestOAuth2Exchange_WeChat_UnionIDPreferred(t *testing.T) {
 	var tokenQuery string
@@ -192,7 +192,7 @@ func TestOAuth2Exchange_WeChat_UnionIDPreferred(t *testing.T) {
 	}
 }
 
-// 鈹€鈹€ 閽夐拤鍏ㄦ祦绋?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ 閽夐拤鍏ㄦ祦绋?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 func TestOAuth2Exchange_DingTalk(t *testing.T) {
 	// 鍏堝０鏄庡悗璧嬪€硷細闂寘鍐呴渶瑕佸紩鐢?ts锛圙o 涓?:= 鍒濆鍖栬〃杈惧紡涓嶈兘寮曠敤鑷韩锛?
@@ -226,7 +226,7 @@ func TestOAuth2Exchange_DingTalk(t *testing.T) {
 	}
 }
 
-// 鈹€鈹€ 椋炰功鍏ㄦ祦绋嬶紙宓屽 data 褰㈡€?+ sub 浼樺厛锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ 椋炰功鍏ㄦ祦绋嬶紙宓屽 data 褰㈡€?+ sub 浼樺厛锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 func TestOAuth2Exchange_Feishu(t *testing.T) {
 	ts := newOAuth2TestServer(map[string]func(http.ResponseWriter, *http.Request){
@@ -251,7 +251,7 @@ func TestOAuth2Exchange_Feishu(t *testing.T) {
 	}
 }
 
-// 鈹€鈹€ QQ 鍏ㄦ祦绋嬶紙token 鈫?/me 鎷?openid 鈫?userinfo锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ QQ 鍏ㄦ祦绋嬶紙token 鈫?/me 鎷?openid 鈫?userinfo锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 func TestOAuth2Exchange_QQ(t *testing.T) {
 	ts := newOAuth2TestServer(map[string]func(http.ResponseWriter, *http.Request){
@@ -285,7 +285,7 @@ func TestOAuth2Exchange_QQ(t *testing.T) {
 	}
 }
 
-// 鈹€鈹€ 澶辫触鍒嗘敮 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ 澶辫触鍒嗘敮 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 func TestOAuth2Exchange_TokenFailure(t *testing.T) {
 	ts := newOAuth2TestServer(map[string]func(http.ResponseWriter, *http.Request){

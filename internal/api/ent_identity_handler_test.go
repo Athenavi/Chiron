@@ -26,7 +26,7 @@ func builtinRoleScan(dest ...any) error {
 
 func strPtr(s string) *string { return &s }
 
-// 鈹€鈹€ 鍐呯疆瑙掕壊淇濇姢锛?09锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ 鍐呯疆瑙掕壊淇濇姢锛?09锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 func TestUpdateRole_BuiltinPermissionsChange_409(t *testing.T) {
 	store := &fakeQuerier{
@@ -114,7 +114,7 @@ func TestUpdateRole_NotFound_404(t *testing.T) {
 	}
 }
 
-// 鈹€鈹€ 璇锋眰鏍￠獙锛?00锛孌B 鏃犲叧锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ 璇锋眰鏍￠獙锛?00锛孌B 鏃犲叧锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 func TestSetUserRoles_InvalidBody_400(t *testing.T) {
 	h := &EntIdentityHandler{db: &fakeQuerier{}}
@@ -157,7 +157,7 @@ func TestSetUserRoles_InvalidRoleID_400(t *testing.T) {
 	}
 }
 
-// 鈹€鈹€ 鎸傝浇杈呭姪鏂规硶锛氫腑闂翠欢閾剧敓鏁?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ 鎸傝浇杈呭姪鏂规硶锛氫腑闂翠欢閾剧敓鏁?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 func TestRegisterRoutes_RequiresAuth(t *testing.T) {
 	h := NewEntIdentityHandler()
@@ -179,7 +179,7 @@ func TestRegisterRoutes_RequiresAuth(t *testing.T) {
 	}
 }
 
-// 鈹€鈹€ 鍒嗛〉鍙傛暟瑙ｆ瀽 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+//€ 鍒嗛〉鍙傛暟瑙ｆ瀽 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 func TestParsePageQuery(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/ent/users", nil)
