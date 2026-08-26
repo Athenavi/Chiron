@@ -9,73 +9,67 @@ import (
 	"strings"
 )
 
-// versionLock 表示 version.lock 文件的结构
+// versionLock represents the data/version.lock file
 type versionLock struct {
-	Chiron string `json:"chiron"`
-	DB     string `json:"db"`
-	Python string `json:"python"`
-	Go     string `json:"go"`
-	Date   string `json:"date"`
+	DB string `json:"db"`
 }
 
-// getLockDBRevision 从 data/version.lock 文件中读取 db revision
-func getLockDBRevision() (string, error) {
+// getExpectedRevision reads the expected db revision from data/version.lock
+func getExpectedRevision() (string, error) {
 	data, err := os.ReadFile("data/version.lock")
 	if err != nil {
-		return "", fmt.Errorf("failed to read version.lock: %w", err)
+		return "", err
 	}
-
 	var lock versionLock
 	if err := json.Unmarshal(data, &lock); err != nil {
-		return "", fmt.Errorf("failed to parse version.lock: %w", err)
+		return "", err
 	}
-
-	if lock.DB == "" {
-		return "", fmt.Errorf("db revision not found in version.lock")
-	}
-
 	return lock.DB, nil
 }
 
-// getCurrentDBRevision 执行 alembic current 命令获取当前数据库的 revision
-func getCurrentDBRevision(python string) (string, error) {
+// getCurrentRevision runs "alembic current" to get the database's actual revision
+func getCurrentRevision(python string) (string, error) {
 	cmd := exec.Command(python, "-m", "alembic", "--config", "alembic.ini", "current")
+	cmd.Dir = "."
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("alembic current failed: %w, output: %s", err, string(output))
+		return "", fmt.Errorf("alembic current failed: %w: %s", err, string(output))
 	}
-
-	// 解析输出，格式类似: "62dee11343df (head)"
-	outputStr := strings.TrimSpace(string(output))
-	if outputStr == "" {
+	// Output format: "xxx (head)" - extract revision ID
+	trimmed := strings.TrimSpace(string(output))
+	parts := strings.Fields(trimmed)
+	if len(parts) == 0 {
 		return "", fmt.Errorf("alembic current returned empty output")
 	}
-
-	// 提取 revision ID（第一个空格前的部分）
-	parts := strings.Fields(outputStr)
-	if len(parts) == 0 {
-		return "", fmt.Errorf("failed to parse alembic current output: %s", outputStr)
-	}
-
 	return parts[0], nil
 }
 
-// listMigrationFiles 列出迁移目录下的所有 .py 文件
+// updateVersionLockDB updates data/version.lock with the given revision
+func updateVersionLockDB(revision string) error {
+	lock := versionLock{DB: revision}
+	data, err := json.MarshalIndent(lock, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile("data/version.lock", data, 0o644)
+}
+
+// listMigrationFiles returns a list of migration file names in the given directory
 func listMigrationFiles(dir string) ([]string, error) {
-	files, err := os.ReadDir(dir)
+	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
 	}
-	var pyFiles []string
-	for _, f := range files {
-		if !f.IsDir() && strings.HasSuffix(f.Name(), ".py") {
-			pyFiles = append(pyFiles, f.Name())
+	var files []string
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".py") {
+			files = append(files, e.Name())
 		}
 	}
-	return pyFiles, nil
+	return files, nil
 }
 
-// findNewFile 找出新增的文件
+// findNewFile returns the first file in after that is not in before
 func findNewFile(before, after []string) string {
 	beforeSet := make(map[string]bool)
 	for _, f := range before {
@@ -89,63 +83,42 @@ func findNewFile(before, after []string) string {
 	return ""
 }
 
-// isEmptyMigration 检查迁移文件是否为空（只包含模板代码）
+// isEmptyMigration checks if a migration file contains only empty upgrade/downgrade
 func isEmptyMigration(filePath string) (bool, error) {
-	content, err := os.ReadFile(filePath)
+	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return false, err
 	}
-	
-	text := string(content)
-	// 检查是否包含实际的数据库操作
-	hasOperations := strings.Contains(text, "op.create_table") ||
-		strings.Contains(text, "op.add_column") ||
-		strings.Contains(text, "op.drop_column") ||
-		strings.Contains(text, "op.alter_column") ||
-		strings.Contains(text, "op.create_index") ||
-		strings.Contains(text, "op.drop_index") ||
-		strings.Contains(text, "op.create_foreign_key") ||
-		strings.Contains(text, "op.drop_table")
-	
-	return !hasOperations, nil
-}
-
-// updateVersionLockDB 更新 version.lock 文件中的 db revision
-func updateVersionLockDB(newRevision string) error {
-	data, err := os.ReadFile("data/version.lock")
-	if err != nil {
-		return fmt.Errorf("failed to read version.lock: %w", err)
+	// Simple heuristic: if the file does not contain "op." it's probably empty
+	// Better: check for "pass" in upgrade/downgrade functions
+	content := string(data)
+	// Look for typical empty migration patterns
+	if strings.Contains(content, "def upgrade():\n    pass") &&
+		strings.Contains(content, "def downgrade():\n    pass") {
+		return true, nil
 	}
-
-	var lock versionLock
-	if err := json.Unmarshal(data, &lock); err != nil {
-		return fmt.Errorf("failed to parse version.lock: %w", err)
+	// Also check if there are no operations
+	if !strings.Contains(content, "op.") {
+		return true, nil
 	}
-
-	lock.DB = newRevision
-
-	updated, err := json.MarshalIndent(lock, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal version.lock: %w", err)
-	}
-
-	if err := os.WriteFile("data/version.lock", updated, 0644); err != nil {
-		return fmt.Errorf("failed to write version.lock: %w", err)
-	}
-
-	return nil
+	return false, nil
 }
 
 // RunMigrations 执行 Alembic 数据库迁移（alembic upgrade head）
 // dsn 为 PostgreSQL 连接串，通过环境变量 DATABASE_DSN 传递给 Alembic
 func RunMigrations(dsn string) error {
+	// Normalize DSN: postgres:// -> postgresql:// for Alembic
 	dsn = strings.Replace(dsn, "postgres://", "postgresql://", 1)
 	os.Setenv("DATABASE_DSN", dsn)
-	// 确保 APP_SECRET 已写入 .env 供 Alembic 使用
+
+	// Ensure APP_SECRET is written to .env for Alembic
 	if appSecret := os.Getenv("APP_SECRET"); appSecret != "" {
 		content := fmt.Sprintf("# Generated by install wizard\nAPP_SECRET=%s\n", appSecret)
-		os.WriteFile(".env", []byte(content), 0o600)
+		if err := os.WriteFile(".env", []byte(content), 0o600); err != nil {
+			return fmt.Errorf("failed to write .env: %w", err)
+		}
 	}
+
 	os.Setenv("PYTHONUTF8", "1")
 	python := "python"
 	if v := os.Getenv("PYTHON"); v != "" {
@@ -154,107 +127,97 @@ func RunMigrations(dsn string) error {
 		python = v
 	}
 
-	// Step 1: 检查 version.lock 中的 revision 是否与数据库一致
-	lockRevision, err := getLockDBRevision()
+	// Step 1: Check version consistency
+	expected, err := getExpectedRevision()
 	if err != nil {
-		return fmt.Errorf("failed to read version.lock: %w", err)
+		// version.lock may not exist yet; that's okay, we'll generate migration
+		fmt.Printf("No version.lock found, will generate initial migration\n")
+	} else {
+		current, err := getCurrentRevision(python)
+		if err == nil && current == expected {
+			fmt.Printf("Database revision matches version.lock (%s), no migration needed\n", expected)
+			return nil
+		}
+		if err != nil {
+			fmt.Printf("Failed to get current revision, generating migration: %v\n", err)
+		} else {
+			fmt.Printf("Version mismatch: lock=%s, db=%s, generating migration\n", expected, current)
+		}
 	}
 
-	currentRevision, err := getCurrentDBRevision(python)
-	if err != nil {
-		return fmt.Errorf("failed to get current db revision: %w", err)
-	}
+	// Step 2: Generate migration if needed
+	migrationsDir := filepath.Join(".", "migrations", "versions")
+	beforeFiles, _ := listMigrationFiles(migrationsDir)
 
-	// 如果 revision 一致，跳过所有操作
-	if lockRevision == currentRevision {
-		fmt.Printf("Database is already at revision %s, no migration needed\n", currentRevision)
+	revisionMsg := "auto_migration"
+	if expected != "" {
+		revisionMsg = fmt.Sprintf("db_%s", expected)
+	}
+	revisionCmd := exec.Command(python, "-m", "alembic", "--config", "alembic.ini",
+		"revision", "--autogenerate", "-m", revisionMsg)
+	revisionCmd.Dir = "."
+	revisionCmd.Stdout = os.Stdout
+	revisionCmd.Stderr = os.Stderr
+	_ = revisionCmd.Run() // Ignore error; empty migration may cause error but we continue
+
+	// Check if a new migration file was generated
+	afterFiles, _ := listMigrationFiles(migrationsDir)
+	newFile := findNewFile(beforeFiles, afterFiles)
+
+	if newFile == "" {
+		// No new file generated, models match database
+		fmt.Printf("No migration generated, models match database\n")
+		// Update version.lock to current database revision
+		current, err := getCurrentRevision(python)
+		if err != nil {
+			return fmt.Errorf("failed to get current revision after no migration: %w", err)
+		}
+		if err := updateVersionLockDB(current); err != nil {
+			fmt.Printf("Warning: failed to update version.lock: %v\n", err)
+		}
 		return nil
 	}
 
-	fmt.Printf("Database revision mismatch: lock=%s, current=%s\n", lockRevision, currentRevision)
+	// Check if the new migration is empty
+	isEmpty, err := isEmptyMigration(filepath.Join(migrationsDir, newFile))
+	if err != nil {
+		fmt.Printf("Warning: failed to check migration file: %v\n", err)
+		// Continue anyway
+	}
 
-	// Step 2: 先执行已有迁移，让数据库达到 migrations 目录的最新版本
-	fmt.Printf("Applying existing migrations...\n")
+	if isEmpty {
+		// Empty migration, remove it and update version.lock
+		if err := os.Remove(filepath.Join(migrationsDir, newFile)); err != nil {
+			fmt.Printf("Warning: failed to remove empty migration: %v\n", err)
+		}
+		fmt.Printf("Empty migration removed, updating version.lock\n")
+		current, err := getCurrentRevision(python)
+		if err != nil {
+			return fmt.Errorf("failed to get current revision after removing empty migration: %w", err)
+		}
+		if err := updateVersionLockDB(current); err != nil {
+			fmt.Printf("Warning: failed to update version.lock: %v\n", err)
+		}
+		return nil
+	}
+
+	// Step 3: Apply the generated migration
+	fmt.Printf("Applying new migration: %s\n", newFile)
 	upgradeCmd := exec.Command(python, "-m", "alembic", "--config", "alembic.ini", "upgrade", "head")
 	upgradeCmd.Dir = "."
 	upgradeCmd.Stdout = os.Stdout
 	upgradeCmd.Stderr = os.Stderr
 
 	if err := upgradeCmd.Run(); err != nil {
-		return fmt.Errorf("alembic upgrade failed: %w", err)
-	}
-
-	// Step 3: 升级后再次检查数据库版本
-	upgradedRevision, err := getCurrentDBRevision(python)
-	if err != nil {
-		return fmt.Errorf("failed to get db revision after upgrade: %w", err)
-	}
-
-	// 如果升级后与 version.lock 一致，说明只是数据库落后，已修复
-	if upgradedRevision == lockRevision {
-		fmt.Printf("Database upgraded to revision %s, matches version.lock\n", upgradedRevision)
-		return nil
-	}
-
-	// Step 4: 仍然不一致，说明确实需要生成新的迁移文件
-	fmt.Printf("Database still at %s, generating new migration for %s...\n", upgradedRevision, lockRevision)
-	
-	migrationsDir := filepath.Join(".", "migrations", "versions")
-	beforeFiles, _ := listMigrationFiles(migrationsDir)
-
-	// 执行 autogenerate
-	versionDescribe := fmt.Sprintf("db_%s", lockRevision)
-	revisionCmd := exec.Command(python, "-m", "alembic", "--config", "alembic.ini",
-		"revision", "--autogenerate", "-m", versionDescribe)
-	revisionCmd.Dir = "."
-	revisionCmd.Stdout = os.Stdout
-	revisionCmd.Stderr = os.Stderr
-	_ = revisionCmd.Run()
-
-	// 检查是否生成了新文件
-	afterFiles, _ := listMigrationFiles(migrationsDir)
-	newFile := findNewFile(beforeFiles, afterFiles)
-
-	if newFile == "" {
-		// 没有生成新文件，说明模型与数据库实际一致
-		fmt.Printf("No migration generated, models match database\n")
-		// 更新 version.lock 为当前数据库版本
-		if err := updateVersionLockDB(upgradedRevision); err != nil {
-			fmt.Printf("Warning: failed to update version.lock: %v\n", err)
-		}
-		return nil
-	}
-
-	// 检查新文件是否为空迁移
-	isEmpty, err := isEmptyMigration(filepath.Join(migrationsDir, newFile))
-	if err != nil {
-		fmt.Printf("Warning: failed to check migration file: %v\n", err)
-		return nil
-	}
-
-	if isEmpty {
-		// 空迁移，删除并更新 version.lock
-		os.Remove(filepath.Join(migrationsDir, newFile))
-		fmt.Printf("Empty migration removed, updating version.lock to %s\n", upgradedRevision)
-		if err := updateVersionLockDB(upgradedRevision); err != nil {
-			fmt.Printf("Warning: failed to update version.lock: %v\n", err)
-		}
-		return nil
-	}
-
-	// 有实际内容的迁移，执行 upgrade
-	fmt.Printf("Applying new migration: %s\n", newFile)
-	upgradeCmd2 := exec.Command(python, "-m", "alembic", "--config", "alembic.ini", "upgrade", "head")
-	upgradeCmd2.Dir = "."
-	upgradeCmd2.Stdout = os.Stdout
-	upgradeCmd2.Stderr = os.Stderr
-
-	if err := upgradeCmd2.Run(); err != nil {
 		return fmt.Errorf("alembic upgrade after migration failed: %w", err)
 	}
 
-	// 更新 version.lock
-	if err := updateVersionLockDB(lockRevision); err != nil {
+	// Step 4: Update version.lock to the new current revision
+	current, err := getCurrentRevision(python)
+	if err != nil {
+		return fmt.Errorf("failed to get current revision after upgrade: %w", err)
+	}
+	if err := updateVersionLockDB(current); err != nil {
 		fmt.Printf("Warning: failed to update version.lock: %v\n", err)
 	}
 

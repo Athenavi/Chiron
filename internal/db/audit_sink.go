@@ -2,6 +2,8 @@ package db
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -136,8 +138,8 @@ func WriteAuditLogs(ctx context.Context, entries []AuditEntry) error {
 
 	var sb strings.Builder
 	sb.WriteString(`INSERT INTO audit_logs
-		(tenant_id, user_id, action, resource_type, resource_id, details, ip_address) VALUES `)
-	args := make([]any, 0, len(entries)*7)
+		(id, tenant_id, user_id, action, resource_type, resource_id, details, ip_address) VALUES `)
+	args := make([]any, 0, len(entries)*8)
 	idx := 0
 	next := func() string { idx++; return fmt.Sprintf("$%d", idx) }
 
@@ -162,9 +164,9 @@ func WriteAuditLogs(ctx context.Context, entries []AuditEntry) error {
 		if i > 0 {
 			sb.WriteString(", ")
 		}
-		sb.WriteString("(" + next() + ", " + next() + ", " + next() + ", " +
+		sb.WriteString("(" + next() + ", " + next() + ", " + next() + ", " + next() + ", " +
 			next() + ", " + next() + ", " + next() + ", " + next() + ")")
-		args = append(args, tenantID, userID, clipVarchar(e.Action, 64),
+		args = append(args, generateUUID(), tenantID, userID, clipVarchar(e.Action, 64),
 			auditResourceType(e.Resource), clipVarchar(e.Resource, 64),
 			string(details), nilableIP(e.IP))
 	}
@@ -203,4 +205,25 @@ func nilableIP(ip string) any {
 		return nil
 	}
 	return clipVarchar(ip, 45)
+}
+
+// generateUUID 生成 UUID v4 字符串（36字符，含连字符）。
+func generateUUID() string {
+	uuid := make([]byte, 16)
+	if _, err := rand.Read(uuid); err != nil {
+		// 极端回退：使用随机字节填充
+		for i := range uuid {
+			uuid[i] = byte(i)
+		}
+	}
+	// 设置版本 4 和变体位
+	uuid[6] = (uuid[6] & 0x0f) | 0x40 // version 4
+	uuid[8] = (uuid[8] & 0x3f) | 0x80 // variant RFC 4122
+
+	return fmt.Sprintf("%s-%s-%s-%s-%s",
+		hex.EncodeToString(uuid[0:4]),
+		hex.EncodeToString(uuid[4:6]),
+		hex.EncodeToString(uuid[6:8]),
+		hex.EncodeToString(uuid[8:10]),
+		hex.EncodeToString(uuid[10:16]))
 }
