@@ -1,4 +1,4 @@
-﻿package auth
+package auth
 
 import (
 	"context"
@@ -38,7 +38,8 @@ func (s *LocalAuthService) GetUser(ctx context.Context, userID string) (*User, e
 	return &user, nil
 }
 
-// GetUserByEmail 澶氱鎴锋煡璇細email+tenant_id 鍙岄敭瀹氫綅锛岄槻姝㈣法绉熸埛鐧诲綍銆?// tenantID 涓虹┖鏃跺洖閫€ DefaultTenantID锛堝崟绉熸埛鍏煎锛屾湭鏉ユ敹绱э級銆
+// GetUserByEmail 多租户查询：email+tenant_id 双键定位，防止跨租户登录。
+// tenantID 为空时回退 DefaultTenantID（单租户兼容，未来收紧）。
 func (s *LocalAuthService) GetUserByEmail(ctx context.Context, email, tenantID string) (*User, error) {
 	if s.db == nil {
 		return nil, fmt.Errorf("database not available")
@@ -118,7 +119,7 @@ func (s *LocalAuthService) DeleteUser(ctx context.Context, userID string) error 
 	return nil
 }
 
-// ListUsers 澶氱鎴烽殧绂伙細浠呰繑鍥炴寚瀹氱鎴风殑鐢ㄦ埛銆
+// ListUsers 多租户隔离：仅返回指定租户的用户。
 func (s *LocalAuthService) ListUsers(ctx context.Context, tenantID string) ([]User, error) {
 	if s.db == nil {
 		return nil, fmt.Errorf("database not available")

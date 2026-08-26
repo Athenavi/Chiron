@@ -266,7 +266,7 @@ func (h *BillingHandler) CreatePayment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	subject := fmt.Sprintf("Chiron 充值 %d credits", body.Credits)
+	subject := fmt.Sprintf("MiniCC 充值 %d credits", body.Credits)
 	switch body.Channel {
 	case billing.ChannelAlipay:
 		if h.alipay == nil {
@@ -666,7 +666,6 @@ func (h *BillingHandler) payPalCaptureOrder(ctx context.Context, orderID string)
 	}
 	return r, nil
 }
-
 
 
 

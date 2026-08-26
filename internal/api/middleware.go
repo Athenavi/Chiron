@@ -25,9 +25,9 @@ type responseWriter struct {
 	bytes   int
 	flusher http.Flusher
 }
-//€ JWT 榛戝悕鍗曟湰鍦?TTL 缂撳瓨锛圥1 浼樺寲锛氬噺灏戠儹璺緞姣忔璇锋眰鐨?Redis 寰€杩旓級鈹€鈹€
-// 姝ｇ紦瀛橈紙宸叉媺榛戯級15 鍒嗛挓鏈夋晥锛涜礋缂撳瓨锛堟湭鎷夐粦锛変粎 30 绉掞紝纭繚鐧诲嚭鎾ら攢
-// 鍦?鈮?0s 鍐呭叏灞€鐢熸晥锛堝鍓湰浠嶄互 Redis 涓烘渶缁堜簨瀹炴簮锛夈€
+// ── JWT 黑名单本地 TTL 缓存（P1 优化：减少热路径每次请求的 Redis 往返）──
+// 正缓存（已拉黑）15 分钟有效；负缓存（未拉黑）仅 30 秒，确保登出撤销
+// 在 ≤30s 内全局生效（多副本仍以 Redis 为最终事实源）。
 type jwtBlacklistEntry struct {
 	blacklisted bool
 	checkedAt   time.Time
@@ -40,7 +40,7 @@ const (
 	jwtBlacklistMissTTL = 30 * time.Second
 )
 
-// checkJWTBlacklisted 浼樺厛鏌ユ湰鍦扮紦瀛橈紝miss 鏃跺洖婧?Redis 骞跺洖濉€
+// checkJWTBlacklisted 优先查本地缓存，miss 时回源 Redis 并回填。
 func checkJWTBlacklisted(ctx context.Context, jti string) (bool, error) {
 	if v, ok := jwtBlacklistCache.Load(jti); ok {
 		e := v.(jwtBlacklistEntry)
@@ -63,7 +63,7 @@ func checkJWTBlacklisted(ctx context.Context, jti string) (bool, error) {
 	return n > 0, nil
 }
 
-// markJWTBlacklisted 鐧诲嚭鏃跺悓姝ユ湰鍦版缂撳瓨锛堥厤鍚?Redis 鍐欏叆锛夈€
+// markJWTBlacklisted 登出时同步本地正缓存（配合 Redis 写入）。
 func markJWTBlacklisted(jti string) {
 	if jti == "" {
 		return
@@ -71,7 +71,8 @@ func markJWTBlacklisted(jti string) {
 	jwtBlacklistCache.Store(jti, jwtBlacklistEntry{blacklisted: true, checkedAt: time.Now()})
 }
 
-// StartBlacklistCleaner 瀹氭湡娓呯悊杩囨湡鐨?JWT 榛戝悕鍗曟湰鍦扮紦瀛樻潯鐩紝闃叉鍐呭瓨娉勬紡銆?// 姣?10 鍒嗛挓鎵弿涓€娆★紝鍒犻櫎瓒呰繃 1 灏忔椂鏈洿鏂扮殑鏉＄洰銆
+// StartBlacklistCleaner 定期清理过期的 JWT 黑名单本地缓存条目，防止内存泄漏。
+// 每 10 分钟扫描一次，删除超过 1 小时未更新的条目。
 func StartBlacklistCleaner(ctx context.Context) {
 	go func() {
 		ticker := time.NewTicker(10 * time.Minute)
@@ -186,8 +187,8 @@ func RecoverMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// CORSMiddleware 澶勭悊 CORS銆俛llowOrigin 鏄€楀彿鍒嗛殧鐧藉悕鍗曪紱"*" 鍦?AllowCredentials=true
-// 涓嬭繚鍙?CORS 瑙勮寖涓旈珮鍗憋紝鏄惧紡鎷掔粷銆
+// CORSMiddleware 处理 CORS。allowOrigin 是逗号分隔白名单；"*" 在 AllowCredentials=true
+// 下违反 CORS 规范且高危，显式拒绝。
 func CORSMiddleware(allowOrigin string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -219,8 +220,9 @@ func CORSMiddleware(allowOrigin string) func(http.Handler) http.Handler {
 	}
 }
 
-// SecurityHeadersMiddleware 娉ㄥ叆閫氱敤瀹夊叏鍝嶅簲澶淬€?// CSP_CONNECT_SRC 閫氳繃 env 娉ㄥ叆锛堥粯璁ょ暀绌哄垯涓嶅己鍒?connect-src 鐧藉悕鍗曪紝
-// 鐢遍儴缃叉柟鎸夌敓浜у煙鍚嶉厤缃紝閬垮厤 localhost 鍐欐瀵艰嚧鐢熶骇鐜琚樆鏂級銆
+// SecurityHeadersMiddleware 注入通用安全响应头。
+// CSP_CONNECT_SRC 通过 env 注入（默认留空则不强制 connect-src 白名单，
+// 由部署方按生产域名配置，避免 localhost 写死导致生产环境被阻断）。
 func SecurityHeadersMiddleware(next http.Handler) http.Handler {
 	cspConnectSrc := strings.TrimSpace(os.Getenv("CSP_CONNECT_SRC"))
 	if cspConnectSrc == "" {
@@ -247,7 +249,7 @@ func AuthMiddleware(a *auth.Authenticator) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tokenStr := ""
 
-			// 1. Cookie (primary for browser clients; SSE 缁?withCredentials 鎼哄甫)
+			// 1. Cookie (primary for browser clients; SSE 经 withCredentials 携带)
 			if c, err := r.Cookie("chiron_token"); err == nil && c.Value != "" {
 				tokenStr = c.Value
 			}
@@ -264,7 +266,7 @@ func AuthMiddleware(a *auth.Authenticator) func(http.Handler) http.Handler {
 			// 2. Try X-API-Key header
 		if tokenStr == "" {
 			if key := r.Header.Get("X-API-Key"); key != "" {
-				// Validate API key against PostgreSQL锛堝惈 tenant_id 涓?revoked 鐘舵€佹牎楠岋紝澶氱鎴烽殧绂伙級
+				// Validate API key against PostgreSQL（含 tenant_id 与 revoked 状态校验，多租户隔离）
 				var userID, role, tenantID string
 				keyHash := sha256.Sum256([]byte(key))
 				err := db.ReadPool().QueryRow(r.Context(),
@@ -276,8 +278,10 @@ func AuthMiddleware(a *auth.Authenticator) func(http.Handler) http.Handler {
 					   AND (ak.expires_at IS NULL OR ak.expires_at > NOW())`,
 					hex.EncodeToString(keyHash[:])).Scan(&userID, &role, &tenantID)
 				if err == nil {
-				// P1-5: tenant_id 涓虹┖鐩存帴鎷掔粷锛屼笉鍐嶅洖閫€ DefaultTenantID銆?				// 鍘嗗彶鏁版嵁涓?tenant_id=NULL 鐨?user 璧?DefaultTenantID 浼氳惤鍒伴粯璁ょ鎴凤紝
-				// 閫犳垚璺ㄧ鎴锋暟鎹闂紱澶氱鎴烽儴缃插繀椤诲己鍒舵瘡涓敤鎴风粦瀹氱鎴枫€?				if tenantID == "" {
+				// P1-5: tenant_id 为空直接拒绝，不再回退 DefaultTenantID。
+				// 历史数据中 tenant_id=NULL 的 user 走 DefaultTenantID 会落到默认租户，
+				// 造成跨租户数据访问；多租户部署必须强制每个用户绑定租户。
+				if tenantID == "" {
 					slog.Warn("API key bound to user with null tenant_id, rejecting",
 						"user_id", userID)
 					Unauthorized(w, "user has no tenant binding; contact admin")
@@ -309,7 +313,7 @@ func AuthMiddleware(a *auth.Authenticator) func(http.Handler) http.Handler {
 				return
 			}
 
-			//€ JWT 榛戝悕鍗曟鏌ワ紙鐧诲嚭鍚庣殑 token 绔嬪嵆澶辨晥锛夆攢鈹€
+			// ── JWT 黑名单检查（登出后的 token 立即失效）──
 			if claims.ID != "" {
 				blacklisted, err := checkJWTBlacklisted(r.Context(), claims.ID)
 				if err != nil {

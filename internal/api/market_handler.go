@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"context"
@@ -15,6 +15,9 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// ── 能力市场：类型与常量 ─────────────────────────────────────────────────
+
+// MarketItem 对应 ent_catalog_items 表（市场目录条目：plugin/skill）。
 type MarketItem struct {
 	ID         string          `json:"id"`
 	Type       string          `json:"type"` // plugin / skill
@@ -27,6 +30,7 @@ type MarketItem struct {
 	UpdatedAt  time.Time       `json:"updated_at"`
 }
 
+// MarketGrant 对应 ent_catalog_installs 表（租户安装/启用记录）。
 type MarketGrant struct {
 	ItemID      string    `json:"item_id"`
 	TenantID    string    `json:"tenant_id"`
@@ -34,12 +38,15 @@ type MarketGrant struct {
 	InstalledAt time.Time `json:"installed_at"`
 }
 
+// 合法枚举（与迁移 CHECK 约束一致）
 var (
 	validMarketItemTypes = map[string]bool{"plugin": true, "skill": true, "agent": true, "mcp": true}
 )
 
 var validMarketItemName = regexp.MustCompile(`^[a-zA-Z0-9_.-]{1,128}$`)
 
+// canCatalogTransition 状态机校验：仅允许 draft→published→retired，
+// retired 为终态不可回 published。
 func canCatalogTransition(from, to string) bool {
 	switch {
 	case from == "draft" && to == "published":
@@ -51,10 +58,19 @@ func canCatalogTransition(from, to string) bool {
 	}
 }
 
+// ── Handler ──────────────────────────────────────────────────────────────
+
+// MarketHandler 提供企业能力市场 API（目录条目 CRUD / 发布状态机 / 租户授权）。
+// 路由注册由集成任务统一接入（本任务不注册）：
+//
+//	marketHandler := api.NewMarketHandler()
+//	marketHandler.RegisterRoutes(mux, authMW)
 type MarketHandler struct{}
 
-// NewMarketHandler 鍒涘缓甯傚満 handler銆?
+// NewMarketHandler 创建市场 handler。
 func NewMarketHandler() *MarketHandler { return &MarketHandler{} }
+
+// RegisterRoutes 挂载市场路由（authMW + RequireEntPerm("market:manage")）。
 func (h *MarketHandler) RegisterRoutes(mux *http.ServeMux, authMW func(http.Handler) http.Handler) {
 	permMW := RequireEntPerm("market:manage")
 	handle := func(pattern string, hf http.HandlerFunc) {
@@ -72,6 +88,11 @@ func (h *MarketHandler) RegisterRoutes(mux *http.ServeMux, authMW func(http.Hand
 	handle("PUT /v1/ent/market/grants/{itemID}/{tenantID}", h.UpdateGrant)
 	handle("DELETE /v1/ent/market/grants/{itemID}/{tenantID}", h.DeleteGrant)
 }
+
+// ── 门控函数（导出给 plugin/skill 集成点，独立可测） ─────────────────────
+
+// marketItemLookup 查询市场条目状态；测试可整体替换。
+// 返回 (是否存在同名 published 条目, 该租户是否已安装且启用, error)。
 var marketItemLookup = func(ctx context.Context, itemType, itemName, tenantID string) (bool, bool, error) {
 	pool := db.ReadPool()
 	if pool == nil {
@@ -100,6 +121,10 @@ var marketItemLookup = func(ctx context.Context, itemType, itemName, tenantID st
 	return true, enabled, nil
 }
 
+// IsItemEnabledForTenant 判断租户是否可使用指定市场能力（plugin/skill 门控）：
+//   - 市场无任何同名 published 条目 → true（未上架能力不受市场管控影响）；
+//   - 有同名 published 条目 → 该租户已安装且 enabled 才 true；
+//   - 查询失败 → fail-open（true + slog.Warn），保证市场基础设施故障不阻断能力使用。
 func IsItemEnabledForTenant(ctx context.Context, itemType, itemName, tenantID string) (bool, error) {
 	published, enabled, err := marketItemLookup(ctx, itemType, itemName, tenantID)
 	if err != nil {
@@ -113,6 +138,8 @@ func IsItemEnabledForTenant(ctx context.Context, itemType, itemName, tenantID st
 	return enabled, nil
 }
 
+// ListEnabledMarketItems 返回租户已安装且启用的 published 市场条目
+// （供插件/技能列表叠加市场已授权项）。
 func ListEnabledMarketItems(ctx context.Context, itemType, tenantID string) ([]MarketItem, error) {
 	pool := db.ReadPool()
 	if pool == nil {
@@ -139,6 +166,8 @@ func ListEnabledMarketItems(ctx context.Context, itemType, tenantID string) ([]M
 	return items, rows.Err()
 }
 
+// ── 内部辅助 ─────────────────────────────────────────────────────────────
+
 const catalogItemColumns = `id, type, name, version, manifest, status, created_by, created_at, updated_at`
 
 func scanMarketItem(row interface{ Scan(...any) error }) (*MarketItem, error) {
@@ -150,12 +179,15 @@ func scanMarketItem(row interface{ Scan(...any) error }) (*MarketItem, error) {
 	return &it, nil
 }
 
+// marketTenantID 与策略 handler 一致的租户解析（claims 优先，回退默认租户）。
 func marketTenantID(claims *auth.Claims) string {
 	if claims != nil && claims.TenantID != "" {
 		return claims.TenantID
 	}
 	return DefaultTenantID
 }
+
+// ── 目录条目 CRUD ────────────────────────────────────────────────────────
 
 // ListItems GET /v1/ent/market/items?type=&status=
 func (h *MarketHandler) ListItems(w http.ResponseWriter, r *http.Request) {
@@ -208,7 +240,7 @@ func (h *MarketHandler) ListItems(w http.ResponseWriter, r *http.Request) {
 	OK(w, items)
 }
 
-// CreateItem POST /v1/ent/market/items
+// CreateItem POST /v1/ent/market/items（初始状态 draft）。
 func (h *MarketHandler) CreateItem(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	if claims == nil {
@@ -287,6 +319,8 @@ func (h *MarketHandler) GetItem(w http.ResponseWriter, r *http.Request) {
 	OK(w, it)
 }
 
+// UpdateItem PUT /v1/ent/market/items/{id}（仅 name/version/manifest；
+// 状态流转只经 publish/retire 端点）。
 func (h *MarketHandler) UpdateItem(w http.ResponseWriter, r *http.Request) {
 	if claims := auth.GetClaims(r.Context()); claims == nil {
 		Unauthorized(w, ErrAuthRequired)
@@ -318,6 +352,7 @@ func (h *MarketHandler) UpdateItem(w http.ResponseWriter, r *http.Request) {
 		BadRequest(w, "manifest must be valid JSON")
 		return
 	}
+	// jsonb 列参数以 string 传递（[]byte 会被 pgx 编码为 bytea）；nil → NULL
 	var manifest any
 	if body.Manifest != nil {
 		manifest = string(*body.Manifest)
@@ -345,6 +380,7 @@ func (h *MarketHandler) UpdateItem(w http.ResponseWriter, r *http.Request) {
 	OK(w, updated)
 }
 
+// DeleteItem DELETE /v1/ent/market/items/{id}（级联删除安装记录）。
 func (h *MarketHandler) DeleteItem(w http.ResponseWriter, r *http.Request) {
 	if claims := auth.GetClaims(r.Context()); claims == nil {
 		Unauthorized(w, ErrAuthRequired)
@@ -371,6 +407,7 @@ func (h *MarketHandler) DeleteItem(w http.ResponseWriter, r *http.Request) {
 	NoContent(w)
 }
 
+// transitionItem 读取当前状态并校验状态机迁移，通过后原子 UPDATE。
 func (h *MarketHandler) transitionItem(w http.ResponseWriter, r *http.Request, to string) {
 	if claims := auth.GetClaims(r.Context()); claims == nil {
 		Unauthorized(w, ErrAuthRequired)
@@ -407,6 +444,7 @@ func (h *MarketHandler) transitionItem(w http.ResponseWriter, r *http.Request, t
 		 WHERE id = $1 AND status = $3 RETURNING `+catalogItemColumns, id, to, from))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			// 并发下状态已被其他请求变更
 			JSON(w, http.StatusConflict, APIResponse{
 				Success: false,
 				Error:   "invalid status transition (concurrent update)",
@@ -419,13 +457,17 @@ func (h *MarketHandler) transitionItem(w http.ResponseWriter, r *http.Request, t
 	OK(w, updated)
 }
 
+// PublishItem POST /v1/ent/market/items/{id}/publish（draft → published）。
 func (h *MarketHandler) PublishItem(w http.ResponseWriter, r *http.Request) {
 	h.transitionItem(w, r, "published")
 }
 
+// RetireItem POST /v1/ent/market/items/{id}/retire（published → retired）。
 func (h *MarketHandler) RetireItem(w http.ResponseWriter, r *http.Request) {
 	h.transitionItem(w, r, "retired")
 }
+
+// ── 租户授权（安装记录） ─────────────────────────────────────────────────
 
 func scanMarketGrant(row interface{ Scan(...any) error }) (*MarketGrant, error) {
 	var g MarketGrant
@@ -480,7 +522,7 @@ func (h *MarketHandler) ListGrants(w http.ResponseWriter, r *http.Request) {
 	OK(w, grants)
 }
 
-// GrantItem POST /v1/ent/market/grants锛圲PSERT锛歩tem_id + tenant_id 涓婚敭锛夈€?
+// GrantItem POST /v1/ent/market/grants（UPSERT：item_id + tenant_id 主键）。
 func (h *MarketHandler) GrantItem(w http.ResponseWriter, r *http.Request) {
 	if claims := auth.GetClaims(r.Context()); claims == nil {
 		Unauthorized(w, ErrAuthRequired)
@@ -511,6 +553,7 @@ func (h *MarketHandler) GrantItem(w http.ResponseWriter, r *http.Request) {
 		ServiceUnavailable(w, ErrDBUnavailable)
 		return
 	}
+	// 条目必须存在（外键兜底，提前给出友好 404）
 	var exists bool
 	if err := db.Pool.QueryRow(r.Context(),
 		`SELECT EXISTS(SELECT 1 FROM ent_catalog_items WHERE id = $1)`, body.ItemID).Scan(&exists); err != nil {
@@ -534,6 +577,7 @@ func (h *MarketHandler) GrantItem(w http.ResponseWriter, r *http.Request) {
 	Created(w, g)
 }
 
+// UpdateGrant PUT /v1/ent/market/grants/{itemID}/{tenantID}（仅切换 enabled）。
 func (h *MarketHandler) UpdateGrant(w http.ResponseWriter, r *http.Request) {
 	if claims := auth.GetClaims(r.Context()); claims == nil {
 		Unauthorized(w, ErrAuthRequired)

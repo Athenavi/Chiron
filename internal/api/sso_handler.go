@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"context"
@@ -17,13 +17,13 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// maskedSecret 鏄?provider 璇诲搷搴斾腑 client_secret 鐨勫敮涓€鑴辨晱褰㈡€併€?
+// maskedSecret 是 provider 读响应中 client_secret 的唯一脱敏形态。
 const maskedSecret = "********"
 
-// ssoStateTTL 鏄?SSO state 浠ょ墝鏈夋晥鏈燂紙闃查噸鏀剧獥鍙ｏ級銆?
+// ssoStateTTL 是 SSO state 令牌有效期（防重放窗口）。
 const ssoStateTTL = 10 * time.Minute
 
-//€ 鏁版嵁妯″瀷 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+// ── 数据模型 ────────────────────────────────────────────
 
 type ssoProvider struct {
 	ID              string
@@ -36,7 +36,7 @@ type ssoProvider struct {
 	Enabled         bool
 	AutoProvision   bool
 	RoleMapping     map[string]string
-	// OAuth2 鎵╁睍
+	// OAuth2 扩展
 	Protocol     string
 	ProviderType string
 	DisplayName  string
@@ -57,7 +57,7 @@ type ssoUser struct {
 	Role  string
 }
 
-// sanitizeProvider 鏋勯€?provider 鐨勫澶栧搷搴旓細client_secret 涓€寰嬭劚鏁忋€?
+// sanitizeProvider 构造 provider 的对外响应：client_secret 一律脱敏。
 func sanitizeProvider(p *ssoProvider) map[string]any {
 	roleMapping := p.RoleMapping
 	if roleMapping == nil {
@@ -98,7 +98,7 @@ func sanitizeProvider(p *ssoProvider) map[string]any {
 
 type scanner interface{ Scan(dest ...any) error }
 
-// 鍙┖鍒楃粺涓€ COALESCE 涓虹┖涓诧細鏈鐩栵紙''锛夊嵆"鐢ㄦā鏉跨己鐪佸€?锛岃涔変笌 OAuth2 绔偣瑕嗙洊涓€鑷淬€?
+// 可空列统一 COALESCE 为空串：未覆盖（''）即"用模板缺省值"，语义与 OAuth2 端点覆盖一致。
 const ssoProviderColumns = `id, tenant_id, name, COALESCE(issuer, ''), client_id, client_secret_enc,
        scopes, enabled, auto_provision, role_mapping,
        COALESCE(protocol, 'oidc'), COALESCE(provider_type, 'custom'),
@@ -142,25 +142,25 @@ func scanSSOProvider(row scanner) (*ssoProvider, error) {
 	return &p, nil
 }
 
-//€ Handler 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+// ── Handler ─────────────────────────────────────────────
 
-// SSOHandler 璐熻矗 OIDC/OAuth2 SSO 鍏紑娴佺▼銆佺敤鎴疯嚜鍔╃粦瀹氫笌绠＄悊绔?CRUD銆?
-// db 鎶借薄涓?entQuerier 渚夸簬娴嬭瘯娉ㄥ叆 fake锛沞xchanger 鎶借薄 IdP 浜や簰銆?
+// SSOHandler 负责 OIDC/OAuth2 SSO 公开流程、用户自助绑定与管理端 CRUD。
+// db 抽象为 entQuerier 便于测试注入 fake；exchanger 抽象 IdP 交互。
 type SSOHandler struct {
 	auth       *auth.Authenticator
 	cfg        *config.Config
 	db         entQuerier
-	exchanger  auth.OIDCExchanger // OIDC 鍗忚浜ゆ崲鍣紙go-oidc锛?
-	oauth2     auth.OIDCExchanger // OAuth2 鍗忚浜ゆ崲鍣紙github/寰俊/閽夐拤/椋炰功/qq锛?
+	exchanger  auth.OIDCExchanger // OIDC 协议交换器（go-oidc）
+	oauth2     auth.OIDCExchanger // OAuth2 协议交换器（github/微信/钉钉/飞书/qq）
 	codec      *auth.StateCodec
 	encKey     []byte
-	redirectURL string // OAuth2 redirect_uri锛堟巿鏉冨洖璋冨湴鍧€锛?
-	successURL  string // 鐧诲綍鎴愬姛鍚?302 鍥炲墠绔殑鐩爣
-	bindURL     string // 缁戝畾鎴愬姛鍚?302 鍥炲墠绔殑鐩爣
+	redirectURL string // OAuth2 redirect_uri（授权回调地址）
+	successURL  string // 登录成功后 302 回前端的目标
+	bindURL     string // 绑定成功后 302 回前端的目标
 }
 
 func NewSSOHandler(authenticator *auth.Authenticator, cfg *config.Config) *SSOHandler {
-	// 鍓嶇鐙珛閮ㄧ讲锛坉ev 5173 / 鐙珛鍩熷悕锛夋椂 302 鍒扮粷瀵瑰湴鍧€锛涘悓婧愰儴缃蹭繚鎸佺浉瀵硅矾寰?
+	// 前端独立部署（dev 5173 / 独立域名）时 302 到绝对地址；同源部署保持相对路径
 	feBase := strings.TrimRight(cfg.FrontendURL, "/")
 	h := &SSOHandler{
 		auth:        authenticator,
@@ -179,22 +179,22 @@ func NewSSOHandler(authenticator *auth.Authenticator, cfg *config.Config) *SSOHa
 	return h
 }
 
-// RegisterPublicRoutes 鎸傝浇鍏紑 SSO 璺敱锛堟棤 authMW锛涘灞傞』濂?rlMW 闄愭祦锛夛細
-// 鍙戠幇鍒楄〃 / 鐧诲綍璺宠浆 / IdP 鍥炶皟銆俠ind 妯″紡鐨勭櫥褰曟€佷粠 JWT cookie 瑙ｆ瀽銆?
+// RegisterPublicRoutes 挂载公开 SSO 路由（无 authMW；外层须套 rlMW 限流）：
+// 发现列表 / 登录跳转 / IdP 回调。bind 模式的登录态从 JWT cookie 解析。
 func (h *SSOHandler) RegisterPublicRoutes(mux *http.ServeMux, rlMW func(http.Handler) http.Handler) {
 	mux.Handle("GET /v1/auth/sso/providers", rlMW(http.HandlerFunc(h.ListPublicProviders)))
 	mux.Handle("GET /v1/auth/sso/login/{providerID}", rlMW(http.HandlerFunc(h.Login)))
 	mux.Handle("GET /v1/auth/sso/callback", rlMW(http.HandlerFunc(h.Callback)))
 }
 
-// RegisterUserRoutes 鎸傝浇鐢ㄦ埛鑷姪璺敱锛坅uthMW锛夛細缁戝畾鍒楄〃 / 瑙ｇ粦 / 璁剧疆瀵嗙爜銆?
+// RegisterUserRoutes 挂载用户自助路由（authMW）：绑定列表 / 解绑 / 设置密码。
 func (h *SSOHandler) RegisterUserRoutes(mux *http.ServeMux, authMW func(http.Handler) http.Handler) {
 	mux.Handle("GET /v1/auth/sso/identities", authMW(http.HandlerFunc(h.ListIdentities)))
 	mux.Handle("DELETE /v1/auth/sso/identities/{id}", authMW(http.HandlerFunc(h.DeleteIdentity)))
 	mux.Handle("POST /v1/auth/password", authMW(http.HandlerFunc(h.SetPassword)))
 }
 
-// RegisterAdminRoutes 鎸傝浇 SSO 绠＄悊璺敱锛歛uthMW + RequireEntPerm("sso:manage")銆?
+// RegisterAdminRoutes 挂载 SSO 管理路由：authMW + RequireEntPerm("sso:manage")。
 func (h *SSOHandler) RegisterAdminRoutes(mux *http.ServeMux, authMW func(http.Handler) http.Handler) {
 	sso := func(hf http.HandlerFunc) http.Handler {
 		return authMW(RequireEntPerm("sso:manage")(hf))
@@ -206,10 +206,10 @@ func (h *SSOHandler) RegisterAdminRoutes(mux *http.ServeMux, authMW func(http.Ha
 	mux.Handle("DELETE /v1/ent/sso/providers/{id}", sso(h.DeleteProvider))
 }
 
-//€ 鍏紑璺敱 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+// ── 公开路由 ────────────────────────────────────────────
 
 // ListPublicProviders GET /v1/auth/sso/providers
-// 杩斿洖 enabled provider 鐨勫睍绀哄瓧娈碉紙涓嶅惈浠讳綍鏁忔劅淇℃伅锛夛紝鎸?sort_order 鎺掑簭銆?
+// 返回 enabled provider 的展示字段（不含任何敏感信息），按 sort_order 排序。
 func (h *SSOHandler) ListPublicProviders(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(r.Context(),
 		`SELECT id, name, display_name, provider_type, icon, sort_order, protocol
@@ -255,8 +255,8 @@ func (h *SSOHandler) ListPublicProviders(w http.ResponseWriter, r *http.Request)
 }
 
 // Login GET /v1/auth/sso/login/{providerID}[?mode=bind]
-// 鐢熸垚 state+nonce 鈫?302 鍒?IdP 鎺堟潈椤点€?
-// mode=bind 闇€鐧诲綍鎬侊紙authMW 淇濊瘉锛夛紝uid 鍐欏叆 HMAC 绛惧悕 state銆?
+// 生成 state+nonce → 302 到 IdP 授权页。
+// mode=bind 需登录态（authMW 保证），uid 写入 HMAC 签名 state。
 func (h *SSOHandler) Login(w http.ResponseWriter, r *http.Request) {
 	providerID := r.PathValue("providerID")
 	if !isValidUUID(providerID) {
@@ -284,7 +284,7 @@ func (h *SSOHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// bind 妯″紡锛氬繀椤绘惡甯︾櫥褰曟€侊紙浠?JWT cookie 瑙ｆ瀽锛屽叕寮€璺敱鏃?authMW锛?
+	// bind 模式：必须携带登录态（从 JWT cookie 解析，公开路由无 authMW）
 	mode := auth.StateModeLogin
 	uid := ""
 	if r.URL.Query().Get("mode") == auth.StateModeBind {
@@ -329,7 +329,7 @@ func (h *SSOHandler) Login(w http.ResponseWriter, r *http.Request) {
 }
 
 // Callback GET /v1/auth/sso/callback?code=&state=
-// 鏍￠獙 state 鈫?鎺堟潈鐮佹崲韬唤 鈫?鐧诲綍缁戝畾/鑷姩寤哄彿锛堟垨 bind 妯″紡缁戝畾褰撳墠璐﹀彿锛夆啋 棰佸彂浼氳瘽銆?
+// 校验 state → 授权码换身份 → 登录绑定/自动建号（或 bind 模式绑定当前账号）→ 颁发会话。
 func (h *SSOHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	state := r.URL.Query().Get("state")
 	code := r.URL.Query().Get("code")
@@ -342,14 +342,14 @@ func (h *SSOHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1. state 鏍￠獙锛圚MAC 闃?CSRF/绡℃敼锛孴TL 闃查噸鏀撅級鈥斺€斿け璐ヤ竴寰?400锛屼笖涓嶈Е纰?DB
+	// 1. state 校验（HMAC 防 CSRF/篡改，TTL 防重放）——失败一律 400，且不触碰 DB
 	payload, err := h.codec.Verify(state)
 	if err != nil {
 		logAndRespond(w, err, http.StatusBadRequest, "invalid sso state")
 		return
 	}
 
-	// 2. 鍔犺浇 provider锛堝繀椤?enabled锛?
+	// 2. 加载 provider（必须 enabled）
 	provider, err := h.getEnabledProvider(r.Context(), payload.ProviderID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		BadRequest(w, "unknown sso provider in state")
@@ -365,7 +365,7 @@ func (h *SSOHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3. 鎺堟潈鐮佷氦鎹?+ 韬唤鏍￠獙锛圤IDC 鍚?nonce 姣斿锛汷Auth2 鐢?state HMAC 闃查噸鏀撅級
+	// 3. 授权码交换 + 身份校验（OIDC 含 nonce 比对；OAuth2 由 state HMAC 防重放）
 	exchanger, cfg, err := h.exchangerFor(provider, clientSecret)
 	if err != nil {
 		BadRequest(w, err.Error())
@@ -381,20 +381,20 @@ func (h *SSOHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3.5 bind 妯″紡锛氭妸璇ヤ笁鏂硅韩浠界粦瀹氬埌 state.uid 璐﹀彿
+	// 3.5 bind 模式：把该三方身份绑定到 state.uid 账号
 	if payload.Mode == auth.StateModeBind {
 		h.handleBindCallback(w, r, provider, idToken, payload)
 		return
 	}
 
-	// 4. 鎸?(provider_id, subject) 鏌ョ粦瀹?
+	// 4. 按 (provider_id, subject) 查绑定
 	user, err := h.findIdentityUser(r.Context(), provider.ID, idToken.Subject)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		logAndRespond(w, err, http.StatusInternalServerError, ErrDBUnavailable)
 		return
 	}
 
-	// 5. 鏈粦瀹氾細auto_provision 鍐冲畾寤哄彿鎴栨嫆缁?
+	// 5. 未绑定：auto_provision 决定建号或拒绝
 	if errors.Is(err, pgx.ErrNoRows) {
 		if !provider.AutoProvision {
 			logAndRespond(w, errors.New("sso subject not bound and auto_provision disabled"),
@@ -408,8 +408,9 @@ func (h *SSOHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 6. 澶嶇敤鐜版湁鐧诲綍鐨勪細璇濋鍙戦€昏緫锛圙enerateToken + SetTokenCookie锛?	// 澶氱鎴烽殧绂伙細SSO 鐢ㄦ埛鐨?tenant_id 鏉ヨ嚜 sso_provider 琛ㄩ厤缃紙ent_oidc_providers.tenant_id锛夛紝
-	// 涓庤嚜鍔ㄥ缓鍙?provisionAndBind 浣跨敤鐨?provider.TenantID 涓€鑷达紝淇濊瘉 JWT 涓?DB 琛屼负瀵归綈
+	// 6. 复用现有登录的会话颁发逻辑（GenerateToken + SetTokenCookie）
+	// 多租户隔离：SSO 用户的 tenant_id 来自 sso_provider 表配置（ent_oidc_providers.tenant_id），
+	// 与自动建号 provisionAndBind 使用的 provider.TenantID 一致，保证 JWT 与 DB 行为对齐
 	if provider.TenantID == "" {
 		InternalError(w, "sso provider missing tenant_id configuration")
 		return
@@ -424,8 +425,8 @@ func (h *SSOHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, h.successURL, http.StatusFound)
 }
 
-// handleBindCallback bind 妯″紡鍥炶皟锛氳涓夋柟韬唤 鈫?state.uid 鏈湴璐﹀彿銆?
-// 鍐茬獊锛堝凡缁戝畾浠栦汉锛夆啋 409锛涘凡缁戝畾鏈汉 鈫?骞傜瓑鎴愬姛銆?
+// handleBindCallback bind 模式回调：该三方身份 → state.uid 本地账号。
+// 冲突（已绑定他人）→ 409；已绑定本人 → 幂等成功。
 func (h *SSOHandler) handleBindCallback(w http.ResponseWriter, r *http.Request, provider *ssoProvider, idToken *auth.IDTokenResult, payload *auth.StatePayload) {
 	ctx := r.Context()
 
@@ -440,11 +441,11 @@ func (h *SSOHandler) handleBindCallback(w http.ResponseWriter, r *http.Request, 
 				"provider="+provider.Name, r.RemoteAddr, nil)
 			JSON(w, http.StatusConflict, APIResponse{
 				Success: false,
-				Error:   "璇ヤ笁鏂硅处鍙峰凡缁戝畾鍏朵粬鐢ㄦ埛锛岃鏀圭敤鍏剁櫥褰?,
+				Error:   "该三方账号已绑定其他用户，请改用其登录",
 			})
 			return
 		}
-		// 宸茬粦瀹氭湰浜?鈫?骞傜瓑
+		// 已绑定本人 → 幂等
 		http.Redirect(w, r, h.bindURL, http.StatusFound)
 		return
 	}
@@ -454,10 +455,10 @@ func (h *SSOHandler) handleBindCallback(w http.ResponseWriter, r *http.Request, 
 		 VALUES ($1, $2, $3, $4)`,
 		payload.UID, provider.ID, idToken.Subject, idToken.Email); err != nil {
 		if isUniqueViolation(err) {
-			// 骞跺彂缁戝畾鍐茬獊
+			// 并发绑定冲突
 			JSON(w, http.StatusConflict, APIResponse{
 				Success: false,
-				Error:   "璇ヤ笁鏂硅处鍙峰凡缁戝畾鍏朵粬鐢ㄦ埛锛岃鏀圭敤鍏剁櫥褰?,
+				Error:   "该三方账号已绑定其他用户，请改用其登录",
 			})
 			return
 		}
@@ -469,9 +470,9 @@ func (h *SSOHandler) handleBindCallback(w http.ResponseWriter, r *http.Request, 
 	http.Redirect(w, r, h.bindURL, http.StatusFound)
 }
 
-//€ 鐢ㄦ埛鑷姪锛氱粦瀹氬垪琛?/ 瑙ｇ粦 / 璁剧疆瀵嗙爜 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+// ── 用户自助：绑定列表 / 解绑 / 设置密码 ────────────────
 
-// ListIdentities GET /v1/auth/sso/identities锛坅uthMW锛?
+// ListIdentities GET /v1/auth/sso/identities（authMW）
 func (h *SSOHandler) ListIdentities(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	if claims == nil {
@@ -520,8 +521,8 @@ func (h *SSOHandler) ListIdentities(w http.ResponseWriter, r *http.Request) {
 	OK(w, items)
 }
 
-// DeleteIdentity DELETE /v1/auth/sso/identities/{id}锛坅uthMW锛?
-// 瀹堝崼锛氱敤鎴锋棤鍙彛浠ゅ瘑鐮侊紙password_set=false锛変笖杩欐槸鏈€鍚庝竴涓笁鏂硅韩浠?鈫?403銆?
+// DeleteIdentity DELETE /v1/auth/sso/identities/{id}（authMW）
+// 守卫：用户无可口令密码（password_set=false）且这是最后一个三方身份 → 403。
 func (h *SSOHandler) DeleteIdentity(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	if claims == nil {
@@ -535,7 +536,7 @@ func (h *SSOHandler) DeleteIdentity(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 
-	// 瀹堝崼锛氱‘淇濊В缁戝悗鑷冲皯淇濈暀涓€绉嶇櫥褰曟柟寮?
+	// 守卫：确保解绑后至少保留一种登录方式
 	var passwordSet bool
 	var count int
 	err := h.db.QueryRow(ctx,
@@ -551,7 +552,7 @@ func (h *SSOHandler) DeleteIdentity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 鐩爣韬唤灞炰簬鏈汉锛?
+	// 目标身份属于本人？
 	var subject string
 	err = h.db.QueryRow(ctx,
 		`SELECT subject FROM ent_user_identities WHERE id = $1 AND user_id = $2`,
@@ -566,7 +567,7 @@ func (h *SSOHandler) DeleteIdentity(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !passwordSet && count <= 1 {
-		Forbidden(w, "鏃犳硶瑙ｇ粦锛氳鍏堣缃瘑鐮侊紝淇濊瘉鑷冲皯淇濈暀涓€绉嶇櫥褰曟柟寮?)
+		Forbidden(w, "无法解绑：请先设置密码，保证至少保留一种登录方式")
 		return
 	}
 
@@ -590,8 +591,8 @@ type setPasswordRequest struct {
 	NewPassword     string `json:"new_password"`
 }
 
-// SetPassword POST /v1/auth/password锛坅uthMW锛?
-// SSO 寤哄彿鐢ㄦ埛锛坧assword_set=false锛夐璁惧瘑鐮佸厤鏃у瘑鐮侊紱宸茶缃€呭繀椤绘牎楠屾棫瀵嗙爜銆?
+// SetPassword POST /v1/auth/password（authMW）
+// SSO 建号用户（password_set=false）首设密码免旧密码；已设置者必须校验旧密码。
 func (h *SSOHandler) SetPassword(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	if claims == nil {
@@ -649,7 +650,7 @@ func (h *SSOHandler) SetPassword(w http.ResponseWriter, r *http.Request) {
 	OK(w, map[string]string{"status": "updated"})
 }
 
-//€ 绠＄悊璺敱锛坅uthMW + sso:manage锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+// ── 管理路由（authMW + sso:manage）──────────────────────
 
 // ListProviders GET /v1/ent/sso/providers
 func (h *SSOHandler) ListProviders(w http.ResponseWriter, r *http.Request) {
@@ -686,7 +687,7 @@ type createProviderRequest struct {
 	Enabled       *bool             `json:"enabled"`
 	AutoProvision *bool             `json:"auto_provision"`
 	RoleMapping   map[string]string `json:"role_mapping"`
-	// OAuth2 鎵╁睍
+	// OAuth2 扩展
 	Protocol     string            `json:"protocol"`
 	ProviderType string            `json:"provider_type"`
 	DisplayName  string            `json:"display_name"`
@@ -698,11 +699,11 @@ type createProviderRequest struct {
 	Extra        map[string]string `json:"extra"`
 }
 
-// normalizeProviderInput 鏍￠獙骞惰ˉ榻?provider 鍗忚瀛楁锛堟ā鏉跨鐐硅嚜鍔ㄥ～鍏咃級銆?
-// 杩斿洖瑙勮寖鍖栫殑 issuer/protocol/providerType/authURL/tokenURL/userinfoURL/scopes銆?
+// normalizeProviderInput 校验并补齐 provider 协议字段（模板端点自动填充）。
+// 返回规范化的 issuer/protocol/providerType/authURL/tokenURL/userinfoURL/scopes。
 func normalizeProviderInput(protocol, providerType, issuer, authURL, tokenURL, userinfoURL string, scopes []string) (
 	string, string, string, string, string, string, []string, error) {
-	// protocol 鏈樉寮忔寚瀹氭椂鎸?provider_type 妯℃澘鎺ㄦ柇锛坓ithub/wechat 绛夊師鐢?OAuth2锛?
+	// protocol 未显式指定时按 provider_type 模板推断（github/wechat 等原生 OAuth2）
 	if protocol == "" {
 		if profile, ok := auth.GetProviderProfile(providerType); ok {
 			protocol = profile.Protocol
@@ -732,7 +733,7 @@ func defaultStr(s, def string) string {
 }
 
 // CreateProvider POST /v1/ent/sso/providers
-// client_secret 浠?AES-GCM 鍔犲瘑鍏ュ簱锛涘瘑閽ユ湭閰嶇疆鏃惰繑鍥?503銆?
+// client_secret 以 AES-GCM 加密入库；密钥未配置时返回 503。
 func (h *SSOHandler) CreateProvider(w http.ResponseWriter, r *http.Request) {
 	var req createProviderRequest
 	if err := DecodeJSON(w, r, &req); err != nil {
@@ -856,7 +857,7 @@ type updateProviderRequest struct {
 	Enabled       *bool              `json:"enabled"`
 	AutoProvision *bool              `json:"auto_provision"`
 	RoleMapping   *map[string]string `json:"role_mapping"`
-	// OAuth2 鎵╁睍
+	// OAuth2 扩展
 	Protocol     *string            `json:"protocol"`
 	ProviderType *string            `json:"provider_type"`
 	DisplayName  *string            `json:"display_name"`
@@ -869,7 +870,7 @@ type updateProviderRequest struct {
 }
 
 // UpdateProvider PUT /v1/ent/sso/providers/{id}
-// client_secret 涓虹┖涓叉垨鑴辨晱鍗犱綅绗︽椂淇濈暀鍘熷瘑鏂囷紱鎻愪緵鏂板€兼椂閲嶆柊鍔犲瘑锛堥渶瀵嗛挜锛夈€?
+// client_secret 为空串或脱敏占位符时保留原密文；提供新值时重新加密（需密钥）。
 func (h *SSOHandler) UpdateProvider(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if !isValidUUID(id) {
@@ -915,7 +916,7 @@ func (h *SSOHandler) UpdateProvider(w http.ResponseWriter, r *http.Request) {
 	if req.ProviderType != nil {
 		providerType = *req.ProviderType
 	}
-	// 鍗忚/妯℃澘鍙樻洿鍚庨噸鏂拌В鏋愮鐐癸紙鏄惧紡瑕嗙洊浼樺厛锛?
+	// 协议/模板变更后重新解析端点（显式覆盖优先）
 	if req.Protocol != nil || req.ProviderType != nil || req.Issuer != nil ||
 		req.AuthURL != nil || req.TokenURL != nil || req.UserinfoURL != nil {
 		var iss, au, tu, uu string
@@ -931,7 +932,7 @@ func (h *SSOHandler) UpdateProvider(w http.ResponseWriter, r *http.Request) {
 		if req.UserinfoURL != nil {
 			uu = *req.UserinfoURL
 		}
-		// 鏈樉寮忚鐩栫殑瀛楁娌跨敤鏃㈡湁鍊硷紙鍙兘宸叉槸绠＄悊鍛樿嚜瀹氫箟绔偣锛?
+		// 未显式覆盖的字段沿用既有值（可能已是管理员自定义端点）
 		if iss == "" {
 			iss = issuer
 		}
@@ -1069,7 +1070,7 @@ func (h *SSOHandler) DeleteProvider(w http.ResponseWriter, r *http.Request) {
 	OK(w, map[string]string{"status": "deleted"})
 }
 
-//€ 鍐呴儴杈呭姪 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+// ── 内部辅助 ────────────────────────────────────────────
 
 func (h *SSOHandler) getProvider(ctx context.Context, id string) (*ssoProvider, error) {
 	return scanSSOProvider(h.db.QueryRow(ctx,
@@ -1081,13 +1082,13 @@ func (h *SSOHandler) getEnabledProvider(ctx context.Context, id string) (*ssoPro
 		`SELECT `+ssoProviderColumns+` FROM ent_oidc_providers WHERE id = $1 AND enabled = TRUE`, id))
 }
 
-// exchangerFor 鎸?provider 鍗忚閫夋嫨浜ゆ崲鍣ㄥ苟鏋勯€犲畬鏁撮厤缃紙鍚ā鏉跨鐐硅В鏋愶級銆?
+// exchangerFor 按 provider 协议选择交换器并构造完整配置（含模板端点解析）。
 func (h *SSOHandler) exchangerFor(p *ssoProvider, clientSecret string) (auth.OIDCExchanger, *auth.OIDCProviderConfig, error) {
 	protocol := p.Protocol
 	if protocol == "" {
 		protocol = auth.ProtocolOIDC
 	}
-	// 妯℃澘绔偣琛ラ綈锛氭樉寮忚鐩栵紙DB 鍒楅潪绌猴級浼樺厛锛屽叾娆?provider 妯℃澘缂虹渷鍊?
+	// 模板端点补齐：显式覆盖（DB 列非空）优先，其次 provider 模板缺省值
 	issuer, authURL, tokenURL, userinfoURL := auth.ResolveEndpoints(
 		p.ProviderType, p.Issuer, p.AuthURL, p.TokenURL, p.UserinfoURL)
 	scopes := p.Scopes
@@ -1124,7 +1125,7 @@ func (h *SSOHandler) exchangerFor(p *ssoProvider, clientSecret string) (auth.OID
 	return h.exchanger, cfg, nil
 }
 
-// findIdentityUser 鎸?(provider_id, subject) 鏌ョ粦瀹氱敤鎴凤紱鏈粦瀹氳繑鍥?pgx.ErrNoRows銆?
+// findIdentityUser 按 (provider_id, subject) 查绑定用户；未绑定返回 pgx.ErrNoRows。
 func (h *SSOHandler) findIdentityUser(ctx context.Context, providerID, subject string) (*ssoUser, error) {
 	var user ssoUser
 	err := h.db.QueryRow(ctx,
@@ -1138,10 +1139,10 @@ func (h *SSOHandler) findIdentityUser(ctx context.Context, providerID, subject s
 	return &user, nil
 }
 
-// provisionAndBind 鑷姩寤哄彿骞跺啓鍏ュ閮ㄨ韩浠界粦瀹氥€?
-// 绉熸埛鍙?provider 閰嶇疆锛沞mail 鍙栬韩浠戒俊鎭紙缂哄け鏃朵互 subject 鍏滃簳锛夛紱
-// password_hash 鍐欏叆闅忔満涓嶅彲纰版挒 bcrypt 涓?password_set=FALSE锛堜笉鍙彛浠ょ櫥褰曪級锛?
-// role 鎸?role_mapping 鍖归厤銆佺己鐪?"user"锛涙惡甯︽墜鏈哄彿鏃跺洖濉?users.phone銆?
+// provisionAndBind 自动建号并写入外部身份绑定。
+// 租户取 provider 配置；email 取身份信息（缺失时以 subject 兜底）；
+// password_hash 写入随机不可碰撞 bcrypt 且 password_set=FALSE（不可口令登录）；
+// role 按 role_mapping 匹配、缺省 "user"；携带手机号时回填 users.phone。
 func (h *SSOHandler) provisionAndBind(r *http.Request, provider *ssoProvider, idToken *auth.IDTokenResult) (*ssoUser, error) {
 	ctx := r.Context()
 
@@ -1155,7 +1156,7 @@ func (h *SSOHandler) provisionAndBind(r *http.Request, provider *ssoProvider, id
 	}
 	role := resolveRole(provider.RoleMapping, idToken.Roles)
 
-	// 闅忔満 32 瀛楄妭瀵嗙爜 鈫?bcrypt锛汼SO 寤哄彿鐢ㄦ埛涓嶅彲鐢ㄥ彛浠ょ櫥褰曪紝鐩村埌涓诲姩璁剧疆瀵嗙爜
+	// 随机 32 字节密码 → bcrypt；SSO 建号用户不可用口令登录，直到主动设置密码
 	randomPassword := make([]byte, 32)
 	if _, err := rand.Read(randomPassword); err != nil {
 		return nil, err
@@ -1165,7 +1166,7 @@ func (h *SSOHandler) provisionAndBind(r *http.Request, provider *ssoProvider, id
 		return nil, err
 	}
 
-	// 鍚岀鎴峰悓 email 宸叉湁鏈湴璐﹀彿鏃剁洿鎺ョ粦瀹氾紝閬垮厤閲嶅寤哄彿
+	// 同租户同 email 已有本地账号时直接绑定，避免重复建号
 	var user ssoUser
 	err = h.db.QueryRow(ctx,
 		`SELECT id, email, name, role FROM users WHERE tenant_id = $1 AND email = $2`,
@@ -1183,12 +1184,12 @@ func (h *SSOHandler) provisionAndBind(r *http.Request, provider *ssoProvider, id
 		return nil, err
 	}
 
-	// 鎼哄甫鎵嬫満鍙凤紙寰俊/閽夐拤绛夛級鏃跺洖濉紱澶辫触浠呰褰曚笉闃绘柇
+	// 携带手机号（微信/钉钉等）时回填；失败仅记录不阻断
 	if idToken.Phone != "" {
 		if _, err := h.db.Exec(ctx,
 			`UPDATE users SET phone = $2, updated_at = NOW() WHERE id = $1 AND (phone IS NULL OR phone = '')`,
 			user.ID, idToken.Phone); err != nil {
-			// 鎵嬫満鍙峰彲鑳戒笌浠栦汉鍐茬獊锛堝敮涓€绱㈠紩锛夛紝涓嶉樆鏂櫥褰曚富娴佺▼
+			// 手机号可能与他人冲突（唯一索引），不阻断登录主流程
 			_ = err
 		}
 	}
@@ -1198,7 +1199,7 @@ func (h *SSOHandler) provisionAndBind(r *http.Request, provider *ssoProvider, id
 		 VALUES ($1, $2, $3, $4)`,
 		user.ID, provider.ID, idToken.Subject, email); err != nil {
 		if isUniqueViolation(err) {
-			// 骞跺彂鍦烘櫙锛氬彟涓€璇锋眰宸插畬鎴愮粦瀹氾紝鐩存帴澶嶇敤鏃㈡湁缁戝畾鐢ㄦ埛
+			// 并发场景：另一请求已完成绑定，直接复用既有绑定用户
 			if bound, lookupErr := h.findIdentityUser(ctx, provider.ID, idToken.Subject); lookupErr == nil {
 				return bound, nil
 			}
@@ -1210,8 +1211,8 @@ func (h *SSOHandler) provisionAndBind(r *http.Request, provider *ssoProvider, id
 	return &user, nil
 }
 
-// resolveRole 鎸?provider.role_mapping 灏?IdP "roles" claim 鏄犲皠涓烘湰鍦拌鑹诧紱
-// 鏃犲懡涓椂缂虹渷 "user"銆傜函鍑芥暟锛屼究浜庡崟鍏冩祴璇曘€?
+// resolveRole 按 provider.role_mapping 将 IdP "roles" claim 映射为本地角色；
+// 无命中时缺省 "user"。纯函数，便于单元测试。
 func resolveRole(mapping map[string]string, idpRoles []string) string {
 	for _, r := range idpRoles {
 		if mapped, ok := mapping[r]; ok && mapped != "" {

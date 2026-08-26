@@ -7,7 +7,6 @@ import (
 	"github.com/athenavi/chiron/internal/auth"
 )
 
-// contextKey 绫诲瀷瀹夊叏鐨?context key
 type contextKey string
 
 const (

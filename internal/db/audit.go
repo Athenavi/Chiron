@@ -1,4 +1,4 @@
-﻿package db
+package db
 
 import (
 	"context"
@@ -11,27 +11,27 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// AuditEntry 瀹¤鏃ュ織鏉＄洰
+// AuditEntry 审计日志条目
 type AuditEntry struct {
 	ID        string    `json:"id"`
 	TenantID  string    `json:"tenant_id"`
 	UserID    string    `json:"user_id"`
 	Action    string    `json:"action"`    // "session.create", "tool.execute", "agent.run"
-	Resource  string    `json:"resource"`  // 璧勬簮鏍囪瘑
-	Detail    string    `json:"detail"`    // 璇︾粏淇℃伅
-	IP        string    `json:"ip"`        // 瀹㈡埛绔?IP
-	Success   bool      `json:"success"`   // 鏄惁鎴愬姛
-	Error     string    `json:"error"`     // 閿欒淇℃伅
+	Resource  string    `json:"resource"`  // 资源标识
+	Detail    string    `json:"detail"`    // 详细信息
+	IP        string    `json:"ip"`        // 客户端 IP
+	Success   bool      `json:"success"`   // 是否成功
+	Error     string    `json:"error"`     // 错误信息
 	Timestamp time.Time `json:"timestamp"`
 }
 
-// Auditor 瀹¤鏃ュ織璁板綍鍣
+// Auditor 审计日志记录器
 type Auditor struct {
 	rdb      RedisClient
 	stream   string
 }
 
-// NewAuditor 鍒涘缓瀹¤鏃ュ織璁板綍鍣
+// NewAuditor 创建审计日志记录器
 func NewAuditor(rdb RedisClient) *Auditor {
 	return &Auditor{
 		rdb:    rdb,
@@ -39,23 +39,23 @@ func NewAuditor(rdb RedisClient) *Auditor {
 	}
 }
 
-// Log 璁板綍瀹¤浜嬩欢鍒?Redis Streams
+// Log 记录审计事件到 Redis Streams
 func (a *Auditor) Log(ctx context.Context, entry AuditEntry) {
 	if a.rdb == nil {
-		slog.Debug("瀹¤鏃ュ織璺宠繃锛圧edis 涓嶅彲鐢級", "action", entry.Action)
+		slog.Debug("审计日志跳过（Redis 不可用）", "action", entry.Action)
 		return
 	}
 
 	entry.Timestamp = time.Now()
 	data, err := json.Marshal(entry)
 	if err != nil {
-		slog.Error("瀹¤鏃ュ織搴忓垪鍖栧け璐?, "error", err)
+		slog.Error("审计日志序列化失败", "error", err)
 		return
 	}
 
 	_, err = a.rdb.XAdd(ctx, &redis.XAddArgs{
 		Stream: a.stream,
-		MaxLen: 100000, // 鏈€澶氫繚鐣?10 涓囨潯
+		MaxLen: 100000, // 最多保留 10 万条
 		Approx: true,
 		Values: map[string]any{
 			"tenant_id": entry.TenantID,
@@ -68,11 +68,11 @@ func (a *Auditor) Log(ctx context.Context, entry AuditEntry) {
 	}).Result()
 
 	if err != nil {
-		slog.Error("瀹¤鏃ュ織鍐欏叆澶辫触", "error", err, "action", entry.Action)
+		slog.Error("审计日志写入失败", "error", err, "action", entry.Action)
 		return
 	}
 
-	slog.Debug("瀹¤鏃ュ織宸茶褰?,
+	slog.Debug("审计日志已记录",
 		"action", entry.Action,
 		"user", entry.UserID,
 		"tenant", entry.TenantID,
@@ -80,19 +80,21 @@ func (a *Auditor) Log(ctx context.Context, entry AuditEntry) {
 	)
 }
 
-// UserExtractor 浠庤姹備腑鎻愬彇鐢ㄦ埛淇℃伅鐨勫嚱鏁扮被鍨?// 杩斿洖 (userID, tenantID)
+// UserExtractor 从请求中提取用户信息的函数类型
+// 返回 (userID, tenantID)
 type UserExtractor func(r *http.Request) (string, string)
 
-// LogAuditMiddleware 瀹¤鏃ュ織涓棿浠?// extractUser: 浠庤姹備腑鎻愬彇鐢ㄦ埛淇℃伅鐨勫嚱鏁帮紝鍙互涓?nil
+// LogAuditMiddleware 审计日志中间件
+// extractUser: 从请求中提取用户信息的函数，可以为 nil
 func LogAuditMiddleware(auditor *Auditor, extractUser UserExtractor) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// 鍖呰 ResponseWriter 浠ユ崟鑾风姸鎬佺爜
+			// 包装 ResponseWriter 以捕获状态码
 			ww := &auditResponseWriter{ResponseWriter: w, statusCode: 200}
 
 			next.ServeHTTP(ww, r)
 
-			// 璁板綍瀹¤鏃ュ織
+			// 记录审计日志
 			entry := AuditEntry{
 				Action:   r.Method + " " + r.URL.Path,
 				Resource: r.URL.String(),
@@ -100,7 +102,7 @@ func LogAuditMiddleware(auditor *Auditor, extractUser UserExtractor) func(http.H
 				Success:  ww.statusCode < 400,
 			}
 
-			// 鎻愬彇鐢ㄦ埛淇℃伅
+			// 提取用户信息
 			if extractUser != nil {
 				entry.UserID, entry.TenantID = extractUser(r)
 			}
@@ -110,7 +112,7 @@ func LogAuditMiddleware(auditor *Auditor, extractUser UserExtractor) func(http.H
 	}
 }
 
-// auditResponseWriter 鍖呰 ResponseWriter 浠ユ崟鑾风姸鎬佺爜
+// auditResponseWriter 包装 ResponseWriter 以捕获状态码
 type auditResponseWriter struct {
 	http.ResponseWriter
 	statusCode int
@@ -121,8 +123,8 @@ func (w *auditResponseWriter) WriteHeader(code int) {
 	w.ResponseWriter.WriteHeader(code)
 }
 
-// AuditLog 鍏ㄥ眬瀹¤鏃ュ織鍑芥暟锛堢畝鍖栨帴鍙ｏ級
-// 鐢ㄤ簬 middleware.go 涓殑蹇€熻皟鐢
+// AuditLog 全局审计日志函数（简化接口）
+// 用于 middleware.go 中的快速调用
 func AuditLog(ctx context.Context, userID, action, resource, detail, ip string, meta map[string]interface{}) {
 	if Redis == nil {
 		return
@@ -158,7 +160,7 @@ func AuditLog(ctx context.Context, userID, action, resource, detail, ip string, 
 	}
 }
 
-// AuditConsumer 瀹¤鏃ュ織娑堣垂鑰
+// AuditConsumer 审计日志消费者
 type AuditConsumer struct {
 	rdb      RedisClient
 	stream   string
@@ -166,7 +168,7 @@ type AuditConsumer struct {
 	handler  func(ctx context.Context, entry AuditEntry) error
 }
 
-// NewAuditConsumer 鍒涘缓瀹¤鏃ュ織娑堣垂鑰
+// NewAuditConsumer 创建审计日志消费者
 func NewAuditConsumer(rdb RedisClient, handler func(ctx context.Context, entry AuditEntry) error) *AuditConsumer {
 	return &AuditConsumer{
 		rdb:     rdb,
@@ -176,13 +178,13 @@ func NewAuditConsumer(rdb RedisClient, handler func(ctx context.Context, entry A
 	}
 }
 
-// Start 鍚姩娑堣垂鑰
+// Start 启动消费者
 func (c *AuditConsumer) Start(ctx context.Context) error {
 	if c.rdb == nil {
 		return nil
 	}
 
-	// 鍒涘缓娑堣垂鑰呯粍
+	// 创建消费者组
 	if err := c.rdb.XGroupCreateMkStream(ctx, c.stream, c.group, "0").Err(); err != nil {
 		if !strings.Contains(err.Error(), "BUSYGROUP") {
 			slog.Warn("audit consumer group create error", "error", err)
@@ -210,7 +212,7 @@ func (c *AuditConsumer) Start(ctx context.Context) error {
 			if err == redis.Nil {
 				continue
 			}
-			slog.Error("瀹¤鏃ュ織娑堣垂澶辫触", "error", err)
+			slog.Error("审计日志消费失败", "error", err)
 			time.Sleep(time.Second)
 			continue
 		}
@@ -224,16 +226,16 @@ func (c *AuditConsumer) Start(ctx context.Context) error {
 
 				var entry AuditEntry
 				if err := json.Unmarshal([]byte(data), &entry); err != nil {
-					slog.Error("瀹¤鏃ュ織鍙嶅簭鍒楀寲澶辫触", "error", err)
+					slog.Error("审计日志反序列化失败", "error", err)
 					continue
 				}
 
 				if err := c.handler(ctx, entry); err != nil {
-					slog.Error("瀹¤鏃ュ織澶勭悊澶辫触", "error", err, "action", entry.Action)
+					slog.Error("审计日志处理失败", "error", err, "action", entry.Action)
 					continue
 				}
 
-				// 纭娑堟伅
+				// 确认消息
 				c.rdb.XAck(ctx, c.stream, c.group, msg.ID)
 			}
 		}

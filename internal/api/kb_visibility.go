@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"net/http"
@@ -7,7 +7,7 @@ import (
 	"github.com/athenavi/chiron/internal/db"
 )
 
-// handleKBVisibility 鐭ヨ瘑搴撳叡浜彲瑙佹€э紙owner-only锛夛細PUT /v1/kb/{id}/visibility
+// handleKBVisibility 知识库共享可见性（owner-only）：PUT /v1/kb/{id}/visibility
 func handleKBVisibility(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	if claims == nil || claims.TenantID == "" {

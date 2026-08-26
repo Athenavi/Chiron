@@ -18,8 +18,9 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleReadiness(w http.ResponseWriter, r *http.Request) {
-	// 浜у搧鍐崇瓥(2026-08-22)锛歊edis 涓哄繀闇€渚濊禆锛涘氨缁鏌ュ弽鏄犵湡瀹炰緷璧栫姸鎬侊紝
-	// 渚涚紪鎺掑櫒(compose/K8s)鍦?Redis 鏁呴殰鏃惰Е鍙戦噸鍚€?	deps := map[string]string{
+	// 产品决策(2026-08-22)：Redis 为必需依赖；就绪检查反映真实依赖状态，
+	// 供编排器(compose/K8s)在 Redis 故障时触发重启。
+	deps := map[string]string{
 		"postgres": "up",
 		"redis":    "up",
 	}

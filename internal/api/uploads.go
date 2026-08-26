@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"fmt"
@@ -18,6 +18,13 @@ import (
 	"github.com/athenavi/chiron/internal/id"
 )
 
+// UploadHandler 提供通用分片上传（断点续传）：
+//   - Init        POST   /v1/uploads            → upload_id / chunk_size / chunk_count
+//   - PutChunk    PUT    /v1/uploads/{id}/chunks/{index}
+//   - GetProgress GET    /v1/uploads/{id}       → received_chunks（断点续传依据）
+//   - Complete    POST   /v1/uploads/{id}/complete → 合并并按 purpose 落库
+//
+// 分片存于 <storageRoot>/uploads/{upload_id}/chunk_{index}；小文件可走既有 multipart 直传。
 type UploadHandler struct {
 	authenticator *auth.Authenticator
 	storageRoot   string
@@ -29,6 +36,15 @@ func NewUploadHandler(a *auth.Authenticator, storageRoot string) *UploadHandler 
 
 const defaultChunkSize = 2 << 20 // 2MB
 
+// maxKBDocSize 限制 kb_doc 文档大小（防 finalizeKBDoc 整文件读入内存导致 OOM）。
+const maxKBDocSize int64 = 64 << 20 // 64MB
+
+// validUploadNameRe 用于文件名净化：拒绝路径分隔符与目录穿越序列。
+// 仅允许字母数字、中文等常规字符、点、下划线、连字符、空格。
+var validUploadNameRe = regexp.MustCompile(`^[^\x00-\x1f/\\]+$`)
+
+// sanitizeUploadName 净化上传文件名（P0-S3 路径穿越修复）：
+// 拒绝包含路径分隔符或空白的名字；剥离潜在遍历；限制长度。
 func sanitizeUploadName(name string) string {
 	name = strings.TrimSpace(name)
 	if name == "" || len(name) > 255 {
@@ -40,7 +56,7 @@ func sanitizeUploadName(name string) string {
 	if name == "." || name == ".." {
 		return ""
 	}
-	// 闃插尽锛氫粎淇濈暀鏂囦欢鍚嶉儴鍒嗭紙鏉滅粷浠讳綍娈嬩綑鍒嗛殧绗﹀満鏅級
+	// 防御：仅保留文件名部分（杜绝任何残余分隔符场景）
 	name = filepath.Base(filepath.Clean(name))
 	if name == "." || name == ".." {
 		return ""
@@ -48,6 +64,7 @@ func sanitizeUploadName(name string) string {
 	return name
 }
 
+// chunkDir 返回 upload_id 的临时分片目录（自动创建）。
 func (h *UploadHandler) chunkDir(uploadID string) (string, error) {
 	dir := filepath.Join(h.storageRoot, "uploads", uploadID)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -64,6 +81,7 @@ func (h *UploadHandler) userID(r *http.Request) (string, bool) {
 	return claims.UserID, true
 }
 
+// claimsOf 返回当前请求的 claims（含 tenant_id 与 user_id）。
 func (h *UploadHandler) claimsOf(r *http.Request) (*auth.Claims, bool) {
 	c := auth.GetClaims(r.Context())
 	if c == nil || c.TenantID == "" {
@@ -71,6 +89,8 @@ func (h *UploadHandler) claimsOf(r *http.Request) (*auth.Claims, bool) {
 	}
 	return c, true
 }
+
+// ── Init ────────────────────────────────────────────────────────────
 
 func (h *UploadHandler) Init(w http.ResponseWriter, r *http.Request) {
 	claims, ok := h.claimsOf(r)
@@ -82,10 +102,10 @@ func (h *UploadHandler) Init(w http.ResponseWriter, r *http.Request) {
 		Name      string `json:"name"`
 		Size      int64  `json:"size"`
 		MimeType  string `json:"mime_type"`
-		Purpose   string `json:"purpose"`
-		ParentID  string `json:"parent_id"`
+		Purpose   string `json:"purpose"`   // media / kb_doc / generic
+		ParentID  string `json:"parent_id"` // media 文件夹 id；kb_doc 时传 kb_id
 		Category  string `json:"category"`
-		ChunkSize int    `json:"chunk_size"`
+		ChunkSize int    `json:"chunk_size"` // 可选，默认 2MB
 	}
 	if err := DecodeJSON(w, r, &body); err != nil {
 		BadRequest(w, "invalid request")
@@ -96,11 +116,14 @@ func (h *UploadHandler) Init(w http.ResponseWriter, r *http.Request) {
 		BadRequest(w, "name and size are required")
 		return
 	}
+	// P0-S3 路径穿越修复：文件名必须净化，拒绝 / \ .. 等
+	body.Name = sanitizeUploadName(body.Name)
 	if body.Name == "" {
 		BadRequest(w, "invalid file name")
 		return
 	}
-
+	// P0 存储型 XSS 防护（分片路径补齐）：可执行/脚本 MIME 与 html/xml 类扩展名一律拒绝
+	// （直传路径已有 isExecutableMIME；此处覆盖分片上传，避免 .html 被按 text/html 同源输出）
 	if isExecutableMIME(body.MimeType, body.Name) {
 		BadRequest(w, "file type not allowed")
 		return
@@ -117,7 +140,7 @@ func (h *UploadHandler) Init(w http.ResponseWriter, r *http.Request) {
 		BadRequest(w, "purpose must be media / kb_doc / generic")
 		return
 	}
-
+	// P0-P3 防护：kb_doc 会整文件读入内存（知识文档 content 列），限制大小
 	if body.Purpose == "kb_doc" && body.Size > maxKBDocSize {
 		BadRequest(w, "kb_doc upload too large (max 64MB)")
 		return
@@ -156,6 +179,8 @@ func (h *UploadHandler) Init(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ── PutChunk ────────────────────────────────────────────────────────
+
 func (h *UploadHandler) PutChunk(w http.ResponseWriter, r *http.Request) {
 	claims, ok := h.claimsOf(r)
 	if !ok {
@@ -170,7 +195,7 @@ func (h *UploadHandler) PutChunk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 褰掑睘鏍￠獙锛堝惈 tenant_id锛岄槻璺ㄧ鎴疯鍐欏垎鐗囷級
+	// 归属校验（含 tenant_id，防跨租户读写分片）
 	var owner string
 	if err := db.Pool.QueryRow(r.Context(),
 		`SELECT user_id FROM uploads WHERE id = $1 AND tenant_id = $2`, uploadID, claims.TenantID).Scan(&owner); err != nil || owner != claims.UserID {
@@ -178,6 +203,8 @@ func (h *UploadHandler) PutChunk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 限制单分片大小，防止恶意客户端发送超大 chunk 撑爆磁盘（P1-1）
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<20)
 	dir, err := h.chunkDir(uploadID)
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "create chunk dir failed")
@@ -202,6 +229,8 @@ func (h *UploadHandler) PutChunk(w http.ResponseWriter, r *http.Request) {
 	}
 	OK(w, map[string]interface{}{"upload_id": uploadID, "index": idx, "received": true})
 }
+
+// ── GetProgress ─────────────────────────────────────────────────────
 
 func (h *UploadHandler) GetProgress(w http.ResponseWriter, r *http.Request) {
 	claims, ok := h.claimsOf(r)
@@ -232,6 +261,8 @@ func (h *UploadHandler) GetProgress(w http.ResponseWriter, r *http.Request) {
 		"status":          status,
 	})
 }
+
+// ── Complete ────────────────────────────────────────────────────────
 
 func (h *UploadHandler) Complete(w http.ResponseWriter, r *http.Request) {
 	claims, ok := h.claimsOf(r)
@@ -268,7 +299,7 @@ func (h *UploadHandler) Complete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 鎸夊簭鍚堝苟鍒嗙墖
+	// 按序合并分片
 	dir, err := h.chunkDir(uploadID)
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "read chunk dir failed")
@@ -281,7 +312,8 @@ func (h *UploadHandler) Complete(w http.ResponseWriter, r *http.Request) {
 	}
 	defer merged.Close()
 
-	// 鏍￠獙鎬诲ぇ灏?	fi, err := merged.Stat()
+	// 校验总大小
+	fi, err := merged.Stat()
 	if err == nil && fi.Size() != up.Size {
 		BadRequest(w, fmt.Sprintf("size mismatch: got %d want %d", fi.Size(), up.Size))
 		return
@@ -305,6 +337,7 @@ func (h *UploadHandler) Complete(w http.ResponseWriter, r *http.Request) {
 		`UPDATE uploads SET status = 'completed', updated_at = NOW() WHERE id = $1 AND tenant_id = $2`, uploadID, claims.TenantID); err != nil {
 		slog.Warn("failed to record upload", "error", err)
 	}
+	// 清理临时分片
 	_ = os.RemoveAll(dir)
 
 	OK(w, map[string]interface{}{
@@ -313,6 +346,7 @@ func (h *UploadHandler) Complete(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// mergeChunks 按 index 顺序拼接分片为单个临时文件。
 func (h *UploadHandler) mergeChunks(dir string, count int) (*os.File, error) {
 	merged, err := os.CreateTemp(h.storageRoot, "merged_*.tmp")
 	if err != nil {
@@ -341,6 +375,7 @@ func (h *UploadHandler) mergeChunks(dir string, count int) (*os.File, error) {
 	return merged, nil
 }
 
+// finalizeMedia 合并文件写入 media 存储区并落 media_assets（按当前租户）。
 func (h *UploadHandler) finalizeMedia(r *http.Request, tenantID string, up struct {
 	ID        string
 	UserID    string
@@ -388,7 +423,7 @@ func (h *UploadHandler) finalizeMedia(r *http.Request, tenantID string, up struc
 	return "/" + objectKey, nil
 }
 
-// finalizeKBDoc 鍚堝苟鏂囦欢鍐呭钀?knowledge_documents锛坈ontent bytea 渚?RAG 鏋勫缓锛屾寜褰撳墠绉熸埛锛夈€
+// finalizeKBDoc 合并文件内容落 knowledge_documents（content bytea 供 RAG 构建，按当前租户）。
 func (h *UploadHandler) finalizeKBDoc(r *http.Request, tenantID string, up struct {
 	ID        string
 	UserID    string
@@ -405,7 +440,8 @@ func (h *UploadHandler) finalizeKBDoc(r *http.Request, tenantID string, up struc
 	if up.ParentID == "" {
 		return "", fmt.Errorf("kb_doc upload requires parent_id (kb_id)")
 	}
-    var owner string
+	// 校验 KB 存在且归属当前租户当前用户
+	var owner string
 	if err := db.Pool.QueryRow(r.Context(),
 		`SELECT user_id FROM knowledge_bases WHERE id = $1 AND tenant_id = $2`, up.ParentID, tenantID).Scan(&owner); err != nil || owner != up.UserID {
 		return "", fmt.Errorf("knowledge base not found or not owned")
@@ -432,6 +468,7 @@ func (h *UploadHandler) finalizeKBDoc(r *http.Request, tenantID string, up struc
 	if err != nil {
 		return "", err
 	}
+	// 重算 KB 统计（带 tenant_id 限制）
 	_, _ = db.Pool.Exec(r.Context(),
 		`UPDATE knowledge_bases
 		 SET document_count = (SELECT COUNT(*) FROM knowledge_documents WHERE knowledge_base_id = $1 AND tenant_id = $2),
@@ -440,7 +477,7 @@ func (h *UploadHandler) finalizeKBDoc(r *http.Request, tenantID string, up struc
 	return fmt.Sprintf("/kb/%s/documents/%s", up.ParentID, docID), nil
 }
 
-// finalizeGeneric 鍚堝苟鏂囦欢鍐欏叆閫氱敤鐩綍骞惰繑鍥炲彲璁块棶 URL銆
+// finalizeGeneric 合并文件写入通用目录并返回可访问 URL。
 func (h *UploadHandler) finalizeGeneric(up struct {
 	ID        string
 	UserID    string
@@ -473,6 +510,8 @@ func (h *UploadHandler) finalizeGeneric(up struct {
 	}
 	return "/" + objectKey, nil
 }
+
+// ── 路由注册 ───────────────────────────────────────────────────────
 
 func (h *UploadHandler) RegisterRoutes(mux *http.ServeMux, authMW func(http.Handler) http.Handler, rlMW func(http.Handler) http.Handler) {
 	mux.Handle("POST /v1/uploads", authMW(rlMW(http.HandlerFunc(h.Init))))

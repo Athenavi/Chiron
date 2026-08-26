@@ -1,4 +1,4 @@
-﻿package billing
+package billing
 
 import (
 	"context"
@@ -21,7 +21,7 @@ func NewTransactionRecorder(store Store) *TransactionRecorder {
 
 // OnCreditChange persists a credit_transactions row for the event.
 // Called by the Manager's background dispatcher goroutine.
-// 浣欓涓轰氦鏄撳悗鐪熷疄浣欓锛堜簨浠舵惡甯︼級锛沠ree_chat 鏍囪鐢ㄩ噺涓嶈鍏ヤ氦鏄撳巻鍙层€
+// 余额为交易后真实余额（事件携带）；free_chat 标记用量不计入交易历史。
 func (r *TransactionRecorder) OnCreditChange(evt CreditEvent) {
 	if evt.Reason == "free_chat" {
 		return

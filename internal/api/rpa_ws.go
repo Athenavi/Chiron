@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-//€ RPA 娑堟伅绫诲瀷 鈹€鈹€
+// ── RPA 消息类型 ──
 
 type RPAMessageType string
 
@@ -27,7 +27,7 @@ const (
 	RPAMsgAck     RPAMessageType = "ack"
 )
 
-// RPAMessage 鏄墍鏈?RPA WebSocket 娑堟伅鐨勭粺涓€ envelope
+// RPAMessage 是所有 RPA WebSocket 消息的统一 envelope
 type RPAMessage struct {
 	Type   RPAMessageType         `json:"type"`
 	ID     string                 `json:"id"`
@@ -48,20 +48,20 @@ func (e *RPAError) Error() string {
 	return fmt.Sprintf("rpa error %d: %s", e.Code, e.Message)
 }
 
-// RPACommand 灏佽鍙戦€佺粰鎻掍欢鐨勫懡浠
+// RPACommand 封装发送给插件的命令
 type RPACommand struct {
 	Method string
 	Params map[string]interface{}
 	TabID  int
 }
 
-// RPAResult 灏佽鎻掍欢杩斿洖鐨勭粨鏋
+// RPAResult 封装插件返回的结果
 type RPAResult struct {
 	Result map[string]interface{}
 	Error  *RPAError
 }
 
-//€ RPA 瀹㈡埛绔?鈹€鈹€
+// ── RPA 客户端 ──
 
 type RPAClient struct {
 	ID       string
@@ -88,17 +88,17 @@ func (c *RPAClient) SendMessage(msg RPAMessage) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	msg.TS = time.Now().UnixMilli()
-	// P1 淇锛氬啓瓒呮椂锛岄槻姝㈡瀹㈡埛绔棤闄愰樆濉炲箍鎾?goroutine
+	// P1 修复：写超时，防止死客户端无限阻塞广播 goroutine
 	_ = c.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 	return c.Conn.WriteJSON(msg)
 }
 
-//€ RPAHub 鈹€鈹€
+// ── RPAHub ──
 
 type RPAHub struct {
 	mu      sync.RWMutex
-	clients map[string]*RPAClient      // clientID 鈫?client
-	pending map[string]chan *RPAResult // msgID 鈫?result channel
+	clients map[string]*RPAClient      // clientID → client
+	pending map[string]chan *RPAResult // msgID → result channel
 }
 
 func NewRPAHub() *RPAHub {
@@ -108,7 +108,7 @@ func NewRPAHub() *RPAHub {
 	}
 }
 
-// Register 娉ㄥ唽涓€涓彃浠惰繛鎺
+// Register 注册一个插件连接
 func (h *RPAHub) Register(client *RPAClient) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -116,7 +116,7 @@ func (h *RPAHub) Register(client *RPAClient) {
 	slog.Info("rpa client registered", "client_id", client.ID, "user_id", client.UserID)
 }
 
-// Unregister 娉ㄩ攢涓€涓彃浠惰繛鎺
+// Unregister 注销一个插件连接
 func (h *RPAHub) Unregister(clientID string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -124,7 +124,7 @@ func (h *RPAHub) Unregister(clientID string) {
 	slog.Info("rpa client unregistered", "client_id", clientID)
 }
 
-// GetClient 鑾峰彇鎸囧畾瀹㈡埛绔
+// GetClient 获取指定客户端
 func (h *RPAHub) GetClient(clientID string) (*RPAClient, bool) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -132,7 +132,7 @@ func (h *RPAHub) GetClient(clientID string) (*RPAClient, bool) {
 	return c, ok
 }
 
-// GetClientByUser 鑾峰彇鎸囧畾鐢ㄦ埛鐨勬渶杩戞椿璺冨鎴风
+// GetClientByUser 获取指定用户的最近活跃客户端
 func (h *RPAHub) GetClientByUser(userID string) (*RPAClient, bool) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -147,7 +147,7 @@ func (h *RPAHub) GetClientByUser(userID string) (*RPAClient, bool) {
 	return latest, latest != nil
 }
 
-// SendCommand 鍙戦€佸懡浠ゅ苟绛夊緟缁撴灉锛堝甫瓒呮椂锛
+// SendCommand 发送命令并等待结果（带超时）
 func (h *RPAHub) SendCommand(ctx context.Context, clientID string, cmd *RPACommand) (*RPAResult, error) {
 	client, ok := h.GetClient(clientID)
 	if !ok {
@@ -163,7 +163,7 @@ func (h *RPAHub) SendCommand(ctx context.Context, clientID string, cmd *RPAComma
 		TabID:  cmd.TabID,
 	}
 
-	// 娉ㄥ唽 pending channel
+	// 注册 pending channel
 	ch := make(chan *RPAResult, 1)
 	h.mu.Lock()
 	h.pending[msgID] = ch
@@ -175,12 +175,12 @@ func (h *RPAHub) SendCommand(ctx context.Context, clientID string, cmd *RPAComma
 		h.mu.Unlock()
 	}()
 
-	// 鍙戦€佸懡浠
+	// 发送命令
 	if err := client.SendMessage(msg); err != nil {
 		return nil, fmt.Errorf("send command: %w", err)
 	}
 
-	// 绛夊緟缁撴灉
+	// 等待结果
 	select {
 	case result := <-ch:
 		return result, nil
@@ -189,7 +189,7 @@ func (h *RPAHub) SendCommand(ctx context.Context, clientID string, cmd *RPAComma
 	}
 }
 
-// HandleResult 澶勭悊浠庢彃浠惰繑鍥炵殑缁撴灉
+// HandleResult 处理从插件返回的结果
 func (h *RPAHub) HandleResult(msg *RPAMessage) {
 	h.mu.RLock()
 	ch, ok := h.pending[msg.ID]
@@ -207,7 +207,7 @@ func (h *RPAHub) HandleResult(msg *RPAMessage) {
 	ch <- result
 }
 
-// BroadcastToUser 鍚戞寚瀹氱敤鎴风殑鎵€鏈夊鎴风骞挎挱浜嬩欢
+// BroadcastToUser 向指定用户的所有客户端广播事件
 func (h *RPAHub) BroadcastToUser(userID string, msg RPAMessage) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -220,7 +220,7 @@ func (h *RPAHub) BroadcastToUser(userID string, msg RPAMessage) {
 	}
 }
 
-// ConnectedClients 杩斿洖宸茶繛鎺ョ殑瀹㈡埛绔垪琛
+// ConnectedClients 返回已连接的客户端列表
 func (h *RPAHub) ConnectedClients() []*RPAClient {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -256,7 +256,7 @@ func (h *RPAHub) ConnectedClientIDs() []string {
 	return ids
 }
 
-//€ RPA WebSocket Handler 鈹€鈹€
+// ── RPA WebSocket Handler ──
 
 var rpaUpgrader = websocket.Upgrader{
 	ReadBufferSize:  4096,
@@ -264,7 +264,7 @@ var rpaUpgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		origin := r.Header.Get("Origin")
 		if origin == "" {
-			return true // 鏈嶅姟绔?ws 瀹㈡埛绔棤 Origin
+			return true // 服务端 ws 客户端无 Origin
 		}
 		allowed := os.Getenv("CORS_ORIGINS")
 		if allowed == "" || allowed == "*" {
@@ -289,10 +289,10 @@ const (
 	rpaPingInterval = 30 * time.Second
 )
 
-// RPAWebSocketHandler 澶勭悊 RPA 鎻掍欢鐨?WebSocket 杩炴帴
+// RPAWebSocketHandler 处理 RPA 插件的 WebSocket 连接
 func RPAWebSocketHandler(hub *RPAHub, authenticator *auth.Authenticator) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// 楠岃瘉 JWT token
+		// 验证 JWT token
 		token := r.URL.Query().Get("token")
 		clientID := r.URL.Query().Get("client_id")
 		if clientID == "" {
@@ -321,7 +321,8 @@ func RPAWebSocketHandler(hub *RPAHub, authenticator *auth.Authenticator) http.Ha
 		}
 		hub.Register(client)
 
-		// 鍙戦€佽繛鎺ョ‘璁?		client.SendMessage(RPAMessage{
+		// 发送连接确认
+		client.SendMessage(RPAMessage{
 			Type: RPAMsgAck,
 			ID:   "init",
 			Result: map[string]interface{}{
@@ -330,7 +331,7 @@ func RPAWebSocketHandler(hub *RPAHub, authenticator *auth.Authenticator) http.Ha
 			},
 		})
 
-		// 璁剧疆璇诲啓瓒呮椂
+		// 设置读写超时
 		conn.SetReadDeadline(time.Now().Add(rpaReadTimeout))
 		conn.SetPongHandler(func(string) error {
 			conn.SetReadDeadline(time.Now().Add(rpaReadTimeout))
@@ -338,7 +339,7 @@ func RPAWebSocketHandler(hub *RPAHub, authenticator *auth.Authenticator) http.Ha
 			return nil
 		})
 
-		// 蹇冭烦 goroutine
+		// 心跳 goroutine
 		done := make(chan struct{})
 		go func() {
 			defer func() {
@@ -360,7 +361,7 @@ func RPAWebSocketHandler(hub *RPAHub, authenticator *auth.Authenticator) http.Ha
 			}
 		}()
 
-		// 娑堟伅璇诲彇寰幆
+		// 消息读取循环
 		defer func() {
 			close(done)
 			hub.Unregister(clientID)
@@ -396,9 +397,9 @@ func RPAWebSocketHandler(hub *RPAHub, authenticator *auth.Authenticator) http.Ha
 	}
 }
 
-//€ RPA HTTP Bridge锛圥ython engine 鈫?Go gateway 鈫?娴忚鍣ㄦ彃浠讹級 鈹€鈹€
+// ── RPA HTTP Bridge（Python engine → Go gateway → 浏览器插件） ──
 
-// rpaInternalTokenOK 甯搁噺鏃堕棿姣旇緝 X-Internal-Token锛堢綉鍏斥啍寮曟搸浜掍俊锛夈€
+// rpaInternalTokenOK 常量时间比较 X-Internal-Token（网关↔引擎互信）。
 func rpaInternalTokenOK(r *http.Request, internalToken string) bool {
 	if internalToken == "" {
 		return false
@@ -407,8 +408,8 @@ func rpaInternalTokenOK(r *http.Request, internalToken string) bool {
 	return provided != "" && subtle.ConstantTimeCompare([]byte(provided), []byte(internalToken)) == 1
 }
 
-// RPAExecHandler 渚?Python engine 鐨?GatewayBrowserHub 鎶婃祻瑙堝櫒鍛戒护鍙戠粰
-// 宸茶繛鎺ユ彃浠?Chrome Extension /ws/rpa)銆傝姹傚叡浜?internal token锛岄槻姝㈢洿杩炴互鐢ㄣ€
+// RPAExecHandler 供 Python engine 的 GatewayBrowserHub 把浏览器命令发给
+// 已连接插件(Chrome Extension /ws/rpa)。要求共享 internal token，防止直连滥用。
 func RPAExecHandler(hub *RPAHub, internalToken string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !rpaInternalTokenOK(r, internalToken) {
@@ -433,7 +434,7 @@ func RPAExecHandler(hub *RPAHub, internalToken string) http.HandlerFunc {
 	}
 }
 
-// RPAClientsHandler 杩斿洖宸茶繛鎺ユ祻瑙堝櫒鎻掍欢瀹㈡埛绔垪琛ㄣ€
+// RPAClientsHandler 返回已连接浏览器插件客户端列表。
 func RPAClientsHandler(hub *RPAHub, internalToken string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !rpaInternalTokenOK(r, internalToken) {
@@ -444,7 +445,7 @@ func RPAClientsHandler(hub *RPAHub, internalToken string) http.HandlerFunc {
 	}
 }
 
-// handleRPAEvent 澶勭悊鎻掍欢涓诲姩鎺ㄩ€佺殑浜嬩欢
+// handleRPAEvent 处理插件主动推送的事件
 func handleRPAEvent(hub *RPAHub, client *RPAClient, msg *RPAMessage) {
 	switch msg.Method {
 	case "tab_updated", "tab_created", "tab_closed":

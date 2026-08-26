@@ -36,12 +36,11 @@ func NewAdminHandler(a *auth.Authenticator, store *storage.AtomicStore, redis *d
 	return &AdminHandler{authenticator: a, store: store, redis: redis, pythonClient: pythonClient}
 }
 
-// 閳光偓閳光偓 Routes 閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓
 
 // RegisterRoutes adds admin endpoints to the given router under /v1/admin.
 // Caller is responsible for auth middleware.
 func (h *AdminHandler) RegisterRoutes(r *http.ServeMux) {
-	// 鍘熸湁绔偣
+	// 原有端点
 	r.HandleFunc("GET /metrics", h.Metrics)
 	r.HandleFunc("GET /users", h.ListUsers)
 	r.HandleFunc("GET /users/{id}", h.GetUser)
@@ -58,21 +57,27 @@ func (h *AdminHandler) RegisterRoutes(r *http.ServeMux) {
 	r.HandleFunc("PUT /redis", h.UpdateRedis)
 	r.HandleFunc("POST /redis/test", h.TestRedis)
 
+	// 新增端点：队列管理
 	r.HandleFunc("GET /queue", h.GetQueueStats)
 	r.HandleFunc("POST /queue/flush", h.FlushQueue)
 	r.HandleFunc("POST /queue/pause", h.PauseQueue)
 
-    r.HandleFunc("GET /cache/stats", h.GetCacheStats)
+	// 新增端点：缓存监控
+	r.HandleFunc("GET /cache/stats", h.GetCacheStats)
 
+	// 新增端点：性能监控
 	r.HandleFunc("GET /performance", h.GetPerformance)
 
+	// 新增端点：API Key 管理
 	r.HandleFunc("GET /api-keys", h.ListApiKeys)
+	// 运维类端点（租户/域名/数据库/Redis/模型/定时任务）—— /admin 全栈实装
 	h.registerOpsRoutes(r)
 	r.HandleFunc("POST /api-keys", h.AddApiKey)
 	r.HandleFunc("PUT /api-keys/{id}", h.UpdateApiKey)
 	r.HandleFunc("DELETE /api-keys/{id}", h.DeleteApiKey)
 
-    r.HandleFunc("PUT /settings", h.SaveSettings)
+	// 新增端点：系统设置
+	r.HandleFunc("PUT /settings", h.SaveSettings)
 	r.HandleFunc("GET /settings", h.GetSettings)
 }
 
@@ -185,13 +190,16 @@ func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		BadRequest(w, "invalid role: must be owner, admin, or user")
 		return
 	}
+	// S 安全修复：非 owner 不可将角色提升为 owner（防止 admin 提权）
 	claims := auth.GetClaims(r.Context())
 	if body.Role == "owner" && (claims == nil || claims.Role != "owner") {
 		BadRequest(w, "only owner can assign owner role")
 		return
 	}
 
-    userColumnMap := map[string]string{
+	// Build dynamic UPDATE with column name whitelist — tenant_id 作为额外 WHERE 条件防越权
+	// S 安全修复：列名必须来自白名单，防止 SQL 注入
+	userColumnMap := map[string]string{
 		"email": "email",
 		"name":  "name",
 		"role":  "role",
@@ -270,6 +278,8 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 
 	OK(w, map[string]string{"status": "deleted"})
 }
+
+// 鈹€鈹€ System Management 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 func (h *AdminHandler) SystemInfo(w http.ResponseWriter, r *http.Request) {
 	info := map[string]interface{}{
@@ -355,14 +365,16 @@ func dbNameFromDSN() string {
 		return "chiron"
 	}
 	if u.Path != "" && u.Path != "/" {
-		// Path is /dbname 閳?trim leading slash
+		// Path is /dbname 鈥?trim leading slash
 		return u.Path[1:]
 	}
 	return "chiron"
 }
 
+// 鈹€鈹€ Backup & Restore 鈹€鈹€
 
 func (h *AdminHandler) CreateBackup(w http.ResponseWriter, r *http.Request) {
+	// P0-P4 修复：pg_dump 输出流式转发，避免整库缓冲入内存导致 OOM
 	cmd := exec.CommandContext(r.Context(), "pg_dump", "--dbname="+extractDSN())
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -390,6 +402,8 @@ func (h *AdminHandler) RestoreBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
+	// P0-P4 防护：限制恢复文件大小，避免整文件读入内存
+	sqlData, err := io.ReadAll(io.LimitReader(file, 512<<20))
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "read file failed")
 		return
@@ -418,6 +432,8 @@ func (h *AdminHandler) RestoreBackup(w http.ResponseWriter, r *http.Request) {
 func extractDSN() string {
 	return os.Getenv("POSTGRES_DSN")
 }
+
+// ─── Storage Management ────────────────────────────────────────────
 
 type StorageConfig struct {
 	Backend     string `json:"backend"`
@@ -495,9 +511,9 @@ func (h *AdminHandler) UpdateStorage(w http.ResponseWriter, r *http.Request) {
 	warning := ""
 	if previous != body.Backend {
 		if previous == "local" {
-			warning = "Switched from local to s3. Local storage is not migrated to S3. Please manually migrate your data if needed. ", previous, body.Backend)
+			warning = "存储后端已从 local 切换为 s3。旧后端中的文件不会自动迁移。"
 		} else {
-			warning = "Switched from s3 to local. S3 storage is not migrated to local. Please manually migrate your data if needed. ", previous, body.Backend)
+			warning = "存储后端已从 s3 切换为 local。旧后端中的文件不会自动迁移。"
 		}
 	}
 
@@ -527,7 +543,7 @@ func (h *AdminHandler) TestStorage(w http.ResponseWriter, r *http.Request) {
 	case "local":
 		OK(w, map[string]interface{}{
 			"status":  "ok",
-			"message": "鏈湴瀛樺偍鍙敤",
+			"message": "本地存储可用",
 		})
 	case "s3":
 		if body.S3Endpoint == "" || body.S3Bucket == "" || body.S3AccessKey == "" || body.S3SecretKey == "" {
@@ -538,7 +554,7 @@ func (h *AdminHandler) TestStorage(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			OK(w, map[string]interface{}{
 				"status":  "error",
-				"message": fmt.Errorf("S3 杩炴帴澶辫触: %w", err).Error(),
+				"message": fmt.Errorf("S3 连接失败: %w", err).Error(),
 			})
 			return
 		}
@@ -547,20 +563,20 @@ func (h *AdminHandler) TestStorage(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			OK(w, map[string]interface{}{
 				"status":  "error",
-				"message": fmt.Errorf("S3 bucket 璁块棶澶辫触: %w", err).Error(),
+				"message": fmt.Errorf("S3 bucket 访问失败: %w", err).Error(),
 			})
 			return
 		}
 		OK(w, map[string]interface{}{
 			"status":  "ok",
-			"message": fmt.Sprintf("S3 杩炴帴鎴愬姛锛宐ucket '%s' 鍙闂?, body.S3Bucket),
+			"message": fmt.Sprintf("S3 连接成功，bucket '%s' 可访问", body.S3Bucket),
 		})
 	default:
 		BadRequest(w, "backend must be 'local' or 's3'")
 	}
 }
 
-//€鈹€ Redis Management 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+// ─── Redis Management ────────────────────────────────────────────
 
 func (h *AdminHandler) GetRedis(w http.ResponseWriter, r *http.Request) {
 	if h.redis == nil {

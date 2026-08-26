@@ -1,4 +1,4 @@
-﻿package billing
+package billing
 
 import (
 	"context"
@@ -9,28 +9,28 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// EnterpriseBillingObserver 鏄妸娑堣垂浜嬩欢褰掗泦鍒?billing_records 鐨?
-// BillingObserver锛堜紒涓氭垚鏈腑蹇冿級銆傚啓鍏ュ畬鍏ㄥ紓姝ワ紙goroutine + recover锛夛紝
-// 浠讳綍澶辫触浠?slog.Warn锛岀粷涓嶉樆濉炴垨褰卞搷涓昏璐归摼璺€?
+// EnterpriseBillingObserver 是把消费事件归集到 billing_records 的
+// BillingObserver（企业成本中心）。写入完全异步（goroutine + recover），
+// 任何失败仅 slog.Warn，绝不阻塞或影响主计费链路。
 //
-// 鎺ョ嚎浣嶇疆锛堥泦鎴愪换鍔★級锛歡ateway_router.go NewGatewayRouter 涓?
-// billingMgr.Subscribe 澶勶紙鐜版湁 TransactionRecorder / BalanceSyncer 鏃侊級锛?
+// 接线位置（集成任务）：gateway_router.go NewGatewayRouter 中
+// billingMgr.Subscribe 处（现有 TransactionRecorder / BalanceSyncer 旁）：
 //
 //	billingMgr.Subscribe(billing.NewEnterpriseBillingObserver(db.Pool))
 type EnterpriseBillingObserver struct {
-	pool *pgxpool.Pool // nil = 浜嬩欢鏃跺洖閫€鍒板叏灞€ db.Pool
+	pool *pgxpool.Pool // nil = 事件时回退到全局 db.Pool
 }
 
 var _ BillingObserver = (*EnterpriseBillingObserver)(nil)
 
-// NewEnterpriseBillingObserver 鍒涘缓浼佷笟璁¤垂瑙傚療鑰呫€?
-// pool 涓?nil 鏃朵簨浠跺鐞嗗洖閫€鍒板叏灞€ db.Pool锛堟部鐢ㄩ」鐩?PGStore 妯″紡锛夈€?
+// NewEnterpriseBillingObserver 创建企业计费观察者。
+// pool 为 nil 时事件处理回退到全局 db.Pool（沿用项目 PGStore 模式）。
 func NewEnterpriseBillingObserver(pool *pgxpool.Pool) *EnterpriseBillingObserver {
 	return &EnterpriseBillingObserver{pool: pool}
 }
 
-// OnCreditChange 寮傛鍐欎竴鏉?billing_records 褰掗泦璁板綍銆?
-// 浠呭綊闆嗘秷璐癸紙鎵ｅ噺锛変簨浠讹紱鍏呭€?閫€娆剧瓑鍏ヨ处鐢?payments / credit_transactions 瑕嗙洊銆?
+// OnCreditChange 异步写一条 billing_records 归集记录。
+// 仅归集消费（扣减）事件；充值/退款等入账由 payments / credit_transactions 覆盖。
 func (o *EnterpriseBillingObserver) OnCreditChange(evt CreditEvent) {
 	if evt.Amount >= 0 {
 		return
@@ -45,8 +45,8 @@ func (o *EnterpriseBillingObserver) OnCreditChange(evt CreditEvent) {
 	}()
 }
 
-// record 鎵ц涓€娆″綊闆嗗啓鍏ワ細tenant_id 缁?users 琛ㄥ叧鑱旓紝
-// group_id 鍙栫敤鎴蜂富缇ょ粍锛坋nt_group_members 绗竴鏉★級锛屾棤缇ょ粍鍒?NULL銆?
+// record 执行一次归集写入：tenant_id 经 users 表关联，
+// group_id 取用户主群组（ent_group_members 第一条），无群组则 NULL。
 func (o *EnterpriseBillingObserver) record(evt CreditEvent) {
 	pool := o.pool
 	if pool == nil {
@@ -60,7 +60,7 @@ func (o *EnterpriseBillingObserver) record(evt CreditEvent) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// tenant_id锛氱粡 users 琛ㄥ叧鑱旀煡璇紙users.id 鈫?users.tenant_id锛?
+	// tenant_id：经 users 表关联查询（users.id → users.tenant_id）
 	var tenantID string
 	if err := pool.QueryRow(ctx,
 		`SELECT tenant_id FROM users WHERE id = $1`, evt.UserID).Scan(&tenantID); err != nil {
@@ -69,17 +69,17 @@ func (o *EnterpriseBillingObserver) record(evt CreditEvent) {
 		return
 	}
 
-	// group_id锛氱敤鎴蜂富缇ょ粍锛坋nt_group_members 绗竴鏉★紝鎸?group_id 鎺掑簭淇濊瘉纭畾鎬э級銆?
-	// 鏃犳垚鍛樺叧绯绘垨鍏跺畠鏌ヨ閿欒鍧囬檷绾т负 NULL 褰掗泦锛屼笉褰卞搷鎴愭湰钀借处銆?
+	// group_id：用户主群组（ent_group_members 第一条，按 group_id 排序保证确定性）。
+	// 无成员关系或其它查询错误均降级为 NULL 归集，不影响成本落账。
 	var groupID *string
 	_ = pool.QueryRow(ctx,
 		`SELECT group_id FROM ent_group_members WHERE user_id = $1 ORDER BY group_id LIMIT 1`,
 		evt.UserID).Scan(&groupID)
 
-	// 1 credit = 1 鍒嗭紙涓?payments.amount_cents 鍙ｅ緞涓€鑷达級
+	// 1 credit = 1 分（与 payments.amount_cents 口径一致）
 	costCents := -evt.Amount
-	// 娉ㄦ剰锛欳reditEvent 涓嶆惡甯?token 鏄庣粏锛圡anager 浜嬩欢浠呭惈閲戦锛夛紝
-	// input/output_tokens 璁?0锛屾垚鏈互 cost_cents 涓哄噯銆?
+	// 注意：CreditEvent 不携带 token 明细（Manager 事件仅含金额），
+	// input/output_tokens 记 0，成本以 cost_cents 为准。
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO billing_records
 			(tenant_id, user_id, session_id, input_tokens, output_tokens, cost_cents, group_id)

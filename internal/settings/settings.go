@@ -1,4 +1,4 @@
-﻿// Package settings 提供一个基于 AES-256-GCM 的加密设置存取层。
+// Package settings 提供一个基于 AES-256-GCM 的加密设置存取层。
 //
 // 功能：
 //   - 用部署主密钥（APP_SECRET 派生密钥）对敏感配置（LLM/S3/支付密钥、redis/pg 密码等）
@@ -22,7 +22,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// 密文格式前缀：v1: + base64(nonce || ciphertext)
+// 密文格式前缀：`v1:` + base64(nonce || ciphertext)
 const (
 	cipherVersion = "v1:"
 	nonceSize     = 12
@@ -36,7 +36,7 @@ var (
 // Store 为 system_settings 表提供带加密的读写。
 type Store struct {
 	pool *pgxpool.Pool
-	aead cipher.AEAD // 由 APP_SECRET 派生，nil 表示未初始化加密（仅允许非敏感存取）
+	aead cipher.AEAD // 由 APP_SECRET 派生；nil 表示未初始化加密（仅允许非敏感存取）
 }
 
 // New 创建 Store。appSecret 为空时返回一个仅支持非敏感存取的 Store（敏感键写入会报错）。
@@ -58,7 +58,7 @@ func nullableUser(userID string) interface{} {
 	return userID
 }
 
-// newAEAD 从 APP_SECRET 派生 AES-GCM AEAD；密钥为空返回 nil。
+// newAEAD 从 APP_SECRET 派生 AES-GCM AEAD；秘密为空返回 nil。
 func newAEAD(appSecret string) cipher.AEAD {
 	if appSecret == "" {
 		return nil
@@ -122,7 +122,7 @@ func IsSensitive(key string) bool {
 }
 
 // SaveConfig 将某分类的 config 逐键 upsert 到 system_settings。
-//   - val 为 nil：删除该键（回退 env/默认值）
+//   - val 为 nil：删除该键（回落 env/默认值）
 //   - 敏感键且 aead 可用：加密后落库，标记 encrypted=true
 func (s *Store) SaveConfig(ctx context.Context, category string, config map[string]interface{}, userID string) error {
 	if s.pool == nil {

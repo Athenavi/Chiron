@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"log/slog"
@@ -9,7 +9,8 @@ import (
 	"github.com/athenavi/chiron/internal/settings"
 )
 
-// internalTokenMW 鏍￠獙 X-Internal-Token锛屼緵 Go 缃戝叧鍐呴儴绔偣锛堝紩鎿庨厤缃笅鍙戯級浣跨敤銆?// 缂哄け/涓嶅尮閰嶆椂杩斿洖 401锛岀粷涓嶉€忓嚭瑙ｅ瘑鍚庣殑鏁忔劅閰嶇疆銆
+// internalTokenMW 校验 X-Internal-Token，供 Go 网关内部端点（引擎配置下发）使用。
+// 缺失/不匹配时返回 401，绝不透出解密后的敏感配置。
 func internalTokenMW(cfg *config.Config, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if cfg.InternalToken == "" || r.Header.Get("X-Internal-Token") != cfg.InternalToken {
@@ -21,7 +22,8 @@ func internalTokenMW(cfg *config.Config, next http.HandlerFunc) http.HandlerFunc
 }
 
 // EngineConfig GET /v1/internal/engine-config
-// 渚?Python AI 寮曟搸鍚姩鏃舵媺鍙栥€宲ython銆嶅垎绫荤殑鍚庡彴閰嶇疆锛堟晱鎰熼敭宸茬敱 APP_SECRET 瑙ｅ瘑锛夈€?// 浠呮帴鍙楀甫 X-Internal-Token 鐨勫唴閮ㄨ皟鐢紝闃叉閰嶇疆澶栨硠銆
+// 供 Python AI 引擎启动时拉取「python」分类的后台配置（敏感键已由 APP_SECRET 解密）。
+// 仅接受带 X-Internal-Token 的内部调用，防止配置外泄。
 func EngineConfig(cfg *config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if db.Pool == nil {
