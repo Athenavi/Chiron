@@ -28,12 +28,14 @@ func (h *MediaHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 200<<20) // 200MB 上传上限
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
 		// 暴露真实原因（请求体超限 / boundary 缺失 / 格式损坏），便于定位
+		slog.Warn("parse multipart form failed", "error", err, "content_type", r.Header.Get("Content-Type"), "content_length", r.ContentLength)
 		BadRequest(w, "file too large or invalid form: "+err.Error())
 		return
 	}
 
 	file, header, err := r.FormFile("file")
 	if err != nil {
+		slog.Warn("get form file failed", "error", err, "form_keys", r.MultipartForm.File)
 		BadRequest(w, "file is required")
 		return
 	}

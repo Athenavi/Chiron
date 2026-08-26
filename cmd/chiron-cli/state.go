@@ -15,6 +15,8 @@ type InstanceState struct {
 	Port      int    `json:"port"`
 	StartedAt string `json:"started_at"`
 	LogFile   string `json:"log_file"`
+	Mode      string `json:"mode,omitempty"`
+}
 
 type State struct {
 	Instances []InstanceState `json:"instances"`

@@ -59,7 +59,8 @@ func runLogs(cmd *cobra.Command, args []string) error {
 		filepath.Join("logs", logsService+".stderr.log"),
 	}
 
-	// 鑷冲皯涓€涓棩蹇楁枃浠跺瓨鍦?	existing := false
+	// 至少一个日志文件存在
+	existing := false
 	for _, p := range logPaths {
 		if _, err := os.Stat(p); err == nil {
 			existing = true
@@ -183,7 +184,8 @@ func followLogs(paths []string) error {
 						fmt.Print(line)
 					}
 					if err != nil {
-						break // EOF 鎴栭敊璇?					}
+						break // EOF 或错误
+					}
 				}
 				newOff, _ := file.Seek(0, 1)
 				offsets[p] = newOff
