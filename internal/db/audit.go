@@ -25,7 +25,8 @@ type AuditEntry struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
-// Auditor 瀹¤鏃ュ織璁板綍鍣?type Auditor struct {
+// Auditor 瀹¤鏃ュ織璁板綍鍣
+type Auditor struct {
 	rdb      RedisClient
 	stream   string
 }
@@ -155,7 +156,8 @@ func (w *auditResponseWriter) WriteHeader(code int) {
 	}
 }
 
-// AuditConsumer 瀹¤鏃ュ織娑堣垂鑰?type AuditConsumer struct {
+// AuditConsumer 瀹¤鏃ュ織娑堣垂鑰
+type AuditConsumer struct {
 	rdb      RedisClient
 	stream   string
 	group    string

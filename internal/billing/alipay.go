@@ -19,7 +19,8 @@ import (
 	"time"
 )
 
-// AlipayClient 瀵规帴鏀粯瀹濆紑鏀惧钩鍙帮紙褰撻潰浠?trade.precreate + 寮傛閫氱煡楠岀锛夈€?// 鑷爺 RSA2 绛惧悕锛屼笉渚濊禆绗笁鏂?SDK銆?type AlipayClient struct {
+// AlipayClient 瀵规帴鏀粯瀹濆紑鏀惧钩鍙帮紙褰撻潰浠?trade.precreate + 寮傛閫氱煡楠岀锛夈€?// 鑷爺 RSA2 绛惧悕锛屼笉渚濊禆绗笁鏂?SDK銆
+type AlipayClient struct {
 	appID       string
 	privateKey  *rsa.PrivateKey
 	publicKey   *rsa.PublicKey // 鏀粯瀹濆叕閽ワ紙鐢ㄤ簬鍝嶅簲/鍥炶皟楠岀锛?	gateway     string

@@ -29,15 +29,15 @@ func runHealth(cmd *cobra.Command, args []string) error {
 	// Check main service
 	resp, err := client.Get(fmt.Sprintf("%s/health", healthAddr))
 	if err != nil {
-		fmt.Printf("鉂?Service is unhealthy: %v\n", err)
+		fmt.Printf("Service is unhealthy: %v\n", err)
 		return nil
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusOK {
-		fmt.Printf("鉁?Service is healthy\n")
+		fmt.Printf("Service is healthy\n")
 	} else {
-		fmt.Printf("鉂?Service returned status %d\n", resp.StatusCode)
+		fmt.Printf("Service returned status %d\n", resp.StatusCode)
 	}
 
 	// Check specific services if requested
@@ -54,15 +54,15 @@ func checkServiceHealth(client *http.Client, addr, service string) {
 	url := fmt.Sprintf("%s/health/%s", addr, service)
 	resp, err := client.Get(url)
 	if err != nil {
-		fmt.Printf("鉂?%s: %v\n", service, err)
+		fmt.Printf("%s: %v\n", service, err)
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusOK {
-		fmt.Printf("鉁?%s: healthy\n", service)
+		fmt.Printf("%s: healthy\n", service)
 	} else {
-		fmt.Printf("鉂?%s: status %d\n", service, resp.StatusCode)
+		fmt.Printf("%s: status %d\n", service, resp.StatusCode)
 	}
 }
 

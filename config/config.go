@@ -13,9 +13,6 @@ import (
 )
 
 type Config struct {
-	// AppSecret锛氶儴缃茬骇涓诲瘑閽ワ紙鈮?2 瀛楃锛夈€傜敤浜庯細
-	//  - 娲剧敓 JWT_SECRET / INTERNAL_TOKEN锛堝綋瀵瑰簲鐜鍙橀噺鏈樉寮忚缃椂锛?
-	//  - 鍔犲瘑 system_settings 涓晱鎰熼厤缃紙LLM/S3/鏀粯瀵嗛挜銆乺edis/pg 瀵嗙爜锛?
 	AppSecret string
 
 	// Server
@@ -43,21 +40,16 @@ type Config struct {
 	// Auth
 	JWTSecret     string
 	JWTExpiration time.Duration
-	// InternalToken锛欸o 缃戝叧 鈫?Python 寮曟搸鍏变韩瀵嗛挜銆?
-	// Go 杞彂璇锋眰鏃舵敞鍏?X-Internal-Token header锛孭ython 鎹鏍￠獙 ?tenant_id= 閫忎紶韬唤銆?
-	// 鏈厤缃椂 Python 渚?fail-close 鎷掔粷 query 閫忎紶韬唤锛堝己鍒惰蛋 JWT/API Key锛夈€?
 	InternalToken string
 
 	// Registration
-	DisableRegistration bool // 鐢熶骇鍗曠鎴峰彲鍏抽棴鍏紑娉ㄥ唽锛圫 瀹夊叏鍔犲浐锛?
+	DisableRegistration bool
 
 	// Cookie
-	CookieSecure bool // 鐢熶骇 HTTPS 涓嬭缃?Secure 鏍囧織锛岄槻姝?JWT cookie 鏄庢枃浼犺緭
+	CookieSecure bool
 
 	// CORS
 	CORSOrigins string
-
-	// LLM 璋冪敤宸茶浆鍙?Python 寮曟搸锛坈onfig 涓?LLM 閰嶇疆涓洪仐鐣欐閰嶇疆锛屽凡绉婚櫎锛?
 
 	// Storage
 	StorageBackend string // "local" or "s3"
@@ -69,8 +61,8 @@ type Config struct {
 	S3UseSSL       bool // S3/MinIO use SSL
 
 	// Rate Limit
-	RateLimitRPM       int  // requests per minute per user
-	RateLimitFailClose bool // P1-2: Redis 涓嶅彲鐢ㄦ椂鏄惁鎷掔粷鍐欐搷浣滐紙鐢熶骇=true锛屽紑鍙?false锛?
+	RateLimitRPM       int
+	RateLimitFailClose bool
 	RateLimitGlobal    int  // global requests per minute
 
 	// TrustedProxyCIDRs trusted reverse-proxy CIDRs (comma separated).
@@ -85,18 +77,17 @@ type Config struct {
 	// Log
 	LogLevel string // debug / info / warn / error
 
-	// 鏀粯锛堟敮浠樺疂/寰俊锛汼tripe 涓洪仐鐣欐閰嶇疆宸茬Щ闄わ級
-	PublicBaseURL         string // 鍏綉鍙揪鐨勫熀纭€ URL锛岀敤浜庢瀯閫犳敮浠樺洖璋?notify_url
-	FrontendURL           string // 鍓嶇鍦板潃锛堝 http://localhost:5173锛夛紱SSO 鍥炶皟 302 鐩爣锛岀┖ = 鍚屾簮 "/"
+	PublicBaseURL         string
+	FrontendURL           string
 	AlipayAppID           string
-	AlipayPrivateKey      string // 搴旂敤绉侀挜锛圥EM锛?
-	AlipayPublicKey       string // 鏀粯瀹濆叕閽ワ紙PEM锛?
-	AlipayGateway         string // 榛樿鐢熶骇缃戝叧锛涙矙绠辩敤 https://openapi-sandbox.dl.alipaydev.com/gateway.do
+	AlipayPrivateKey      string
+	AlipayPublicKey       string
+	AlipayGateway         string
 	WechatMchID           string
 	WechatAppID           string
-	WechatAPIv3Key        string // APIv3 瀵嗛挜锛?2 浣嶏級
-	WechatMchCertSerialNo string // 鍟嗘埛 API 璇佷功搴忓垪鍙?
-	WechatMchPrivateKey   string // 鍟嗘埛 API 璇佷功绉侀挜锛圥EM锛?
+	WechatAPIv3Key        string
+	WechatMchCertSerialNo string
+	WechatMchPrivateKey   string
 
 	// Agent behavior
 	AgentMaxTurns     int // max LLM-tool turns per run (default 10)
@@ -129,8 +120,6 @@ func Load() *Config {
 		os.Exit(1)
 	}
 
-	// 娲剧敓瀵嗛挜锛氬綋 JWT_SECRET / INTERNAL_TOKEN 鏈樉寮忚缃椂锛岀敱 APP_SECRET 鍩熷垎绂绘淳鐢熴€?
-	// 瀹夊叏妯″瀷鍙栬垗锛氶儴缃蹭富瀵嗛挜涓哄敮涓€蹇呭～绉樺瘑锛涜嫢闇€鏇村己鐨勫瘑閽ラ殧绂伙紝浠嶅彲鏄惧紡璁剧疆 JWT_SECRET / INTERNAL_TOKEN 瑕嗙洊娲剧敓鍊笺€?
 	if cfg.JWTSecret == "" {
 		cfg.JWTSecret = deriveSubsecret(cfg.AppSecret, "chiron-jwt")
 	}
@@ -147,9 +136,6 @@ func Load() *Config {
 	return cfg
 }
 
-// LoadAllowUnconfigured 涓?Load 鐩稿悓锛屼絾鍏佽 APP_SECRET / JWT_SECRET 缂哄け鎴栧急鍊艰€屼笉閫€鍑猴細
-// 渚?cmd/chiron 鍦ㄣ€屽畨瑁呮ā寮忋€嶄笅鍚姩锛堥儴缃插皻鏈厤缃敮涓€涓诲瘑閽ワ紝鏃犳硶娲剧敓 JWT / 鍔犲瘑瀵嗛挜锛夈€?
-// APP_SECRET 鏈夋晥鏃朵粛鎵ц娲剧敓锛涜皟鐢ㄦ柟椤荤敤 cfg.ValidateAppSecret() 鍒ゆ柇鏄惁杩涘叆瀹夎妯″紡銆?
 func LoadAllowUnconfigured() *Config {
 	cfg := loadConfig()
 
@@ -171,8 +157,6 @@ func loadConfig() *Config {
 		ReadTimeout:     getDuration("READ_TIMEOUT", 10*time.Second),
 		WriteTimeout:    getDuration("WRITE_TIMEOUT", 60*time.Second),
 		IdleTimeout:     getDuration("IDLE_TIMEOUT", 120*time.Second),
-		// 寮曞杩炴帴锛氫粎褰撴湭鏄惧紡璁剧疆 POSTGRES_DSN 鏃朵娇鐢ㄩ粯璁わ紝渚涖€屽彧鐣?app_secret銆嶅垵濮嬪寲鍚庝粠
-		// system_settings 璇诲彇鏁版嵁搴撻泦缇ら厤缃鐩栵紙鍒囨崲闆嗙兢閲嶅惎鐢熸晥锛夈€?
 		PostgresDSN:         getEnv("POSTGRES_DSN", ""),
 		PostgresMaxConn:     getInt("POSTGRES_MAX_CONN", 20),
 		PostgresMinConn:     getInt("POSTGRES_MIN_CONN", 2),
@@ -222,9 +206,6 @@ func loadConfig() *Config {
 		AgentContextLimit:     getInt("AGENT_CONTEXT_LIMIT", 20),
 		AgentMaxConcurrency:   getInt("AGENT_MAX_CONCURRENCY", 20),
 
-		// Python AI 寮曟搸锛堣繛鎺ユ睜閰嶇疆锛?
-
-		// Python AI 寮曟搸
 		PythonEngineAddress: getEnv("PYTHON_ENGINE_ADDRESS", "localhost:8000"),
 		PythonEngineTimeout: getDuration("PYTHON_ENGINE_TIMEOUT", 5*time.Minute),
 
@@ -239,12 +220,10 @@ func loadConfig() *Config {
 	return cfg
 }
 
-// ValidateAppSecret 鏍￠獙閮ㄧ讲涓诲瘑閽ュ己搴︼紙鈮?2 瀛楃锛岄潪寮卞€硷級銆?
 func (c *Config) ValidateAppSecret() bool {
 	return ValidateJWTSecret(c.AppSecret)
 }
 
-// deriveSubsecret 浠庝富瀵嗛挜娲剧敓纭畾鎬у瓙瀵嗛挜锛圚MAC-SHA256锛屽煙鍒嗙锛夈€?
 func deriveSubsecret(secret, domain string) string {
 	if secret == "" {
 		return ""

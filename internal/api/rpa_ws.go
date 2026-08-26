@@ -48,13 +48,15 @@ func (e *RPAError) Error() string {
 	return fmt.Sprintf("rpa error %d: %s", e.Code, e.Message)
 }
 
-// RPACommand 灏佽鍙戦€佺粰鎻掍欢鐨勫懡浠?type RPACommand struct {
+// RPACommand 灏佽鍙戦€佺粰鎻掍欢鐨勫懡浠
+type RPACommand struct {
 	Method string
 	Params map[string]interface{}
 	TabID  int
 }
 
-// RPAResult 灏佽鎻掍欢杩斿洖鐨勭粨鏋?type RPAResult struct {
+// RPAResult 灏佽鎻掍欢杩斿洖鐨勭粨鏋
+type RPAResult struct {
 	Result map[string]interface{}
 	Error  *RPAError
 }

@@ -11,12 +11,12 @@ import (
 	"github.com/athenavi/chiron/internal/db"
 )
 
-// Activity 鑱氬悎鏈€杩戞椿鍔紙璺ㄥ伐浣滃彴锛夛紝渚涘墠绔?WorkstationNav 浣跨敤銆?type Activity struct {
+type Activity struct {
 	Workstation string `json:"workstation"`   // dialogue / agent / workflow / skill / knowledge / plugin
-	Route       string `json:"route"`         // 璺宠浆璺敱
-	Title       string `json:"title"`         // 娲诲姩鏍囬
-	Status      string `json:"status"`        // 鍘熷鐘舵€?	StatusText  string `json:"status_text"`   // 灞曠ず鏂囨
-	Timestamp   int64  `json:"timestamp"`     // Unix 姣
+	Route       string `json:"route"`
+	Title       string `json:"title"`
+	Status      string `json:"status"`
+	Timestamp   int64  `json:"timestamp"`
 }
 
 func activityStatusText(status string) string {

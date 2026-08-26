@@ -77,7 +77,7 @@ func runInstanceList(cmd *cobra.Command, args []string) error {
 func runInstanceAdd(cmd *cobra.Command, args []string) error {
 	name := args[0]
 	if instancePID <= 0 {
-		return fmt.Errorf("--pid 蹇呴』 > 0")
+		return fmt.Errorf("--pid must > 0")
 	}
 	state, err := loadState()
 	if err != nil {
@@ -102,7 +102,7 @@ func runInstanceRemove(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("instance not found: %s", name)
 	}
 
-	// 鑻ヨ繘绋嬩粛鍦ㄨ繍琛屽垯鍏堢粓姝?	if inst.PID > 0 && processAlive(inst.PID) {
+	if inst.PID > 0 && processAlive(inst.PID) {
 		if err := stopProcess(inst.PID, name); err != nil {
 			return fmt.Errorf("failed to stop %s: %w", name, err)
 		}

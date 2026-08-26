@@ -27,7 +27,6 @@ var (
 	logsFollow  bool
 )
 
-// 鏈嶅姟鍚嶇櫧鍚嶅崟锛氫粎瀛楁瘝鏁板瓧涓庤繛瀛楃/涓嬪垝绾匡紝闃叉璺緞绌胯秺
 var serviceNameRe = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
 func init() {
@@ -38,10 +37,9 @@ func init() {
 
 func runLogs(cmd *cobra.Command, args []string) error {
 	if logsService == "" {
-		// 鏈寚瀹氭湇鍔★細鍒楀嚭鍙敤鏃ュ織鏂囦欢
 		entries, err := os.ReadDir("logs")
 		if err != nil {
-			return fmt.Errorf("璇诲彇 logs/ 鐩綍澶辫触锛堝彲鐢?-s <service> 鎸囧畾鏈嶅姟锛? %w", err)
+			return fmt.Errorf("? %w", err)
 		}
 		fmt.Println("Available log files in logs/:")
 		for _, e := range entries {
@@ -53,7 +51,7 @@ func runLogs(cmd *cobra.Command, args []string) error {
 	}
 
 	if !serviceNameRe.MatchString(logsService) {
-		return fmt.Errorf("闈炴硶鐨勬湇鍔″悕: %s锛堜粎鍏佽瀛楁瘝鏁板瓧銆?銆乢锛?, logsService)
+		return fmt.Errorf("invalid service name: %s, please use -s or --service to specify a service", logsService)
 	}
 
 	logPaths := []string{
@@ -69,7 +67,7 @@ func runLogs(cmd *cobra.Command, args []string) error {
 		}
 	}
 	if !existing {
-		return fmt.Errorf("鏈壘鍒版湇鍔?%s 鐨勬棩蹇楋紙logs/%s.*.log锛?, logsService, logsService)
+		return fmt.Errorf("log file not found: %s.*.log in logs/, please use -s or --service to specify a service", logsService)
 	}
 
 	for _, p := range logPaths {
@@ -87,7 +85,6 @@ func runLogs(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// tailFile 浠庢枃浠舵湯灏惧弽鍚戣鍙?N 琛岋紙閬垮厤澶ф棩蹇楀叏閲忚鍏ュ唴瀛橈級
 func tailFile(path string, n int) error {
 	file, err := os.Open(path)
 	if err != nil {
@@ -106,7 +103,7 @@ func tailFile(path string, n int) error {
 	return nil
 }
 
-// readLastLines 浠庢枃浠跺熬鍚戝墠璇诲彇鏈€澶?n 琛岋紙绱Н瀛楄妭鍚庣粺涓€鍒囧垎锛岄檺鍐呭瓨銆佷笉璺ㄥ潡鏂锛?func readLastLines(file *os.File, n int) ([]string, error) {
+func readLastLines(file *os.File, n int) ([]string, error) {
 	if n <= 0 {
 		n = 100
 	}
@@ -119,7 +116,7 @@ func tailFile(path string, n int) error {
 		return nil, nil
 	}
 
-	const maxBytes = 1 << 20 // 鍗曟绱Н涓婇檺 1MB锛堥槻姝㈣秴澶ф棩蹇楁墦婊″唴瀛橈級
+	const maxBytes = 1 << 20
 	var data []byte
 	pos := size
 	newlines := 0
@@ -140,7 +137,7 @@ func tailFile(path string, n int) error {
 	}
 
 	content := string(data)
-	// 鏈鍒版枃浠跺ご鏃讹紝寮€澶村彲鑳芥槸琛屼腑娈碉紝涓㈠純绗竴涓笉瀹屾暣琛?	if !atHead {
+	if !atHead {
 		if idx := strings.Index(content, "\n"); idx >= 0 {
 			content = content[idx+1:]
 		} else {
@@ -148,7 +145,6 @@ func tailFile(path string, n int) error {
 		}
 	}
 	lines := strings.Split(content, "\n")
-	// 鏂囦欢浠?\n 缁撳熬 鈫?鏈熬绌轰覆鍏冪礌鍘绘帀
 	if len(lines) > 0 && lines[len(lines)-1] == "" {
 		lines = lines[:len(lines)-1]
 	}
@@ -158,7 +154,6 @@ func tailFile(path string, n int) error {
 	return lines, nil
 }
 
-// followLogs 杞璇诲彇鏂囦欢鏂板鍐呭锛堢敤 bufio.Reader 鏀寔瓒呴暱琛岋級
 func followLogs(paths []string) error {
 	// 璁板綍鍚勬枃浠跺綋鍓嶄綅缃紙鏂囦欢灏撅級
 	offsets := map[string]int64{}

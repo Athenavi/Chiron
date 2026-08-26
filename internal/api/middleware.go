@@ -27,7 +27,8 @@ type responseWriter struct {
 }
 // 鈹€鈹€ JWT 榛戝悕鍗曟湰鍦?TTL 缂撳瓨锛圥1 浼樺寲锛氬噺灏戠儹璺緞姣忔璇锋眰鐨?Redis 寰€杩旓級鈹€鈹€
 // 姝ｇ紦瀛橈紙宸叉媺榛戯級15 鍒嗛挓鏈夋晥锛涜礋缂撳瓨锛堟湭鎷夐粦锛変粎 30 绉掞紝纭繚鐧诲嚭鎾ら攢
-// 鍦?鈮?0s 鍐呭叏灞€鐢熸晥锛堝鍓湰浠嶄互 Redis 涓烘渶缁堜簨瀹炴簮锛夈€?type jwtBlacklistEntry struct {
+// 鍦?鈮?0s 鍐呭叏灞€鐢熸晥锛堝鍓湰浠嶄互 Redis 涓烘渶缁堜簨瀹炴簮锛夈€
+type jwtBlacklistEntry struct {
 	blacklisted bool
 	checkedAt   time.Time
 }

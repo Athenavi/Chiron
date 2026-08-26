@@ -20,7 +20,8 @@ const (
 	PayStatusFailed   = "failed"   // 鏀粯澶辫触
 	PayStatusExpired  = "expired"  // 瓒呮椂鏈敮浠?)
 
-// Payment 鏄竴绗斿厖鍊艰鍗曪紙鏀粯瀹?寰俊/PayPal 鍏辩敤锛夈€?// 閲戦浠?鍒?涓哄崟浣嶏細鏀粯瀹?寰俊涓轰汉姘戝竵鍒嗭紙CNY锛夛紝PayPal 涓虹編鍏冨垎锛圲SD锛夈€?type Payment struct {
+// Payment 鏄竴绗斿厖鍊艰鍗曪紙鏀粯瀹?寰俊/PayPal 鍏辩敤锛夈€?// 閲戦浠?鍒?涓哄崟浣嶏細鏀粯瀹?寰俊涓轰汉姘戝竵鍒嗭紙CNY锛夛紝PayPal 涓虹編鍏冨垎锛圲SD锛夈€
+type Payment struct {
 	ID              string     `json:"id"`
 	UserID          string     `json:"user_id"`
 	Channel         string     `json:"channel"`
@@ -34,7 +35,8 @@ const (
 	ExpiredAt       *time.Time `json:"expired_at,omitempty"`
 }
 
-// PaymentStore 鏄敮浠樿鍗曠殑鎸佷箙鍖栨帴鍙ｃ€?type PaymentStore interface {
+// PaymentStore 鏄敮浠樿鍗曠殑鎸佷箙鍖栨帴鍙ｃ€
+type PaymentStore interface {
 	CreatePayment(ctx context.Context, p *Payment) error
 	GetPayment(ctx context.Context, id string) (*Payment, error)
 	// GetPaymentByProviderOrderID 渚涙笭閬撳洖璋冩寜绗笁鏂硅鍗曞彿瀹氫綅锛堟敮浠樺疂鍥炶皟鏃犲唴閮ㄨ鍗曞彿鏃跺彲鍥炴煡锛?	GetPaymentByProviderOrderID(ctx context.Context, providerOrderID string) (*Payment, error)

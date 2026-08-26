@@ -10,7 +10,8 @@ import (
 	"github.com/athenavi/chiron/internal/db"
 )
 
-// DistributedRateLimiter 鍩轰簬 Redis 鐨勫垎甯冨紡闄愭祦鍣?// 鏀寔澶氱骇闄愭祦锛氬叏灞€銆佺鎴枫€佺敤鎴?type DistributedRateLimiter struct {
+// DistributedRateLimiter 鍩轰簬 Redis 鐨勫垎甯冨紡闄愭祦鍣?// 鏀寔澶氱骇闄愭祦锛氬叏灞€銆佺鎴枫€佺敤鎴
+type DistributedRateLimiter struct {
 	rdb db.RedisClient
 
 	// 闄愭祦閰嶇疆

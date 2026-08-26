@@ -23,7 +23,8 @@ import (
 //   - GetProgress GET    /v1/uploads/{id}       鈫?received_chunks锛堟柇鐐圭画浼犱緷鎹級
 //   - Complete    POST   /v1/uploads/{id}/complete 鈫?鍚堝苟骞舵寜 purpose 钀藉簱
 //
-// 鍒嗙墖瀛樹簬 <storageRoot>/uploads/{upload_id}/chunk_{index}锛涘皬鏂囦欢鍙蛋鏃㈡湁 multipart 鐩翠紶銆?type UploadHandler struct {
+// 鍒嗙墖瀛樹簬 <storageRoot>/uploads/{upload_id}/chunk_{index}锛涘皬鏂囦欢鍙蛋鏃㈡湁 multipart 鐩翠紶銆
+type UploadHandler struct {
 	authenticator *auth.Authenticator
 	storageRoot   string
 }

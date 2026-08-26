@@ -15,7 +15,8 @@ import (
 	"github.com/athenavi/chiron/internal/id"
 )
 
-// UserMarketHandler 闈㈠悜鐢ㄦ埛鐨勪笁澶у競鍦猴紙鎶€鑳?Agent/MCP锛夋祻瑙堜笌涓€閿畨瑁呫€?// 绠＄悊绔彂甯冧笌绉熸埛鎺堟潈浠嶈蛋 market_handler.go锛坋nt_catalog_items / ent_catalog_installs锛夈€?type UserMarketHandler struct {
+// UserMarketHandler 闈㈠悜鐢ㄦ埛鐨勪笁澶у競鍦猴紙鎶€鑳?Agent/MCP锛夋祻瑙堜笌涓€閿畨瑁呫€?// 绠＄悊绔彂甯冧笌绉熸埛鎺堟潈浠嶈蛋 market_handler.go锛坋nt_catalog_items / ent_catalog_installs锛夈€
+type UserMarketHandler struct {
 	cfg          *config.Config
 	pythonClient *engine.PythonClient
 }
@@ -24,7 +25,8 @@ func NewUserMarketHandler(cfg *config.Config, pythonClient *engine.PythonClient)
 	return &UserMarketHandler{cfg: cfg, pythonClient: pythonClient}
 }
 
-// marketItemSummary 鐢ㄦ埛鍙鐨勫競鍦烘潯鐩紙宸插彂甯?+ 绉熸埛鎺堟潈 fail-open锛夈€?type marketItemSummary struct {
+// marketItemSummary 鐢ㄦ埛鍙鐨勫競鍦烘潯鐩紙宸插彂甯?+ 绉熸埛鎺堟潈 fail-open锛夈€
+type marketItemSummary struct {
 	ID        string          `json:"id"`
 	Type      string          `json:"type"` // skill / agent / mcp
 	Name      string          `json:"name"`

@@ -104,7 +104,8 @@ func TestCacheKeyAndTTL(t *testing.T) {
 // 鈹€鈹€ fake RedisClient锛氱紦瀛樺懡涓?/ 鏈懡涓矾寰?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 // fakeRedis 浠呭疄鐜版祴璇曟墍闇€鐨?Get/Set/Del锛屽叾浣欐柟娉曢€氳繃宓屽叆鎺ュ彛
-// 淇濇寔 nil锛堟祴璇曡矾寰勪笉浼氳Е杈撅級銆?type fakeRedis struct {
+// 淇濇寔 nil锛堟祴璇曡矾寰勪笉浼氳Е杈撅級銆
+type fakeRedis struct {
 	db.RedisClient
 	store   map[string]string
 	gets    int

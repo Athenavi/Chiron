@@ -50,7 +50,8 @@ redis.call("EXPIRE", key, 300)
 return tostring(allowed)
 `
 
-// TenantRateLimiter 鎻愪緵 per-tenant 璧勬簮绾?QPS 闄愬埗銆?// Redis 鍙敤鏃惰蛋 Lua 鍘熷瓙鑴氭湰锛堝瀹炰緥鐘舵€佷竴鑷达級锛?// Redis 涓嶅彲鐢ㄦ椂 fail-close锛堜笌 DistributedRateLimiter 绛栫暐涓€鑷达級銆?type TenantRateLimiter struct {
+// TenantRateLimiter 鎻愪緵 per-tenant 璧勬簮绾?QPS 闄愬埗銆?// Redis 鍙敤鏃惰蛋 Lua 鍘熷瓙鑴氭湰锛堝瀹炰緥鐘舵€佷竴鑷达級锛?// Redis 涓嶅彲鐢ㄦ椂 fail-close锛堜笌 DistributedRateLimiter 绛栫暐涓€鑷达級銆
+type TenantRateLimiter struct {
 	rdb       db.RedisClient
 	maxBurst  int
 	refillPerSec float64

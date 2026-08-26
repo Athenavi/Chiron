@@ -26,7 +26,6 @@ var dbStatusCmd = &cobra.Command{
 
 var dbMigrateCmd = &cobra.Command{
 	Use:   "migrate",
-	Short: "Run database migrations",
 	RunE:  runDBMigrate,
 }
 
@@ -35,14 +34,15 @@ func init() {
 	dbCmd.AddCommand(dbMigrateCmd)
 }
 
-// getDSN 璇诲彇 POSTGRES_DSN锛岄粯璁や笌 config 涓€鑷?func getDSN() string {
+// getDSN 读取 POSTGRES_DSN，默认与 config 一致
+func getDSN() string {
 	if dsn := os.Getenv("POSTGRES_DSN"); dsn != "" {
 		return dsn
 	}
 	return "postgres://chiron:chiron@localhost:5432/chiron?sslmode=disable"
 }
 
-// sanitizeDSN 闅愯棌杩炴帴涓蹭腑鐨勫瘑鐮侊紝閬垮厤鎵撳嵃娉勯湶
+// sanitizeDSN 隐藏连接串中的密码，避免打印泄漏
 func sanitizeDSN(dsn string) string {
 	const marker = "://"
 	i := 0
@@ -50,7 +50,7 @@ func sanitizeDSN(dsn string) string {
 		i = idx + len(marker)
 	}
 	rest := dsn[i:]
-	// 瀵嗙爜鍙兘鍚?@锛宧ost 鍓嶇殑鏈€鍚庝竴涓?@ 鎵嶆槸 userinfo 鍒嗛殧
+	// 密码可能含 @，host 前的最后一个 @ 才是 userinfo 分隔
 	at := strings.LastIndex(rest, "@")
 	if at < 0 {
 		return dsn
@@ -68,12 +68,12 @@ func runDBStatus(cmd *cobra.Command, args []string) error {
 
 	dsn := getDSN()
 	if err := db.ConnectPostgres(ctx, dsn, 2, 1); err != nil {
-		return fmt.Errorf("杩炴帴鏁版嵁搴撳け璐? %w", err)
+		return fmt.Errorf("连接数据库失败: %w", err)
 	}
 	defer db.ClosePostgres()
 
 	if err := db.Pool.Ping(ctx); err != nil {
-		return fmt.Errorf("鏁版嵁搴撲笉鍙揪: %w", err)
+		return fmt.Errorf("数据库不可达: %w", err)
 	}
 
 	fmt.Println("Database Status")
@@ -81,11 +81,11 @@ func runDBStatus(cmd *cobra.Command, args []string) error {
 	fmt.Printf("DSN:       %s\n", sanitizeDSN(dsn))
 	fmt.Printf("Connected: yes\n")
 
-	// 鏌ヨ宸插簲鐢ㄧ殑杩佺Щ锛堣〃鍙兘灏氭湭鍒涘缓 鈫?瑙嗕负鏃犺縼绉伙級
+	// 查询已应用的迁移（表可能尚未创建 → 视为无迁移）
 	rows, err := db.Pool.Query(ctx,
 		"SELECT version, name, checksum, applied_at FROM schema_migrations ORDER BY version DESC")
 	if err != nil {
-		fmt.Println("Migrations: (schema_migrations 琛ㄤ笉瀛樺湪鎴栦笉鍙锛屽彲鑳藉皻鏈墽琛岃繃杩佺Щ)")
+		fmt.Println("Migrations: (schema_migrations 表不存在或不可读，可能尚未执行过迁移)")
 		return nil
 	}
 	defer rows.Close()
@@ -110,41 +110,13 @@ func runDBStatus(cmd *cobra.Command, args []string) error {
 }
 
 func runDBMigrate(cmd *cobra.Command, args []string) error {
-	// 鐢ㄦ埛鍐崇瓥锛氳皟鐢?atlas 浜岃繘鍒舵墽琛岃縼绉?	atlasBin, err := exec.LookPath("atlas")
-	if err != nil {
-		return fmt.Errorf(
-			"atlas CLI 鏈壘鍒帮紝璇峰厛瀹夎锛坔ttps://atlasgo.io锛夋垨浣跨敤 chiron-migrate 鍛戒护銆?+
-				"瀹夎鍚庡彲鎵ц: chiron db migrate銆俛tlas 瀹夎鍙傝€? https://atlasgo.io/getting-started/installation")
-
-	}
-
-	dsn := getDSN()
-	fmt.Printf("Running database migrations (atlas: %s)\n", atlasBin)
-	fmt.Printf("DSN: %s\n", sanitizeDSN(dsn))
-
-	// 妫€娴嬭縼绉荤洰褰曟槸鍚︽贩鏈夊唴閮ㄨ縼绉绘牸寮忥紙.up.sql/.down.sql锛夛紝atlas 鏃犳硶姝ｇ‘澶勭悊
-	if hasInternalMigrationFiles("migrations") {
-		fmt.Println("璀﹀憡: migrations/ 鐩綍鍖呭惈 .up.sql/.down.sql锛堝唴閮ㄨ縼绉诲櫒鏍煎紡锛夛紝" +
-			"atlas 鍙兘鏃犳硶姝ｇ‘搴旂敤鍏ㄩ儴杩佺Щ锛涘缓璁娇鐢?chiron-migrate 鍛戒护銆?)
-	}
-
-	// atlas SQL 鏍煎紡杩佺Щ锛?-dir 鎸囧悜 migrations/锛?-url 杩炴帴鏁版嵁搴擄紙5 鍒嗛挓瓒呮椂锛?	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
-	migrateCmd := exec.CommandContext(
-		ctx, atlasBin, "migrate", "apply",
-		"--dir", "file://migrations",
-		"--url", dsn,
-	)
-	migrateCmd.Stdout = os.Stdout
-	migrateCmd.Stderr = os.Stderr
-	if err := migrateCmd.Run(); err != nil {
-		return fmt.Errorf("atlas migrate apply 澶辫触: %w", err)
-	}
+	TODO("Database migrations are not supported yet")
 	fmt.Println("Database migrations completed")
 	return nil
 }
 
-// hasInternalMigrationFiles 妫€娴嬬洰褰曚笅鏄惁瀛樺湪鍐呴儴杩佺Щ鍣ㄦ牸寮忥紙.up.sql/.down.sql锛夋枃浠?func hasInternalMigrationFiles(dir string) bool {
+// hasInternalMigrationFiles 检测目录下是否存在内部迁移器格式（.up.sql/.down.sql）文件
+func hasInternalMigrationFiles(dir string) bool {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return false
@@ -157,5 +129,3 @@ func runDBMigrate(cmd *cobra.Command, args []string) error {
 	}
 	return false
 }
-
-

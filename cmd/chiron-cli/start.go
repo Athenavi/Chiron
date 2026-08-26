@@ -34,8 +34,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get executable path: %w", err)
 	}
-
-	// chiron 涓荤▼搴忓彧璇荤幆澧冨彉閲忥紙涓嶈В鏋愬懡浠よ flag锛夛紝閰嶇疆缁?env 浼犻€?	env := os.Environ()
+	env := os.Environ()
 	if startConfig != "" {
 		env = append(env, "CONFIG_FILE="+startConfig)
 	}
@@ -62,7 +61,6 @@ func runStart(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// defaultPort 璇诲彇鐜 PORT锛堜笌 chiron 涓荤▼搴忎竴鑷达級锛岄粯璁?8080
 func defaultPort() int {
 	p := os.Getenv("PORT")
 	if p == "" {
@@ -75,9 +73,8 @@ func defaultPort() int {
 	return port
 }
 
-// startBackground 鍚庡彴鍚姩杩涚▼锛屾棩蹇楅噸瀹氬悜鍒?logs/{name}.*.log锛屽苟鍐欏叆 .pids/state.json
 func startBackground(serviceCmd *exec.Cmd, name string, port int, mode string) error {
-	// 闃查噸澶嶅惎鍔細鍚屽悕瀹炰緥宸插湪杩愯鍒欐嫆缁?	state, err := loadState()
+	state, err := loadState()
 	if err != nil {
 		return err
 	}
@@ -106,15 +103,13 @@ func startBackground(serviceCmd *exec.Cmd, name string, port int, mode string) e
 		stderrFile.Close()
 		return err
 	}
-	// 鏃ュ織鏂囦欢鍙ユ焺鐢卞瓙杩涚▼鎸佹湁锛岀埗杩涚▼涓嶅啀浣跨敤
 	_ = stdoutFile.Close()
 	_ = stderrFile.Close()
 
-	// 鍐欏叆鐘舵€侊紱澶辫触鍒欏洖婊氾紙缁堟鍒氬惎鍔ㄧ殑杩涚▼锛夛紝閬垮厤 stop 绠′笉鍒扮殑瀛ゅ効杩涚▼
 	state.UpsertInstance(newInstance(name, serviceCmd.Process.Pid, port, mode, filepath.Join("logs", name+".stdout.log")))
 	if err := saveState(state); err != nil {
 		_ = stopProcess(serviceCmd.Process.Pid, name)
-		return fmt.Errorf("鍐欏叆鐘舵€佹枃浠跺け璐ワ紝宸插洖婊氱粓姝㈣繘绋? %w", err)
+		return fmt.Errorf("failed to save state: %w", err)
 	}
 
 	fmt.Printf("Started %s service (PID: %d, port: %d, mode: %s)\n", name, serviceCmd.Process.Pid, port, mode)
@@ -138,7 +133,7 @@ func startMicroservices(exePath string, baseEnv []string) error {
 	for _, svc := range services {
 		svcPath := filepath.Join(dir, fmt.Sprintf("chiron-%s", svc.name))
 		if _, err := os.Stat(svcPath); err != nil {
-			return fmt.Errorf("鏈嶅姟浜岃繘鍒朵笉瀛樺湪: %s锛堝井鏈嶅姟妯″紡闇€鍏堟瀯寤?chiron-%s锛?, svcPath, svc.name)
+			return fmt.Errorf("file not found: %s", svcPath)
 		}
 
 		serviceCmd := exec.Command(svcPath)

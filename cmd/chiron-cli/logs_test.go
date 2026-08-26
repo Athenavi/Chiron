@@ -7,7 +7,6 @@ import (
 	"testing"
 )
 
-// readLastLines 鐨勫洖褰掓祴璇曪細璺ㄥ潡鏂銆侀暱琛屻€佺┖琛屻€佽鏁拌竟鐣?
 func writeTempLog(t *testing.T, content string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "test.log")
@@ -64,7 +63,6 @@ func TestReadLastLinesMoreThanNKeepsTailOrder(t *testing.T) {
 }
 
 func TestReadLastLinesLongLineOverChunkBoundary(t *testing.T) {
-	// 鍗曡 > 4096B锛堣法鍧楋級+ 鍚庣画琛岋細涓嶅緱鏂銆佷笉寰楅敊搴?	line := strings.Repeat("x", 5000)
 	content := line + "\n" + "tail-line\n"
 	lines := readLastFromFile(t, content, 3)
 	if len(lines) != 2 {
@@ -79,7 +77,6 @@ func TestReadLastLinesLongLineOverChunkBoundary(t *testing.T) {
 }
 
 func TestReadLastLinesExactChunkBoundary(t *testing.T) {
-	// 琛屾伆濂借法 4096 杈圭晫锛?095B 琛?+ 1B 濉厖鍚庡啀鎹㈣
 	line := strings.Repeat("y", 4095)
 	content := line + "z\nafter\n"
 	lines := readLastFromFile(t, content, 2)

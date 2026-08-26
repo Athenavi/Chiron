@@ -8,7 +8,8 @@ import (
 	"time"
 )
 
-// mockStore 妯℃嫙 PG 鍘熷瓙浣欓璇箟锛欰tomicDeduct/Add 鐩存帴淇敼鍐呭瓨浣欓锛?// 涓庣敓浜?PGStore 鐨?UPDATE ... RETURNING 琛屼负涓€鑷淬€?type mockStore struct {
+// mockStore 妯℃嫙 PG 鍘熷瓙浣欓璇箟锛欰tomicDeduct/Add 鐩存帴淇敼鍐呭瓨浣欓锛?// 涓庣敓浜?PGStore 鐨?UPDATE ... RETURNING 琛屼负涓€鑷淬€
+type mockStore struct {
 	mu      sync.Mutex
 	balance int
 }

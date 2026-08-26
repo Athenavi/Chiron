@@ -108,7 +108,8 @@ import (
 	}
 }
 
-// orderAwareStore锛歳ecordingStore + 鍐呭瓨璁㈠崟琛紙骞傜瓑娴嬭瘯鐢級銆?type orderAwareStore struct {
+// orderAwareStore锛歳ecordingStore + 鍐呭瓨璁㈠崟琛紙骞傜瓑娴嬭瘯鐢級銆
+type orderAwareStore struct {
 	recordingStore
 	mu   sync.Mutex
 	ords map[string]*Payment

@@ -16,7 +16,8 @@ import (
 	"github.com/wechatpay-apiv3/wechatpay-go/utils"
 )
 
-// WechatClient 瀵规帴寰俊鏀粯 APIv3锛圢ative 鎵爜锛夈€?// 浣跨敤瀹樻柟 SDK锛氳嚜鍔ㄥ畬鎴愬钩鍙拌瘉涔︿笅杞?鏇存柊銆佽姹傜鍚嶄笌鍥炶皟楠岀/AES-GCM 瑙ｅ瘑銆?type WechatClient struct {
+// WechatClient 瀵规帴寰俊鏀粯 APIv3锛圢ative 鎵爜锛夈€?// 浣跨敤瀹樻柟 SDK锛氳嚜鍔ㄥ畬鎴愬钩鍙拌瘉涔︿笅杞?鏇存柊銆佽姹傜鍚嶄笌鍥炶皟楠岀/AES-GCM 瑙ｅ瘑銆
+type WechatClient struct {
 	mchID   string
 	appID   string
 	client  *core.Client

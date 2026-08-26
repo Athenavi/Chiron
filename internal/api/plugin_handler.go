@@ -77,7 +77,8 @@ func maskSensitiveEnv(plugins []MCPPlugin) {
 }
 
 // PluginHandler manages per-user MCP plugin configurations.
-// 閰嶇疆瀛樺偍锛歿PluginDataDir}/{user_id}/plugins.json锛堢敤鎴风骇闅旂锛孲 瀹夊叏淇锛?// 鍘熷疄鐜板叏灞€鍗曟枃浠讹紝浠讳綍鐧诲綍鐢ㄦ埛閮藉彲璇诲啓/淇敼鍏朵粬鐢ㄦ埛鐨勬彃浠堕厤缃級銆?type PluginHandler struct {
+// 閰嶇疆瀛樺偍锛歿PluginDataDir}/{user_id}/plugins.json锛堢敤鎴风骇闅旂锛孲 瀹夊叏淇锛?// 鍘熷疄鐜板叏灞€鍗曟枃浠讹紝浠讳綍鐧诲綍鐢ㄦ埛閮藉彲璇诲啓/淇敼鍏朵粬鐢ㄦ埛鐨勬彃浠堕厤缃級銆
+type PluginHandler struct {
 	cfg           *config.Config
 	authenticator *auth.Authenticator
 	dataDir       string

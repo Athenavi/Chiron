@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-// stateFilePath 鍩轰簬褰撳墠宸ヤ綔鐩綍锛涙祴璇曞湪涓存椂鐩綍涓繍琛岋紝閬垮厤姹℃煋浠撳簱 .pids/
 
 func withTempCwd(t *testing.T, fn func()) {
 	t.Helper()
@@ -38,7 +37,7 @@ func TestStateUpsertRemoveRoundTrip(t *testing.T) {
 			t.Fatalf("want 2 instances, got %d", len(loaded.Instances))
 		}
 
-		// upsert 鎸夊悕绉拌鐩栵紝涓嶄骇鐢熼噸澶?		loaded.UpsertInstance(newInstance("gateway", 9999, 8080, "monolith", ""))
+		loaded.UpsertInstance(newInstance("gateway", 9999, 8080, "monolith", ""))
 		if got := loaded.FindInstance("gateway"); got == nil || got.PID != 9999 {
 			t.Fatalf("want pid 9999 after upsert, got %+v", got)
 		}

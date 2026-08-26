@@ -1,6 +1,5 @@
 ﻿package main
 
-// stop 鍛戒护 鈥?鎸?.pids/state.json 浼橀泤鍋滄鏈湴鏈嶅姟瀹炰緥
 
 import (
 	"fmt"
@@ -24,7 +23,7 @@ func runStop(cmd *cobra.Command, args []string) error {
 	return stopInstances()
 }
 
-// stopInstances 缁堟鎵€鏈夌姸鎬佹枃浠朵腑鐨勫疄渚嬶紝绛夊緟閫€鍑哄悗娓呯悊鐘舵€?func stopInstances() error {
+func stopInstances() error {
 	state, err := loadState()
 	if err != nil {
 		return err
@@ -44,7 +43,6 @@ func runStop(cmd *cobra.Command, args []string) error {
 		fmt.Printf("Stopped %s (PID %d)\n", inst.Name, inst.PID)
 	}
 
-	// 娓呯悊鐘舵€侊紙鍙Щ闄ゆ垚鍔熷仠姝㈢殑锛涘け璐ヤ繚鐣欒褰曚究浜庨噸璇曪級
 	if len(failed) == 0 {
 		if err := clearState(); err != nil {
 			return fmt.Errorf("failed to clear state file: %w", err)
@@ -56,14 +54,12 @@ func runStop(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// stopProcess 浼橀泤缁堟杩涚▼锛氬厛 SIGTERM/taskkill锛岀瓑寰呴€€鍑猴紝瓒呮椂寮烘潃
 func stopProcess(pid int, name string) error {
 	if !processAlive(pid) {
-		return nil // 宸查€€鍑猴紝鏃犻渶澶勭悊
+		return nil
 	}
 
 	if runtime.GOOS == "windows" {
-		// taskkill 涓嶅甫 /F 灏濊瘯浼橀泤鍏抽棴
 		if err := exec.Command("taskkill", "/PID", strconv.Itoa(pid)).Run(); err != nil {
 			fmt.Printf("warning: taskkill graceful failed for PID %d: %v\n", pid, err)
 		}
@@ -73,7 +69,6 @@ func stopProcess(pid int, name string) error {
 		}
 	}
 
-	// 绛夊緟閫€鍑猴紙鏈€澶?10s锛夛紝瓒呮椂寮烘潃
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		if !processAlive(pid) {

@@ -18,7 +18,8 @@ import (
 )
 
 // AgentHandler 绠＄悊鑷畾涔?Agent锛圖B agents 琛級+ 杩愯浼氳瘽锛坅gent_sessions锛夈€?// 鎵ц閾捐矾锛歊un 钀?session(pending) 鈫?寮傛璋?Python /v1/agents/dispatch
-// 锛圥ython 鐢?SubAgent 鐪熸墽琛岋級鈫?缁撴灉鍥炲啓 session(completed/failed)銆?type AgentHandler struct {
+// 锛圥ython 鐢?SubAgent 鐪熸墽琛岋級鈫?缁撴灉鍥炲啓 session(completed/failed)銆
+type AgentHandler struct {
 	authenticator *auth.Authenticator
 	pythonClient  *engine.PythonClient
 	sem           chan struct{} // 骞跺彂鎵ц涓婇檺锛堜笌 /submit 鐨?agentSem 鍚屾簮锛?}
@@ -36,7 +37,8 @@ func NewAgentHandler(a *auth.Authenticator, pc *engine.PythonClient, sem chan st
 	return h
 }
 
-// Agent 鏄嚜瀹氫箟 Agent 鐨?DB 琛ㄧず銆?type Agent struct {
+// Agent 鏄嚜瀹氫箟 Agent 鐨?DB 琛ㄧず銆
+type Agent struct {
 	ID             string          `json:"id"`
 	Name           string          `json:"name"`
 	Description    string          `json:"description,omitempty"`
@@ -50,7 +52,8 @@ func NewAgentHandler(a *auth.Authenticator, pc *engine.PythonClient, sem chan st
 	UpdatedAt      time.Time       `json:"updated_at"`
 }
 
-// AgentSession 鏄竴娆?Agent 杩愯鐨勬寔涔呭寲璁板綍銆?type AgentSession struct {
+// AgentSession 鏄竴娆?Agent 杩愯鐨勬寔涔呭寲璁板綍銆
+type AgentSession struct {
 	ID        string    `json:"id"`
 	AgentID   string    `json:"agent_id,omitempty"`
 	AgentName string    `json:"agent_name,omitempty"`
