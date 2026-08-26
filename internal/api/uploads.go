@@ -40,7 +40,8 @@ const defaultChunkSize = 2 << 20 // 2MB
 // validUploadNameRe 鐢ㄤ簬鏂囦欢鍚嶅噣鍖栵細鎷掔粷璺緞鍒嗛殧绗︿笌鐩綍绌胯秺搴忓垪銆?// 浠呭厑璁稿瓧姣嶆暟瀛椼€佷腑鏂囩瓑甯歌瀛楃銆佺偣銆佷笅鍒掔嚎銆佽繛瀛楃銆佺┖鏍笺€?var validUploadNameRe = regexp.MustCompile(`^[^\x00-\x1f/\\]+$`)
 
 // sanitizeUploadName 鍑€鍖栦笂浼犳枃浠跺悕锛圥0-S3 璺緞绌胯秺淇锛夛細
-// 鎷掔粷鍖呭惈璺緞鍒嗛殧绗︽垨绌虹櫧鐨勫悕瀛楋紱鍓ョ娼滃湪閬嶅巻锛涢檺鍒堕暱搴︺€?func sanitizeUploadName(name string) string {
+// 鎷掔粷鍖呭惈璺緞鍒嗛殧绗︽垨绌虹櫧鐨勫悕瀛楋紱鍓ョ娼滃湪閬嶅巻锛涢檺鍒堕暱搴︺€
+func sanitizeUploadName(name string) string {
 	name = strings.TrimSpace(name)
 	if name == "" || len(name) > 255 {
 		return ""
@@ -59,7 +60,8 @@ const defaultChunkSize = 2 << 20 // 2MB
 	return name
 }
 
-// chunkDir 杩斿洖 upload_id 鐨勪复鏃跺垎鐗囩洰褰曪紙鑷姩鍒涘缓锛夈€?func (h *UploadHandler) chunkDir(uploadID string) (string, error) {
+// chunkDir 杩斿洖 upload_id 鐨勪复鏃跺垎鐗囩洰褰曪紙鑷姩鍒涘缓锛夈€
+func (h *UploadHandler) chunkDir(uploadID string) (string, error) {
 	dir := filepath.Join(h.storageRoot, "uploads", uploadID)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
@@ -75,7 +77,8 @@ func (h *UploadHandler) userID(r *http.Request) (string, bool) {
 	return claims.UserID, true
 }
 
-// claimsOf 杩斿洖褰撳墠璇锋眰鐨?claims锛堝惈 tenant_id 涓?user_id锛夈€?func (h *UploadHandler) claimsOf(r *http.Request) (*auth.Claims, bool) {
+// claimsOf 杩斿洖褰撳墠璇锋眰鐨?claims锛堝惈 tenant_id 涓?user_id锛夈€
+func (h *UploadHandler) claimsOf(r *http.Request) (*auth.Claims, bool) {
 	c := auth.GetClaims(r.Context())
 	if c == nil || c.TenantID == "" {
 		return nil, false
@@ -333,7 +336,8 @@ func (h *UploadHandler) Complete(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// mergeChunks 鎸?index 椤哄簭鎷兼帴鍒嗙墖涓哄崟涓复鏃舵枃浠躲€?func (h *UploadHandler) mergeChunks(dir string, count int) (*os.File, error) {
+// mergeChunks 鎸?index 椤哄簭鎷兼帴鍒嗙墖涓哄崟涓复鏃舵枃浠躲€
+func (h *UploadHandler) mergeChunks(dir string, count int) (*os.File, error) {
 	merged, err := os.CreateTemp(h.storageRoot, "merged_*.tmp")
 	if err != nil {
 		return nil, err
@@ -361,7 +365,8 @@ func (h *UploadHandler) Complete(w http.ResponseWriter, r *http.Request) {
 	return merged, nil
 }
 
-// finalizeMedia 鍚堝苟鏂囦欢鍐欏叆 media 瀛樺偍鍖哄苟钀?media_assets锛堟寜褰撳墠绉熸埛锛夈€?func (h *UploadHandler) finalizeMedia(r *http.Request, tenantID string, up struct {
+// finalizeMedia 鍚堝苟鏂囦欢鍐欏叆 media 瀛樺偍鍖哄苟钀?media_assets锛堟寜褰撳墠绉熸埛锛夈€
+func (h *UploadHandler) finalizeMedia(r *http.Request, tenantID string, up struct {
 	ID        string
 	UserID    string
 	Name      string
@@ -408,7 +413,8 @@ func (h *UploadHandler) Complete(w http.ResponseWriter, r *http.Request) {
 	return "/" + objectKey, nil
 }
 
-// finalizeKBDoc 鍚堝苟鏂囦欢鍐呭钀?knowledge_documents锛坈ontent bytea 渚?RAG 鏋勫缓锛屾寜褰撳墠绉熸埛锛夈€?func (h *UploadHandler) finalizeKBDoc(r *http.Request, tenantID string, up struct {
+// finalizeKBDoc 鍚堝苟鏂囦欢鍐呭钀?knowledge_documents锛坈ontent bytea 渚?RAG 鏋勫缓锛屾寜褰撳墠绉熸埛锛夈€
+func (h *UploadHandler) finalizeKBDoc(r *http.Request, tenantID string, up struct {
 	ID        string
 	UserID    string
 	Name      string
@@ -459,7 +465,8 @@ func (h *UploadHandler) Complete(w http.ResponseWriter, r *http.Request) {
 	return fmt.Sprintf("/kb/%s/documents/%s", up.ParentID, docID), nil
 }
 
-// finalizeGeneric 鍚堝苟鏂囦欢鍐欏叆閫氱敤鐩綍骞惰繑鍥炲彲璁块棶 URL銆?func (h *UploadHandler) finalizeGeneric(up struct {
+// finalizeGeneric 鍚堝苟鏂囦欢鍐欏叆閫氱敤鐩綍骞惰繑鍥炲彲璁块棶 URL銆
+func (h *UploadHandler) finalizeGeneric(up struct {
 	ID        string
 	UserID    string
 	Name      string

@@ -16,7 +16,8 @@ import (
 	"github.com/athenavi/chiron/internal/session"
 )
 
-// testRouterWithPython 鏋勫缓娉ㄥ叆鎸囧畾 Python 瀹㈡埛绔殑缃戝叧璺敱鍣ㄣ€?func testRouterWithPython(t *testing.T, pyClient *engine.PythonClient) http.Handler {
+// testRouterWithPython 鏋勫缓娉ㄥ叆鎸囧畾 Python 瀹㈡埛绔殑缃戝叧璺敱鍣ㄣ€
+func testRouterWithPython(t *testing.T, pyClient *engine.PythonClient) http.Handler {
 	t.Helper()
 	os.Setenv("JWT_SECRET", "test-secret-that-is-at-least-32-bytes-long!")
 	os.Setenv("APP_SECRET", "test-app-secret-that-is-at-least-32-bytes-long!")
@@ -26,7 +27,8 @@ import (
 	return NewGatewayRouter(cfg, pyClient, eventHub, sessionMgr, nil, nil, nil)
 }
 
-// TestMemoryProxy_RoutesExist 楠岃瘉鎵€鏈夎蹇嗚矾鐢遍兘宸叉纭敞鍐屻€?func TestMemoryProxy_RoutesExist(t *testing.T) {
+// TestMemoryProxy_RoutesExist 楠岃瘉鎵€鏈夎蹇嗚矾鐢遍兘宸叉纭敞鍐屻€
+func TestMemoryProxy_RoutesExist(t *testing.T) {
 	router := testRouter(t)
 
 	routes := []struct {
@@ -60,7 +62,8 @@ import (
 	}
 }
 
-// TestMemoryProxy_AuthRequired 楠岃瘉璁板繂璺敱闇€瑕佽璇併€?func TestMemoryProxy_AuthRequired(t *testing.T) {
+// TestMemoryProxy_AuthRequired 楠岃瘉璁板繂璺敱闇€瑕佽璇併€
+func TestMemoryProxy_AuthRequired(t *testing.T) {
 	router := testRouter(t)
 
 	paths := []struct {
@@ -85,7 +88,8 @@ import (
 	}
 }
 
-// TestMemoryProxy_ProxyForwardsCorrectly 楠岃瘉浠ｇ悊璇锋眰姝ｇ‘杞彂鍒?Python 寮曟搸銆?func TestMemoryProxy_ProxyForwardsCorrectly(t *testing.T) {
+// TestMemoryProxy_ProxyForwardsCorrectly 楠岃瘉浠ｇ悊璇锋眰姝ｇ‘杞彂鍒?Python 寮曟搸銆
+func TestMemoryProxy_ProxyForwardsCorrectly(t *testing.T) {
 	// 鍚姩涓€涓ā鎷?Python 寮曟搸鐨?HTTP 鏈嶅姟鍣?	pythonServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// 楠岃瘉鏌ヨ鍙傛暟涓寘鍚?user_id 鍜?tenant_id
 		query := r.URL.Query()
@@ -130,7 +134,8 @@ import (
 	})
 }
 
-// TestMemoryProxy_PathParameters 楠岃瘉璺緞鍙傛暟璺敱姝ｇ‘杞彂銆?func TestMemoryProxy_PathParameters(t *testing.T) {
+// TestMemoryProxy_PathParameters 楠岃瘉璺緞鍙傛暟璺敱姝ｇ‘杞彂銆
+func TestMemoryProxy_PathParameters(t *testing.T) {
 	var receivedPath string
 	pythonServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedPath = r.URL.RequestURI()
@@ -192,7 +197,8 @@ import (
 	})
 }
 
-// TestMemoryProxy_MissingPythonEngine 楠岃瘉 Python 寮曟搸涓嶅彲鐢ㄦ椂杩斿洖 503銆?func TestMemoryProxy_MissingPythonEngine(t *testing.T) {
+// TestMemoryProxy_MissingPythonEngine 楠岃瘉 Python 寮曟搸涓嶅彲鐢ㄦ椂杩斿洖 503銆
+func TestMemoryProxy_MissingPythonEngine(t *testing.T) {
 	// pyClient 鎸囧悜涓嶅瓨鍦ㄧ殑鍦板潃
 	pyClient := engine.NewPythonClient("http://localhost:9999")
 	router := testRouterWithPython(t, pyClient)
@@ -209,7 +215,8 @@ import (
 	}
 }
 
-// TestMemoryProxy_MissingTenantContext 楠岃瘉缂哄皯绉熸埛涓婁笅鏂囨椂杩斿洖 401銆?func TestMemoryProxy_MissingTenantContext(t *testing.T) {
+// TestMemoryProxy_MissingTenantContext 楠岃瘉缂哄皯绉熸埛涓婁笅鏂囨椂杩斿洖 401銆
+func TestMemoryProxy_MissingTenantContext(t *testing.T) {
 	pythonServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))

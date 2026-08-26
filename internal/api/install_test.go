@@ -16,7 +16,8 @@ func testConfig(t *testing.T, appSecret string) *config.Config {
 	return config.LoadAllowUnconfigured()
 }
 
-// TestInitInstallToken_Derived 鎰忓浘锛欰PP_SECRET 鏈夋晥鏃跺畨瑁呬护鐗屽繀椤讳负纭畾鎬ф淳鐢?// 锛堥噸鍚悗涓嶅彉锛岄儴缃茶€呭彲鍦ㄥ惎鍔ㄦ棩蹇椾腑鎷垮埌鍚屼竴浠ょ墝锛夈€?func TestInitInstallToken_Derived(t *testing.T) {
+// TestInitInstallToken_Derived 鎰忓浘锛欰PP_SECRET 鏈夋晥鏃跺畨瑁呬护鐗屽繀椤讳负纭畾鎬ф淳鐢?// 锛堥噸鍚悗涓嶅彉锛岄儴缃茶€呭彲鍦ㄥ惎鍔ㄦ棩蹇椾腑鎷垮埌鍚屼竴浠ょ墝锛夈€
+func TestInitInstallToken_Derived(t *testing.T) {
 	installToken = ""
 	defer func() { installToken = "" }()
 
@@ -32,7 +33,8 @@ func testConfig(t *testing.T, appSecret string) *config.Config {
 	}
 }
 
-// TestInitInstallToken_RandomFallback 鎰忓浘锛欰PP_SECRET 缂哄け锛堥娆￠儴缃诧級鏃朵护鐗?// 涓鸿繘绋嬪唴闅忔満鍊硷紙Jenkins 妯″紡锛夛紝涓ゆ鐙珛鍒濆鍖栦笉寰楃浉鍚屻€?func TestInitInstallToken_RandomFallback(t *testing.T) {
+// TestInitInstallToken_RandomFallback 鎰忓浘锛欰PP_SECRET 缂哄け锛堥娆￠儴缃诧級鏃朵护鐗?// 涓鸿繘绋嬪唴闅忔満鍊硷紙Jenkins 妯″紡锛夛紝涓ゆ鐙珛鍒濆鍖栦笉寰楃浉鍚屻€
+func TestInitInstallToken_RandomFallback(t *testing.T) {
 	installToken = ""
 	defer func() { installToken = "" }()
 
@@ -45,7 +47,8 @@ func testConfig(t *testing.T, appSecret string) *config.Config {
 	}
 }
 
-// TestEncryptSecret_Roundtrip 鎰忓浘锛欴SN/Redis 瀵嗙爜浠?AES-256-GCM 鍔犲瘑鍚庡繀椤诲彲瑙ｅ瘑杩樺師锛?// 涓斿瘑鏂囦笉寰楁硠闇叉槑鏂囷紱閿欒瀵嗛挜锛圓PP_SECRET 鍙樻洿锛夎В瀵嗗繀椤诲け璐ャ€?func TestEncryptSecret_Roundtrip(t *testing.T) {
+// TestEncryptSecret_Roundtrip 鎰忓浘锛欴SN/Redis 瀵嗙爜浠?AES-256-GCM 鍔犲瘑鍚庡繀椤诲彲瑙ｅ瘑杩樺師锛?// 涓斿瘑鏂囦笉寰楁硠闇叉槑鏂囷紱閿欒瀵嗛挜锛圓PP_SECRET 鍙樻洿锛夎В瀵嗗繀椤诲け璐ャ€
+func TestEncryptSecret_Roundtrip(t *testing.T) {
 	secret := "test-app-secret-32-bytes-long-for-testing!"
 	plain := "postgres://user:pass@host:5432/chiron?sslmode=disable"
 
@@ -75,7 +78,8 @@ func testConfig(t *testing.T, appSecret string) *config.Config {
 }
 
 // TestInstallMW 鎰忓浘锛氬畨瑁呯鐐瑰繀椤绘牎楠?X-Install-Token锛坔eader 鎴??token= 鏌ヨ鍙傛暟锛夛紝
-// 鏈惡甯︽垨閿欒浠ょ墝涓€寰?401锛涗护鐗屽尮閰嶆椂鏀捐銆?func TestInstallMW(t *testing.T) {
+// 鏈惡甯︽垨閿欒浠ょ墝涓€寰?401锛涗护鐗屽尮閰嶆椂鏀捐銆
+func TestInstallMW(t *testing.T) {
 	installToken = ""
 	defer func() { installToken = "" }()
 
@@ -134,7 +138,8 @@ func testConfig(t *testing.T, appSecret string) *config.Config {
 }
 
 // TestInstallLockPersistence 鎰忓浘锛歩nstall.lock 鍔犲瘑瀛楁蹇呴』鑳藉師瀛愯惤鐩樺苟鍘熸牱璇诲洖
-// 锛圫tep 2 淇濆瓨 鈫?閲嶅惎鍚?ApplyInstallLockConfig 璇诲彇瑙ｅ瘑鐨勫熀纭€锛夈€?func TestInstallLockPersistence(t *testing.T) {
+// 锛圫tep 2 淇濆瓨 鈫?閲嶅惎鍚?ApplyInstallLockConfig 璇诲彇瑙ｅ瘑鐨勫熀纭€锛夈€
+func TestInstallLockPersistence(t *testing.T) {
 	secret := "test-app-secret-32-bytes-long-for-testing!"
 	dsnEnc, _ := encryptSecret(secret, "postgres://u:p@h:5432/db")
 	redisEnc, _ := encryptSecret(secret, "localhost:6379")
@@ -181,7 +186,8 @@ func testConfig(t *testing.T, appSecret string) *config.Config {
 }
 
 // TestApplyInstallLockConfig 鎰忓浘锛氬畨瑁呭畬鎴愬悗閲嶅惎锛宮ain 鐢?lock 涓姞瀵嗙殑 DSN/Redis
-// 閰嶇疆瑕嗙洊寮曞鍊硷紱env 鏄惧紡璁剧疆鐨?POSTGRES_DSN 浼樺厛浜?lock銆?func TestApplyInstallLockConfig(t *testing.T) {
+// 閰嶇疆瑕嗙洊寮曞鍊硷紱env 鏄惧紡璁剧疆鐨?POSTGRES_DSN 浼樺厛浜?lock銆
+func TestApplyInstallLockConfig(t *testing.T) {
 	secret := "test-app-secret-32-bytes-long-for-testing!"
 	dsnEnc, _ := encryptSecret(secret, "postgres://install:user@db.internal:5432/chiron")
 	addrEnc, _ := encryptSecret(secret, "redis.internal:6379")
@@ -222,7 +228,8 @@ func testConfig(t *testing.T, appSecret string) *config.Config {
 	}
 }
 
-// TestStep3_RequiresPool 鎰忓浘锛歋tep 3 鍦ㄦ暟鎹簱鏈厤缃紙db.Pool 涓?nil锛夋椂蹇呴』鏄庣‘鎷掔粷锛?// 鑰屼笉鏄?panic 鎴栭潤榛樻垚鍔熴€?func TestStep3_RequiresPool(t *testing.T) {
+// TestStep3_RequiresPool 鎰忓浘锛歋tep 3 鍦ㄦ暟鎹簱鏈厤缃紙db.Pool 涓?nil锛夋椂蹇呴』鏄庣‘鎷掔粷锛?// 鑰屼笉鏄?panic 鎴栭潤榛樻垚鍔熴€
+func TestStep3_RequiresPool(t *testing.T) {
 	installToken = ""
 	defer func() { installToken = "" }()
 

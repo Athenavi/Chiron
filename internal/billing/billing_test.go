@@ -114,7 +114,8 @@ func TestManager_CloseDoubleCall(t *testing.T) {
 
 
 // TestTransactionRecorder_RecordsRealBalance 楠岃瘉浜ゆ槗璁板綍鎼哄甫浜ゆ槗鍚庣湡瀹炰綑棰濓紝
-// 涓旈噾棰濈鍙锋纭紙鍔犱负姝ｃ€佹墸涓鸿礋锛夈€?func TestTransactionRecorder_RecordsRealBalance(t *testing.T) {
+// 涓旈噾棰濈鍙锋纭紙鍔犱负姝ｃ€佹墸涓鸿礋锛夈€
+func TestTransactionRecorder_RecordsRealBalance(t *testing.T) {
 	store := &recordingStore{}
 	mgr := NewManager(store)
 	defer mgr.Close()
@@ -141,7 +142,8 @@ func TestManager_CloseDoubleCall(t *testing.T) {
 	}
 }
 
-// TestTransactionRecorder_SkipsFreeChat 楠岃瘉 free_chat 鐢ㄩ噺鏍囪涓嶅啓鍏ヤ氦鏄撳巻鍙层€?func TestTransactionRecorder_SkipsFreeChat(t *testing.T) {
+// TestTransactionRecorder_SkipsFreeChat 楠岃瘉 free_chat 鐢ㄩ噺鏍囪涓嶅啓鍏ヤ氦鏄撳巻鍙层€
+func TestTransactionRecorder_SkipsFreeChat(t *testing.T) {
 	store := &recordingStore{}
 	recorder := NewTransactionRecorder(store)
 

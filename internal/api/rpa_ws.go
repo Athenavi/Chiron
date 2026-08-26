@@ -108,21 +108,24 @@ func NewRPAHub() *RPAHub {
 	}
 }
 
-// Register 娉ㄥ唽涓€涓彃浠惰繛鎺?func (h *RPAHub) Register(client *RPAClient) {
+// Register 娉ㄥ唽涓€涓彃浠惰繛鎺
+func (h *RPAHub) Register(client *RPAClient) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.clients[client.ID] = client
 	slog.Info("rpa client registered", "client_id", client.ID, "user_id", client.UserID)
 }
 
-// Unregister 娉ㄩ攢涓€涓彃浠惰繛鎺?func (h *RPAHub) Unregister(clientID string) {
+// Unregister 娉ㄩ攢涓€涓彃浠惰繛鎺
+func (h *RPAHub) Unregister(clientID string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	delete(h.clients, clientID)
 	slog.Info("rpa client unregistered", "client_id", clientID)
 }
 
-// GetClient 鑾峰彇鎸囧畾瀹㈡埛绔?func (h *RPAHub) GetClient(clientID string) (*RPAClient, bool) {
+// GetClient 鑾峰彇鎸囧畾瀹㈡埛绔
+func (h *RPAHub) GetClient(clientID string) (*RPAClient, bool) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	c, ok := h.clients[clientID]
@@ -144,7 +147,8 @@ func (h *RPAHub) GetClientByUser(userID string) (*RPAClient, bool) {
 	return latest, latest != nil
 }
 
-// SendCommand 鍙戦€佸懡浠ゅ苟绛夊緟缁撴灉锛堝甫瓒呮椂锛?func (h *RPAHub) SendCommand(ctx context.Context, clientID string, cmd *RPACommand) (*RPAResult, error) {
+// SendCommand 鍙戦€佸懡浠ゅ苟绛夊緟缁撴灉锛堝甫瓒呮椂锛
+func (h *RPAHub) SendCommand(ctx context.Context, clientID string, cmd *RPACommand) (*RPAResult, error) {
 	client, ok := h.GetClient(clientID)
 	if !ok {
 		return nil, fmt.Errorf("rpa client not connected: %s", clientID)
@@ -215,7 +219,8 @@ func (h *RPAHub) BroadcastToUser(userID string, msg RPAMessage) {
 	}
 }
 
-// ConnectedClients 杩斿洖宸茶繛鎺ョ殑瀹㈡埛绔垪琛?func (h *RPAHub) ConnectedClients() []*RPAClient {
+// ConnectedClients 杩斿洖宸茶繛鎺ョ殑瀹㈡埛绔垪琛
+func (h *RPAHub) ConnectedClients() []*RPAClient {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	clients := make([]*RPAClient, 0, len(h.clients))
@@ -392,7 +397,8 @@ func RPAWebSocketHandler(hub *RPAHub, authenticator *auth.Authenticator) http.Ha
 
 // 鈹€鈹€ RPA HTTP Bridge锛圥ython engine 鈫?Go gateway 鈫?娴忚鍣ㄦ彃浠讹級 鈹€鈹€
 
-// rpaInternalTokenOK 甯搁噺鏃堕棿姣旇緝 X-Internal-Token锛堢綉鍏斥啍寮曟搸浜掍俊锛夈€?func rpaInternalTokenOK(r *http.Request, internalToken string) bool {
+// rpaInternalTokenOK 甯搁噺鏃堕棿姣旇緝 X-Internal-Token锛堢綉鍏斥啍寮曟搸浜掍俊锛夈€
+func rpaInternalTokenOK(r *http.Request, internalToken string) bool {
 	if internalToken == "" {
 		return false
 	}
@@ -401,7 +407,8 @@ func RPAWebSocketHandler(hub *RPAHub, authenticator *auth.Authenticator) http.Ha
 }
 
 // RPAExecHandler 渚?Python engine 鐨?GatewayBrowserHub 鎶婃祻瑙堝櫒鍛戒护鍙戠粰
-// 宸茶繛鎺ユ彃浠?Chrome Extension /ws/rpa)銆傝姹傚叡浜?internal token锛岄槻姝㈢洿杩炴互鐢ㄣ€?func RPAExecHandler(hub *RPAHub, internalToken string) http.HandlerFunc {
+// 宸茶繛鎺ユ彃浠?Chrome Extension /ws/rpa)銆傝姹傚叡浜?internal token锛岄槻姝㈢洿杩炴互鐢ㄣ€
+func RPAExecHandler(hub *RPAHub, internalToken string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !rpaInternalTokenOK(r, internalToken) {
 			Unauthorized(w, "invalid internal token")
@@ -425,7 +432,8 @@ func RPAWebSocketHandler(hub *RPAHub, authenticator *auth.Authenticator) http.Ha
 	}
 }
 
-// RPAClientsHandler 杩斿洖宸茶繛鎺ユ祻瑙堝櫒鎻掍欢瀹㈡埛绔垪琛ㄣ€?func RPAClientsHandler(hub *RPAHub, internalToken string) http.HandlerFunc {
+// RPAClientsHandler 杩斿洖宸茶繛鎺ユ祻瑙堝櫒鎻掍欢瀹㈡埛绔垪琛ㄣ€
+func RPAClientsHandler(hub *RPAHub, internalToken string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !rpaInternalTokenOK(r, internalToken) {
 			Unauthorized(w, "invalid internal token")

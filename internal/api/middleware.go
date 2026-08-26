@@ -40,7 +40,8 @@ const (
 	jwtBlacklistMissTTL = 30 * time.Second
 )
 
-// checkJWTBlacklisted 浼樺厛鏌ユ湰鍦扮紦瀛橈紝miss 鏃跺洖婧?Redis 骞跺洖濉€?func checkJWTBlacklisted(ctx context.Context, jti string) (bool, error) {
+// checkJWTBlacklisted 浼樺厛鏌ユ湰鍦扮紦瀛橈紝miss 鏃跺洖婧?Redis 骞跺洖濉€
+func checkJWTBlacklisted(ctx context.Context, jti string) (bool, error) {
 	if v, ok := jwtBlacklistCache.Load(jti); ok {
 		e := v.(jwtBlacklistEntry)
 		ttl := jwtBlacklistMissTTL
@@ -62,14 +63,16 @@ const (
 	return n > 0, nil
 }
 
-// markJWTBlacklisted 鐧诲嚭鏃跺悓姝ユ湰鍦版缂撳瓨锛堥厤鍚?Redis 鍐欏叆锛夈€?func markJWTBlacklisted(jti string) {
+// markJWTBlacklisted 鐧诲嚭鏃跺悓姝ユ湰鍦版缂撳瓨锛堥厤鍚?Redis 鍐欏叆锛夈€
+func markJWTBlacklisted(jti string) {
 	if jti == "" {
 		return
 	}
 	jwtBlacklistCache.Store(jti, jwtBlacklistEntry{blacklisted: true, checkedAt: time.Now()})
 }
 
-// StartBlacklistCleaner 瀹氭湡娓呯悊杩囨湡鐨?JWT 榛戝悕鍗曟湰鍦扮紦瀛樻潯鐩紝闃叉鍐呭瓨娉勬紡銆?// 姣?10 鍒嗛挓鎵弿涓€娆★紝鍒犻櫎瓒呰繃 1 灏忔椂鏈洿鏂扮殑鏉＄洰銆?func StartBlacklistCleaner(ctx context.Context) {
+// StartBlacklistCleaner 瀹氭湡娓呯悊杩囨湡鐨?JWT 榛戝悕鍗曟湰鍦扮紦瀛樻潯鐩紝闃叉鍐呭瓨娉勬紡銆?// 姣?10 鍒嗛挓鎵弿涓€娆★紝鍒犻櫎瓒呰繃 1 灏忔椂鏈洿鏂扮殑鏉＄洰銆
+func StartBlacklistCleaner(ctx context.Context) {
 	go func() {
 		ticker := time.NewTicker(10 * time.Minute)
 		defer ticker.Stop()
@@ -184,7 +187,8 @@ func RecoverMiddleware(next http.Handler) http.Handler {
 }
 
 // CORSMiddleware 澶勭悊 CORS銆俛llowOrigin 鏄€楀彿鍒嗛殧鐧藉悕鍗曪紱"*" 鍦?AllowCredentials=true
-// 涓嬭繚鍙?CORS 瑙勮寖涓旈珮鍗憋紝鏄惧紡鎷掔粷銆?func CORSMiddleware(allowOrigin string) func(http.Handler) http.Handler {
+// 涓嬭繚鍙?CORS 瑙勮寖涓旈珮鍗憋紝鏄惧紡鎷掔粷銆
+func CORSMiddleware(allowOrigin string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			origin := r.Header.Get("Origin")
@@ -216,7 +220,8 @@ func RecoverMiddleware(next http.Handler) http.Handler {
 }
 
 // SecurityHeadersMiddleware 娉ㄥ叆閫氱敤瀹夊叏鍝嶅簲澶淬€?// CSP_CONNECT_SRC 閫氳繃 env 娉ㄥ叆锛堥粯璁ょ暀绌哄垯涓嶅己鍒?connect-src 鐧藉悕鍗曪紝
-// 鐢遍儴缃叉柟鎸夌敓浜у煙鍚嶉厤缃紝閬垮厤 localhost 鍐欐瀵艰嚧鐢熶骇鐜琚樆鏂級銆?func SecurityHeadersMiddleware(next http.Handler) http.Handler {
+// 鐢遍儴缃叉柟鎸夌敓浜у煙鍚嶉厤缃紝閬垮厤 localhost 鍐欐瀵艰嚧鐢熶骇鐜琚樆鏂級銆
+func SecurityHeadersMiddleware(next http.Handler) http.Handler {
 	cspConnectSrc := strings.TrimSpace(os.Getenv("CSP_CONNECT_SRC"))
 	if cspConnectSrc == "" {
 		cspConnectSrc = "'self'"

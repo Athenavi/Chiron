@@ -7,7 +7,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// SeedMarketCatalog 骞傜瓑鎾甯傚満鐩綍绀轰緥鏉＄洰锛堟妧鑳?Agent/MCP锛夛紝浠呭綋鐩綍涓虹┖鏃舵墽琛屻€?// 鐢熶骇鍙垹闄ゆ垨鐢辩鐞嗙鑷鍙戝竷锛涙挱绉嶅唴瀹逛负婕旂ず绾с€?func SeedMarketCatalog(ctx context.Context, pool *pgxpool.Pool) error {
+// SeedMarketCatalog 骞傜瓑鎾甯傚満鐩綍绀轰緥鏉＄洰锛堟妧鑳?Agent/MCP锛夛紝浠呭綋鐩綍涓虹┖鏃舵墽琛屻€?// 鐢熶骇鍙垹闄ゆ垨鐢辩鐞嗙鑷鍙戝竷锛涙挱绉嶅唴瀹逛负婕旂ず绾с€
+func SeedMarketCatalog(ctx context.Context, pool *pgxpool.Pool) error {
 	if pool == nil {
 		return nil
 	}

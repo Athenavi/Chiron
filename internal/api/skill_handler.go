@@ -23,7 +23,8 @@ func NewSkillHandler(python *engine.PythonClient) *SkillHandler {
 var validSkillName = regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
 
 // RegisterRoutes 娉ㄥ唽鎶€鑳借矾鐢便€傚畨鍏ㄤ慨澶嶏紙P0-S2锛夛細鎵€鏈夎矾鐢卞繀椤荤粡杩?authMW
-// 锛堟妧鑳藉嵆浠ｇ爜锛屾湭璁よ瘉鍙?install/run = 鏈璇?RCE锛夛紝骞舵寕 rlMW 涓?sanitizeMW銆?func (h *SkillHandler) RegisterRoutes(mux *http.ServeMux, authMW, rlMW, sanitizeMW routeMiddleware) {
+// 锛堟妧鑳藉嵆浠ｇ爜锛屾湭璁よ瘉鍙?install/run = 鏈璇?RCE锛夛紝骞舵寕 rlMW 涓?sanitizeMW銆
+func (h *SkillHandler) RegisterRoutes(mux *http.ServeMux, authMW, rlMW, sanitizeMW routeMiddleware) {
 	// 鍚屾椂娉ㄥ唽绮剧‘鍜屽熬鏂滄潬鍙樹綋锛欸o ServeMux 涓?"/v1/skills/" 鍙尮閰嶅瓙鏍戯紙涓嶅尮閰?"/v1/skills"锛夛紝
 	// 鑰屽墠绔皟鐢ㄧ殑鏄?GET /v1/skills锛孭ython 绔敞鍐岀殑涔熸槸 /v1/skills銆?	mux.Handle("GET /v1/skills", authMW(rlMW(http.HandlerFunc(h.proxy))))
 	mux.Handle("GET /v1/skills/", authMW(rlMW(http.HandlerFunc(h.proxy))))
@@ -36,7 +37,8 @@ var validSkillName = regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
 	// 甯傚満鎶€鑳芥敞鍐岋紙P1 淇锛氬墠绔?SkillMarketCard 璋冪敤 /v1/skills/{id}/register锛?	// 姝ゅ墠涓ょ鍧囨棤姝よ矾鐢卞鑷存敞鍐?404锛?	mux.Handle("POST /v1/skills/{name}/register", authMW(rlMW(http.HandlerFunc(h.register))))
 }
 
-// register 灏嗚兘鍔涙敞鍐屼腑蹇冪殑鎶€鑳芥敞鍐屼负鏈湴鎶€鑳斤紙杞彂 Python /v1/skills/{name}/register锛夈€?func (h *SkillHandler) register(w http.ResponseWriter, r *http.Request) {
+// register 灏嗚兘鍔涙敞鍐屼腑蹇冪殑鎶€鑳芥敞鍐屼负鏈湴鎶€鑳斤紙杞彂 Python /v1/skills/{name}/register锛夈€
+func (h *SkillHandler) register(w http.ResponseWriter, r *http.Request) {
 	if h.python == nil {
 		InternalError(w, "python engine not available")
 		return
@@ -144,7 +146,8 @@ func (h *SkillHandler) proxyDelete(w http.ResponseWriter, r *http.Request) {
 	OK(w, result)
 }
 
-// skillTenantID 鍙栧綋鍓嶇鎴?ID锛歝laims 浼樺厛锛岀己鐪佸洖閫€榛樿绉熸埛銆?func skillTenantID(r *http.Request) string {
+// skillTenantID 鍙栧綋鍓嶇鎴?ID锛歝laims 浼樺厛锛岀己鐪佸洖閫€榛樿绉熸埛銆
+func skillTenantID(r *http.Request) string {
 	if claims := auth.GetClaims(r.Context()); claims != nil && claims.TenantID != "" {
 		return claims.TenantID
 	}
@@ -152,7 +155,8 @@ func (h *SkillHandler) proxyDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 // filterDiscoverByMarket 瀵?discover 浠ｇ悊鍝嶅簲鍋氬競鍦虹櫧鍚嶅崟杩囨护锛?// 浠呭綋甯傚満瀛樺湪鍚屽悕 published 鏉＄洰鏃舵寜绉熸埛鎺堟潈杩囨护锛圛sItemEnabledForTenant
-// 鍐呴儴淇濊瘉鏈笂鏋惰兘鍔涗笌鏌ヨ鏁呴殰鍧囨斁琛岋級銆侾G 涓嶅彲鐢ㄦ椂鏁翠綋璺宠繃锛岄伩鍏嶉€愭潯 warn銆?func filterDiscoverByMarket(ctx context.Context, result map[string]interface{}, tenantID string) {
+// 鍐呴儴淇濊瘉鏈笂鏋惰兘鍔涗笌鏌ヨ鏁呴殰鍧囨斁琛岋級銆侾G 涓嶅彲鐢ㄦ椂鏁翠綋璺宠繃锛岄伩鍏嶉€愭潯 warn銆
+func filterDiscoverByMarket(ctx context.Context, result map[string]interface{}, tenantID string) {
 	if db.ReadPool() == nil {
 		return
 	}
@@ -170,7 +174,8 @@ func (h *SkillHandler) proxyDelete(w http.ResponseWriter, r *http.Request) {
 	result[listKey] = filterSkillsByMarket(ctx, list, tenantID)
 }
 
-// filterSkillsByMarket 瀵规妧鑳藉垪琛ㄩ€愰」鍋氬競鍦洪棬鎺ц繃婊わ紙绾€昏緫锛岀嫭绔嬪彲娴嬶級銆?func filterSkillsByMarket(ctx context.Context, list []interface{}, tenantID string) []interface{} {
+// filterSkillsByMarket 瀵规妧鑳藉垪琛ㄩ€愰」鍋氬競鍦洪棬鎺ц繃婊わ紙绾€昏緫锛岀嫭绔嬪彲娴嬶級銆
+func filterSkillsByMarket(ctx context.Context, list []interface{}, tenantID string) []interface{} {
 	kept := make([]interface{}, 0, len(list))
 	for _, raw := range list {
 		entry, ok := raw.(map[string]interface{})

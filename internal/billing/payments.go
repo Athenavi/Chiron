@@ -45,7 +45,8 @@ type PaymentStore interface {
 	// UpdatePaymentProvider 棰勪笅鍗曟垚鍔熷悗鍥炲～浜岀淮鐮佷笌娓犻亾璁㈠崟鍙枫€?	UpdatePaymentProvider(ctx context.Context, id, qrCode, providerOrderID string) error
 }
 
-// NewPayment 鍒涘缓涓€绗?pending 璁㈠崟銆?func NewPayment(userID, channel string, credits int, amountCents int64, currency string) *Payment {
+// NewPayment 鍒涘缓涓€绗?pending 璁㈠崟銆
+func NewPayment(userID, channel string, credits int, amountCents int64, currency string) *Payment {
 	now := time.Now()
 	exp := now.Add(2 * time.Hour)
 	return &Payment{
@@ -62,7 +63,8 @@ type PaymentStore interface {
 }
 
 // ConfirmPayment 骞傜瓑纭涓€绗旀敮浠樻垚鍔熷苟鍏ヨ处锛?//  1. 璁㈠崟 pending鈫抪aid 鍘熷瓙鎺ㄨ繘锛堥噸澶嶅洖璋?杞鍙叆璐︿竴娆★級锛?//  2. 鎺ㄨ繘鎴愬姛鍚庡悜鐢ㄦ埛鍔?credits锛坮eason = "<channel>_topup"锛夈€?//
-// 杩斿洖 (payment, credited, err)锛歝redited=false 琛ㄧず璁㈠崟姝ゅ墠宸插叆璐︼紙骞傜瓑鍛戒腑锛夈€?func (m *Manager) ConfirmPayment(ctx context.Context, id, tradeNo string) (*Payment, bool, error) {
+// 杩斿洖 (payment, credited, err)锛歝redited=false 琛ㄧず璁㈠崟姝ゅ墠宸插叆璐︼紙骞傜瓑鍛戒腑锛夈€
+func (m *Manager) ConfirmPayment(ctx context.Context, id, tradeNo string) (*Payment, bool, error) {
 	p, err := m.store.MarkPaymentPaid(ctx, id, tradeNo)
 	if err != nil {
 		return nil, false, fmt.Errorf("mark payment paid: %w", err)

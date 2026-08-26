@@ -75,7 +75,8 @@ type presetAgent struct {
 	Turns       int            `json:"turns"`
 }
 
-// loadPresetAgents 浠?configs/preset_agents.json 鍔犺浇棰勭疆 Agent 瀹氫箟銆?// 鏂囦欢涓嶅瓨鍦ㄦ椂杩斿洖绌哄垪琛紙涓嶆挱绉嶄换浣曢缃?Agent锛夈€?func loadPresetAgents() []presetAgent {
+// loadPresetAgents 浠?configs/preset_agents.json 鍔犺浇棰勭疆 Agent 瀹氫箟銆?// 鏂囦欢涓嶅瓨鍦ㄦ椂杩斿洖绌哄垪琛紙涓嶆挱绉嶄换浣曢缃?Agent锛夈€
+func loadPresetAgents() []presetAgent {
 	candidates := []string{
 		"configs/preset_agents.json",
 		"/etc/chiron/preset_agents.json",
@@ -142,7 +143,8 @@ func (h *AgentHandler) seedPresetAgents() {
 
 // 鈹€鈹€ CRUD 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
-// List 杩斿洖褰撳墠绉熸埛鐨勫叏閮?Agent锛堟寜鍒涘缓鏃堕棿鍊掑簭锛夈€?func (h *AgentHandler) List(w http.ResponseWriter, r *http.Request) {
+// List 杩斿洖褰撳墠绉熸埛鐨勫叏閮?Agent锛堟寜鍒涘缓鏃堕棿鍊掑簭锛夈€
+func (h *AgentHandler) List(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	rows, err := db.Pool.Query(r.Context(),
 		`SELECT id::text, name, COALESCE(description,''), COALESCE(system_prompt,''), COALESCE(tools,'[]'::jsonb), COALESCE(llm_config,'{}'::jsonb), max_turns, timeout_seconds, enabled, created_at, updated_at
@@ -166,7 +168,8 @@ func (h *AgentHandler) seedPresetAgents() {
 	OK(w, agents)
 }
 
-// Create 鏂板缓涓€涓?Agent锛堢粦瀹氬綋鍓嶇鎴凤級銆?func (h *AgentHandler) Create(w http.ResponseWriter, r *http.Request) {
+// Create 鏂板缓涓€涓?Agent锛堢粦瀹氬綋鍓嶇鎴凤級銆
+func (h *AgentHandler) Create(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	var body Agent
 	if err := DecodeJSON(w, r, &body); err != nil {
@@ -214,7 +217,8 @@ func (h *AgentHandler) seedPresetAgents() {
 	OK(w, body)
 }
 
-// Get 杩斿洖鍗曚釜 Agent锛堝繀椤诲綊灞炲綋鍓嶇鎴凤級銆?func (h *AgentHandler) Get(w http.ResponseWriter, r *http.Request) {
+// Get 杩斿洖鍗曚釜 Agent锛堝繀椤诲綊灞炲綋鍓嶇鎴凤級銆
+func (h *AgentHandler) Get(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	agentID := r.PathValue("id")
 	if agentID == "" {
@@ -229,7 +233,8 @@ func (h *AgentHandler) seedPresetAgents() {
 	OK(w, a)
 }
 
-// Update 鏇存柊 Agent 瀛楁锛坣ame/description/system_prompt/tools/llm_config/max_turns/timeout_seconds/enabled锛夈€?func (h *AgentHandler) Update(w http.ResponseWriter, r *http.Request) {
+// Update 鏇存柊 Agent 瀛楁锛坣ame/description/system_prompt/tools/llm_config/max_turns/timeout_seconds/enabled锛夈€
+func (h *AgentHandler) Update(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	agentID := r.PathValue("id")
 	if agentID == "" {
@@ -303,7 +308,8 @@ func (h *AgentHandler) seedPresetAgents() {
 	OK(w, a)
 }
 
-// Delete 鍒犻櫎 Agent 鍙婂叾杩愯璁板綍锛堜粎褰撳綊灞炲綋鍓嶇鎴凤級銆?func (h *AgentHandler) Delete(w http.ResponseWriter, r *http.Request) {
+// Delete 鍒犻櫎 Agent 鍙婂叾杩愯璁板綍锛堜粎褰撳綊灞炲綋鍓嶇鎴凤級銆
+func (h *AgentHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	agentID := r.PathValue("id")
 	if agentID == "" {
@@ -319,7 +325,8 @@ func (h *AgentHandler) seedPresetAgents() {
 
 // 鈹€鈹€ 杩愯涓庝細璇?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
-// Run 娲惧彂浠诲姟缁?Agent锛氳惤 session(pending) 鍚庡紓姝ユ墽琛岋紝缁撴灉鍥炲啓銆?func (h *AgentHandler) Run(w http.ResponseWriter, r *http.Request) {
+// Run 娲惧彂浠诲姟缁?Agent锛氳惤 session(pending) 鍚庡紓姝ユ墽琛岋紝缁撴灉鍥炲啓銆
+func (h *AgentHandler) Run(w http.ResponseWriter, r *http.Request) {
 	agentID := r.PathValue("id")
 	if agentID == "" {
 		BadRequest(w, "id is required")
@@ -503,7 +510,8 @@ func (h *AgentHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
 	OK(w, sessions)
 }
 
-// GetSession 杩斿洖鍗曚釜杩愯璁板綍锛堝綊灞炴牎楠岋級銆?func (h *AgentHandler) GetSession(w http.ResponseWriter, r *http.Request) {
+// GetSession 杩斿洖鍗曚釜杩愯璁板綍锛堝綊灞炴牎楠岋級銆
+func (h *AgentHandler) GetSession(w http.ResponseWriter, r *http.Request) {
 	sessionID := r.PathValue("id")
 	if sessionID == "" {
 		BadRequest(w, "id is required")
@@ -538,7 +546,8 @@ func (h *AgentHandler) queryAgent(ctx context.Context, tenantID, userID, agentID
 	return &a, nil
 }
 
-// resolveOwnerTenantID 鏌ヨ绯荤粺棣栦釜 owner 瑙掕壊鐢ㄦ埛鐨?tenant_id锛岀敤浣滈缃?Agent 鐨勫綊灞炵鎴枫€?// 澶氱鎴峰満鏅笅棰勭疆 Agent 浠呭湪 owner 绉熸埛鎾涓€娆★紙鍏跺畠绉熸埛闇€鑷閫氳繃 API 鍒涘缓锛夈€?func (h *AgentHandler) resolveOwnerTenantID(ctx context.Context) (string, error) {
+// resolveOwnerTenantID 鏌ヨ绯荤粺棣栦釜 owner 瑙掕壊鐢ㄦ埛鐨?tenant_id锛岀敤浣滈缃?Agent 鐨勫綊灞炵鎴枫€?// 澶氱鎴峰満鏅笅棰勭疆 Agent 浠呭湪 owner 绉熸埛鎾涓€娆★紙鍏跺畠绉熸埛闇€鑷閫氳繃 API 鍒涘缓锛夈€
+func (h *AgentHandler) resolveOwnerTenantID(ctx context.Context) (string, error) {
 	var tenantID string
 	err := db.Pool.QueryRow(ctx,
 		`SELECT tenant_id FROM users WHERE role = 'owner' ORDER BY created_at LIMIT 1`).Scan(&tenantID)

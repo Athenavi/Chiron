@@ -34,7 +34,8 @@ func activityStatusText(status string) string {
 	}
 }
 
-// handleActivities 杩斿洖褰撳墠鐢ㄦ埛璺ㄥ叚澶у伐浣滃彴鐨勬渶杩戞椿鍔紙鎸夋椂闂村€掑簭锛岀鎴?鐢ㄦ埛闅旂锛夈€?// 浼樺寲锛氶€氳繃 UNION ALL 鍚堝苟涓夋鏌ヨ涓哄崟娆℃暟鎹簱寰€杩斻€?func handleActivities(w http.ResponseWriter, r *http.Request) {
+// handleActivities 杩斿洖褰撳墠鐢ㄦ埛璺ㄥ叚澶у伐浣滃彴鐨勬渶杩戞椿鍔紙鎸夋椂闂村€掑簭锛岀鎴?鐢ㄦ埛闅旂锛夈€?// 浼樺寲锛氶€氳繃 UNION ALL 鍚堝苟涓夋鏌ヨ涓哄崟娆℃暟鎹簱寰€杩斻€
+func handleActivities(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	if claims == nil || claims.TenantID == "" {
 		Unauthorized(w, "missing tenant context")

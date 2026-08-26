@@ -26,7 +26,8 @@ func NewMediaHandler(store storage.FileStore, authenticator *auth.Authenticator)
 	return &MediaHandler{store: store, authenticator: authenticator}
 }
 
-// SetMediaRoot 娉ㄥ叆鏈湴濯掍綋瀛樺偍鏍癸紙璺敱瑁呴厤鏃惰皟鐢級銆?func (h *MediaHandler) SetMediaRoot(root string) {
+// SetMediaRoot 娉ㄥ叆鏈湴濯掍綋瀛樺偍鏍癸紙璺敱瑁呴厤鏃惰皟鐢級銆
+func (h *MediaHandler) SetMediaRoot(root string) {
 	h.root = root
 }
 
@@ -427,7 +428,8 @@ func (h *MediaHandler) assetObjectKey(r *http.Request, id string) (string, error
 	return fmt.Sprintf("media/%s/%s_%s", dir, shortAssetID(id), fileName), nil
 }
 
-// assetObjectKeys 鎵归噺瑙ｆ瀽璧勪骇瀵硅薄瀛樺偍 key锛堝崟娆℃煡璇紝淇閫愯祫浜?N+1锛夈€?func (h *MediaHandler) assetObjectKeys(ctx context.Context, ids []string) (map[string]string, error) {
+// assetObjectKeys 鎵归噺瑙ｆ瀽璧勪骇瀵硅薄瀛樺偍 key锛堝崟娆℃煡璇紝淇閫愯祫浜?N+1锛夈€
+func (h *MediaHandler) assetObjectKeys(ctx context.Context, ids []string) (map[string]string, error) {
 	if len(ids) == 0 {
 		return map[string]string{}, nil
 	}

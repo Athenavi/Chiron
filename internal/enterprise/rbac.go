@@ -23,7 +23,8 @@ const (
 //   - nil, nil锛氱敤鎴锋病鏈変换浣?ent 瑙掕壊璁板綍锛堢洿鎺?+ 缇ょ粍鍧囨湭鍏宠仈锛夛紝
 //     璋冪敤鏂瑰簲鍥為€€鏃ф潈闄愪綋绯伙紙auth.HasPermission锛夈€傛鐘舵€佷笉鍐欑紦瀛樸€?//   - 闈?nil 绌哄垏鐗? nil锛氱敤鎴锋湁瑙掕壊璁板綍浣嗚仛鍚堟潈闄愪负绌猴紝琛ㄧず"鏄庣‘鏃犳潈闄?锛?//     璋冪敤鏂圭姝㈠洖閫€鏃т綋绯汇€傛鐘舵€佷互 "[]" 搴忓垪鍖栫紦瀛樸€?//   - 闈炵┖鍒囩墖, nil锛氳仛鍚堝悗鐨勬潈闄愮偣鍒楄〃锛堝凡鍘婚噸锛夈€?//
 // Redis 涓嶅彲鐢ㄦ垨璇诲彇澶辫触鏃堕檷绾х洿鏌?DB锛坰log.Warn锛屼笉杩斿洖閿欒锛夛紱
-// DB 鏌ヨ澶辫触杩斿洖 error锛堢敱璋冪敤鏂瑰喅瀹?fail-open/fail-close 绛栫暐锛夈€?func LoadEffectivePerms(ctx context.Context, userID string) ([]string, error) {
+// DB 鏌ヨ澶辫触杩斿洖 error锛堢敱璋冪敤鏂瑰喅瀹?fail-open/fail-close 绛栫暐锛夈€
+func LoadEffectivePerms(ctx context.Context, userID string) ([]string, error) {
 	// 鈹€鈹€ 1. 缂撳瓨璇诲彇锛堝懡涓洿鎺ヨ繑鍥烇級鈹€鈹€
 	cacheKey := permsCacheKeyPrefix + userID
 	if rdb := db.Redis; rdb != nil {
@@ -66,7 +67,8 @@ const (
 	return perms, nil
 }
 
-// queryEffectivePerms 浠?PG 鑱氬悎鐢ㄦ埛鐨勬湁鏁堟潈闄愩€?// 杩斿洖 (骞堕泦鍘婚噸鍚庣殑鏉冮檺鍒楄〃, 鏄惁瀛樺湪浠讳綍瑙掕壊鍏宠仈, error)銆?func queryEffectivePerms(ctx context.Context, userID string) ([]string, bool, error) {
+// queryEffectivePerms 浠?PG 鑱氬悎鐢ㄦ埛鐨勬湁鏁堟潈闄愩€?// 杩斿洖 (骞堕泦鍘婚噸鍚庣殑鏉冮檺鍒楄〃, 鏄惁瀛樺湪浠讳綍瑙掕壊鍏宠仈, error)銆
+func queryEffectivePerms(ctx context.Context, userID string) ([]string, bool, error) {
 	pool := db.ReadPool()
 	if pool == nil {
 		return nil, false, errors.New("ent rbac: postgres pool unavailable")
@@ -101,7 +103,8 @@ CROSS JOIN LATERAL unnest(COALESCE(r.permissions, '{}')) AS p`
 	return unionPerms(perms), true, nil
 }
 
-// InvalidateUserPerms 鍒犻櫎鎸囧畾鐢ㄦ埛鐨勬湁鏁堟潈闄愮紦瀛橀敭銆?// Redis 涓嶅彲鐢ㄦ垨鍒犻櫎澶辫触鏃朵粎璁板綍鏃ュ織锛堢紦瀛樻渶澶?5 鍒嗛挓鑷劧杩囨湡锛夈€?func InvalidateUserPerms(ctx context.Context, userID string) {
+// InvalidateUserPerms 鍒犻櫎鎸囧畾鐢ㄦ埛鐨勬湁鏁堟潈闄愮紦瀛橀敭銆?// Redis 涓嶅彲鐢ㄦ垨鍒犻櫎澶辫触鏃朵粎璁板綍鏃ュ織锛堢紦瀛樻渶澶?5 鍒嗛挓鑷劧杩囨湡锛夈€
+func InvalidateUserPerms(ctx context.Context, userID string) {
 	rdb := db.Redis
 	if rdb == nil {
 		return
@@ -112,7 +115,8 @@ CROSS JOIN LATERAL unnest(COALESCE(r.permissions, '{}')) AS p`
 	}
 }
 
-// InvalidateGroupMembersPerms 鎵归噺澶辨晥缇ょ粍鎵€鏈夋垚鍛樼殑鏉冮檺缂撳瓨銆?// 渚涚兢缁?瑙掕壊鍐欐搷浣滐紙淇敼缇ょ粍鎴愬憳銆佺兢缁勮鑹茬粦瀹氥€佽鑹叉潈闄愬彉鏇达級鍚庤皟鐢ㄣ€?// 鎴愬憳鏌ヨ澶辫触鏃朵粎璁板綍鏃ュ織锛堜緷璧?TTL 鑷劧杩囨湡鍏滃簳锛屼笉闃绘柇鍐欒矾寰勶級銆?func InvalidateGroupMembersPerms(ctx context.Context, groupID string) {
+// InvalidateGroupMembersPerms 鎵归噺澶辨晥缇ょ粍鎵€鏈夋垚鍛樼殑鏉冮檺缂撳瓨銆?// 渚涚兢缁?瑙掕壊鍐欐搷浣滐紙淇敼缇ょ粍鎴愬憳銆佺兢缁勮鑹茬粦瀹氥€佽鑹叉潈闄愬彉鏇达級鍚庤皟鐢ㄣ€?// 鎴愬憳鏌ヨ澶辫触鏃朵粎璁板綍鏃ュ織锛堜緷璧?TTL 鑷劧杩囨湡鍏滃簳锛屼笉闃绘柇鍐欒矾寰勶級銆
+func InvalidateGroupMembersPerms(ctx context.Context, groupID string) {
 	rdb := db.Redis
 	if rdb == nil {
 		return
@@ -155,7 +159,8 @@ CROSS JOIN LATERAL unnest(COALESCE(r.permissions, '{}')) AS p`
 	}
 }
 
-// unionPerms 瀵规潈闄愬垪琛ㄥ幓閲嶏紙淇濇寔棣栨鍑虹幇椤哄簭锛夈€傜函鍑芥暟锛屼究浜庡崟鍏冩祴璇曘€?func unionPerms(perms []string) []string {
+// unionPerms 瀵规潈闄愬垪琛ㄥ幓閲嶏紙淇濇寔棣栨鍑虹幇椤哄簭锛夈€傜函鍑芥暟锛屼究浜庡崟鍏冩祴璇曘€
+func unionPerms(perms []string) []string {
 	if len(perms) == 0 {
 		return []string{}
 	}
@@ -171,7 +176,8 @@ CROSS JOIN LATERAL unnest(COALESCE(r.permissions, '{}')) AS p`
 	return out
 }
 
-// encodePerms 灏嗛潪 nil 鏉冮檺鍒囩墖搴忓垪鍖栦负缂撳瓨鍊硷紙绌哄垏鐗?鈫?"[]"锛夈€?// nil 涓嶅簲杩涘叆缂撳瓨锛屾晠鍏ュ弬绾﹀畾涓洪潪 nil銆?func encodePerms(perms []string) (string, error) {
+// encodePerms 灏嗛潪 nil 鏉冮檺鍒囩墖搴忓垪鍖栦负缂撳瓨鍊硷紙绌哄垏鐗?鈫?"[]"锛夈€?// nil 涓嶅簲杩涘叆缂撳瓨锛屾晠鍏ュ弬绾﹀畾涓洪潪 nil銆
+func encodePerms(perms []string) (string, error) {
 	if perms == nil {
 		perms = []string{}
 	}
@@ -182,7 +188,8 @@ CROSS JOIN LATERAL unnest(COALESCE(r.permissions, '{}')) AS p`
 	return string(data), nil
 }
 
-// decodePerms 鍙嶅簭鍒楀寲缂撳瓨鍊笺€俹k=false 琛ㄧず缂撳瓨鎹熷潖锛屽簲鎸夋湭鍛戒腑澶勭悊銆?// "[]" 瑙ｇ爜涓洪潪 nil 绌哄垏鐗囷紙鏄庣‘鏃犳潈闄愶級锛屼笌 nil锛堟湭閰嶇疆銆佷笉鍏ョ紦瀛橈級鍖哄垎銆?func decodePerms(raw string) ([]string, bool) {
+// decodePerms 鍙嶅簭鍒楀寲缂撳瓨鍊笺€俹k=false 琛ㄧず缂撳瓨鎹熷潖锛屽簲鎸夋湭鍛戒腑澶勭悊銆?// "[]" 瑙ｇ爜涓洪潪 nil 绌哄垏鐗囷紙鏄庣‘鏃犳潈闄愶級锛屼笌 nil锛堟湭閰嶇疆銆佷笉鍏ョ紦瀛橈級鍖哄垎銆
+func decodePerms(raw string) ([]string, bool) {
 	var perms []string
 	if err := json.Unmarshal([]byte(raw), &perms); err != nil || perms == nil {
 		return nil, false

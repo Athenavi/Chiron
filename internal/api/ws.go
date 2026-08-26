@@ -117,7 +117,8 @@ func (h *WebSocketHub) connCount(sessionID string) int {
 
 // WebSocketHandler handles WebSocket upgrade and message loop.
 // If eventHub is non-nil, messages are bridged through Redis Pub/Sub for cross-instance delivery.
-// 杩炴帴鍓嶆牎楠?JWT锛?token= / cookie / Authorization锛夊苟楠岃瘉 session 褰掑睘锛圫 瀹夊叏淇锛?// 鍘熷疄鐜版棤璁よ瘉锛屼换鎰忓鎴风鍙闃呬换鎰?session 鐨勪簨浠舵祦锛夈€?func WebSocketHandler(hub *WebSocketHub, eventHub *broadcast.Hub, authenticator *auth.Authenticator, sessionMgr *session.Manager) http.HandlerFunc {
+// 杩炴帴鍓嶆牎楠?JWT锛?token= / cookie / Authorization锛夊苟楠岃瘉 session 褰掑睘锛圫 瀹夊叏淇锛?// 鍘熷疄鐜版棤璁よ瘉锛屼换鎰忓鎴风鍙闃呬换鎰?session 鐨勪簨浠舵祦锛夈€
+func WebSocketHandler(hub *WebSocketHub, eventHub *broadcast.Hub, authenticator *auth.Authenticator, sessionMgr *session.Manager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sessionID := r.PathValue("sessionId")
 		if sessionID == "" {

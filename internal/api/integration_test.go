@@ -51,7 +51,8 @@ func testToken(t *testing.T) string {
 	return token
 }
 
-// adminToken 杩斿洖 admin 瑙掕壊鐨?JWT锛岀敤浜庨獙璇侀渶瑕佺鐞嗙鏉冮檺鐨勮矾鐢便€?func adminToken(t *testing.T) string {
+// adminToken 杩斿洖 admin 瑙掕壊鐨?JWT锛岀敤浜庨獙璇侀渶瑕佺鐞嗙鏉冮檺鐨勮矾鐢便€
+func adminToken(t *testing.T) string {
 	t.Helper()
 	os.Setenv("JWT_SECRET", "test-secret-that-is-at-least-32-bytes-long!")
 	os.Setenv("APP_SECRET", "test-app-secret-that-is-at-least-32-bytes-long!")

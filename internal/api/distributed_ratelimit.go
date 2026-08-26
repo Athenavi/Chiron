@@ -38,7 +38,8 @@ func NewDistributedRateLimiter(rdb db.RedisClient, globalLimit, tenantLimit, use
 	}
 }
 
-// Configure 杩愯鏃剁儹鏇存柊涓夌骇闄愭祦闃堝€硷紙闃堝€?鈮? 琛ㄧず涓嶇敓鏁?璺宠繃锛夈€?// Allow 姣忔璇诲彇瀛楁锛屽洜姝ゆ敼瀹屽嵆鍒荤敓鏁堬紝渚涘悗鍙般€岀郴缁熻缃€嶈皟鐢ㄣ€?func (l *DistributedRateLimiter) Configure(globalLimit, tenantLimit, userLimit int) {
+// Configure 杩愯鏃剁儹鏇存柊涓夌骇闄愭祦闃堝€硷紙闃堝€?鈮? 琛ㄧず涓嶇敓鏁?璺宠繃锛夈€?// Allow 姣忔璇诲彇瀛楁锛屽洜姝ゆ敼瀹屽嵆鍒荤敓鏁堬紝渚涘悗鍙般€岀郴缁熻缃€嶈皟鐢ㄣ€
+func (l *DistributedRateLimiter) Configure(globalLimit, tenantLimit, userLimit int) {
 	if globalLimit > 0 {
 		l.globalLimit = globalLimit
 	}
@@ -71,7 +72,8 @@ if KEYS[3] ~= "" then redis.call("INCR", KEYS[3]); redis.call("EXPIRE", KEYS[3],
 return "ok"
 `
 
-// Allow 妫€鏌ユ槸鍚﹀厑璁歌姹?鈥?鍗曟鍘熷瓙 eval 瀹屾垚涓夌骇妫€鏌?// fail-close 绛栫暐锛歊edis 涓嶅彲鐢ㄦ垨 Eval 閿欒鏃舵嫆缁濊姹傦紙鐢熶骇瀹夊叏浼樺厛锛?func (l *DistributedRateLimiter) Allow(ctx context.Context, tenantID, userID string) (bool, error) {
+// Allow 妫€鏌ユ槸鍚﹀厑璁歌姹?鈥?鍗曟鍘熷瓙 eval 瀹屾垚涓夌骇妫€鏌?// fail-close 绛栫暐锛歊edis 涓嶅彲鐢ㄦ垨 Eval 閿欒鏃舵嫆缁濊姹傦紙鐢熶骇瀹夊叏浼樺厛锛
+func (l *DistributedRateLimiter) Allow(ctx context.Context, tenantID, userID string) (bool, error) {
 	if l.rdb == nil {
 		return false, fmt.Errorf("闄愭祦 Redis 涓嶅彲鐢紝鎸?fail-close 鎷掔粷璇锋眰")
 	}

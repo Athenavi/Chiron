@@ -175,7 +175,8 @@ func (m *Manager) GetBalance(userID string) (int, error) {
 // Deduct deducts credits from a user's balance. Returns the new balance.
 // Returns an error if insufficient credits.
 // P0-P1 淇锛氭敼涓?PG 鍗曡鍙ュ師瀛愭墸璐癸紙UPDATE ... RETURNING锛夛紝鏁版嵁搴撲负鍞竴
-// 浜嬪疄婧愶紝澶氬壇鏈儴缃蹭笅涓嶄細瓒呮墸/閲嶅鎵ｈ垂锛涘唴瀛樹粎浣滆缂撳瓨銆?func (m *Manager) Deduct(userID, reason string, amount int) (int, error) {
+// 浜嬪疄婧愶紝澶氬壇鏈儴缃蹭笅涓嶄細瓒呮墸/閲嶅鎵ｈ垂锛涘唴瀛樹粎浣滆缂撳瓨銆
+func (m *Manager) Deduct(userID, reason string, amount int) (int, error) {
 	if amount <= 0 {
 		return 0, fmt.Errorf("invalid deduction amount: %d", amount)
 	}
@@ -196,7 +197,8 @@ func (m *Manager) GetBalance(userID string) (int, error) {
 }
 
 // AddCredits adds credits to a user's balance (for recharge or admin grants).
-// P0-P1 淇锛氭敼涓?PG 鍗曡鍙ュ師瀛愬厖鍊硷紝鏁版嵁搴撲负鍞竴浜嬪疄婧愩€?func (m *Manager) AddCredits(userID, reason string, amount int) (int, error) {
+// P0-P1 淇锛氭敼涓?PG 鍗曡鍙ュ師瀛愬厖鍊硷紝鏁版嵁搴撲负鍞竴浜嬪疄婧愩€
+func (m *Manager) AddCredits(userID, reason string, amount int) (int, error) {
 	if amount <= 0 {
 		return 0, fmt.Errorf("invalid credit amount: %d", amount)
 	}
@@ -216,7 +218,8 @@ func (m *Manager) GetBalance(userID string) (int, error) {
 	return newBalance, nil
 }
 
-// setBalanceCache 鏇存柊鍐呭瓨璇荤紦瀛橈紙涓嶆敼鍙?DB 浜嬪疄婧愶級銆?func (m *Manager) setBalanceCache(userID string, balance int) {
+// setBalanceCache 鏇存柊鍐呭瓨璇荤紦瀛橈紙涓嶆敼鍙?DB 浜嬪疄婧愶級銆
+func (m *Manager) setBalanceCache(userID string, balance int) {
 	ptr := new(int64)
 	*ptr = int64(balance)
 	m.balances.Store(userID, ptr)
@@ -229,19 +232,23 @@ func (m *Manager) GetHistory(ctx context.Context, userID string, limit int) ([]C
 
 // 鈹€鈹€ 鏀粯璁㈠崟锛坉elegate 鍒?PaymentStore锛?鈹€鈹€
 
-// CreatePayment 鍒涘缓涓€绗?pending 鏀粯璁㈠崟銆?func (m *Manager) CreatePayment(ctx context.Context, p *Payment) error {
+// CreatePayment 鍒涘缓涓€绗?pending 鏀粯璁㈠崟銆
+func (m *Manager) CreatePayment(ctx context.Context, p *Payment) error {
 	return m.store.CreatePayment(ctx, p)
 }
 
-// GetPayment 鎸夊唴閮ㄨ鍗曞彿鏌ヨ璁㈠崟銆?func (m *Manager) GetPayment(ctx context.Context, id string) (*Payment, error) {
+// GetPayment 鎸夊唴閮ㄨ鍗曞彿鏌ヨ璁㈠崟銆
+func (m *Manager) GetPayment(ctx context.Context, id string) (*Payment, error) {
 	return m.store.GetPayment(ctx, id)
 }
 
-// UpdatePaymentProvider 棰勪笅鍗曟垚鍔熷悗鍥炲～浜岀淮鐮佷笌娓犻亾璁㈠崟鍙枫€?func (m *Manager) UpdatePaymentProvider(ctx context.Context, id, qrCode, providerOrderID string) error {
+// UpdatePaymentProvider 棰勪笅鍗曟垚鍔熷悗鍥炲～浜岀淮鐮佷笌娓犻亾璁㈠崟鍙枫€
+func (m *Manager) UpdatePaymentProvider(ctx context.Context, id, qrCode, providerOrderID string) error {
 	return m.store.UpdatePaymentProvider(ctx, id, qrCode, providerOrderID)
 }
 
-// MarkPaymentFailed 鏍囪璁㈠崟鏀粯澶辫触銆?func (m *Manager) MarkPaymentFailed(ctx context.Context, id string) error {
+// MarkPaymentFailed 鏍囪璁㈠崟鏀粯澶辫触銆
+func (m *Manager) MarkPaymentFailed(ctx context.Context, id string) error {
 	return m.store.MarkPaymentFailed(ctx, id)
 }
 

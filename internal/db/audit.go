@@ -31,7 +31,8 @@ type Auditor struct {
 	stream   string
 }
 
-// NewAuditor 鍒涘缓瀹¤鏃ュ織璁板綍鍣?func NewAuditor(rdb RedisClient) *Auditor {
+// NewAuditor 鍒涘缓瀹¤鏃ュ織璁板綍鍣
+func NewAuditor(rdb RedisClient) *Auditor {
 	return &Auditor{
 		rdb:    rdb,
 		stream: "audit:events",
@@ -121,7 +122,8 @@ func (w *auditResponseWriter) WriteHeader(code int) {
 }
 
 // AuditLog 鍏ㄥ眬瀹¤鏃ュ織鍑芥暟锛堢畝鍖栨帴鍙ｏ級
-// 鐢ㄤ簬 middleware.go 涓殑蹇€熻皟鐢?func AuditLog(ctx context.Context, userID, action, resource, detail, ip string, meta map[string]interface{}) {
+// 鐢ㄤ簬 middleware.go 涓殑蹇€熻皟鐢
+func AuditLog(ctx context.Context, userID, action, resource, detail, ip string, meta map[string]interface{}) {
 	if Redis == nil {
 		return
 	}
@@ -164,7 +166,8 @@ type AuditConsumer struct {
 	handler  func(ctx context.Context, entry AuditEntry) error
 }
 
-// NewAuditConsumer 鍒涘缓瀹¤鏃ュ織娑堣垂鑰?func NewAuditConsumer(rdb RedisClient, handler func(ctx context.Context, entry AuditEntry) error) *AuditConsumer {
+// NewAuditConsumer 鍒涘缓瀹¤鏃ュ織娑堣垂鑰
+func NewAuditConsumer(rdb RedisClient, handler func(ctx context.Context, entry AuditEntry) error) *AuditConsumer {
 	return &AuditConsumer{
 		rdb:     rdb,
 		stream:  "audit:events",
@@ -173,7 +176,8 @@ type AuditConsumer struct {
 	}
 }
 
-// Start 鍚姩娑堣垂鑰?func (c *AuditConsumer) Start(ctx context.Context) error {
+// Start 鍚姩娑堣垂鑰
+func (c *AuditConsumer) Start(ctx context.Context) error {
 	if c.rdb == nil {
 		return nil
 	}

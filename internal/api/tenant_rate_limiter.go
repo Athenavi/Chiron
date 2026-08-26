@@ -65,7 +65,8 @@ type tokenBucketLocal struct {
 	lastRefill time.Time
 }
 
-// NewTenantRateLimiter 鍒涘缓鍩轰簬 Redis 鐨?token bucket 闄愭祦鍣ㄣ€?func NewTenantRateLimiter(rdb db.RedisClient, maxQPS, burst int) *TenantRateLimiter {
+// NewTenantRateLimiter 鍒涘缓鍩轰簬 Redis 鐨?token bucket 闄愭祦鍣ㄣ€
+func NewTenantRateLimiter(rdb db.RedisClient, maxQPS, burst int) *TenantRateLimiter {
 	return &TenantRateLimiter{
 		rdb:          rdb,
 		maxBurst:     burst,
@@ -74,7 +75,8 @@ type tokenBucketLocal struct {
 	}
 }
 
-// Allow 妫€鏌ヨ姹傛槸鍚﹁鍏佽銆傝繑鍥?(allowed, retryAfterSeconds)銆?// fail-close锛歊edis 涓嶅彲鐢ㄦ垨鍑洪敊鏃舵嫆缁濊姹傘€?func (rl *TenantRateLimiter) Allow(ctx context.Context, resource, tenantID string) (bool, float64) {
+// Allow 妫€鏌ヨ姹傛槸鍚﹁鍏佽銆傝繑鍥?(allowed, retryAfterSeconds)銆?// fail-close锛歊edis 涓嶅彲鐢ㄦ垨鍑洪敊鏃舵嫆缁濊姹傘€
+func (rl *TenantRateLimiter) Allow(ctx context.Context, resource, tenantID string) (bool, float64) {
 	if rl.rdb == nil {
 		return false, 1 // fail-close
 	}
@@ -99,7 +101,8 @@ type tokenBucketLocal struct {
 	return false, 1
 }
 
-// Middleware 杩斿洖 HTTP 涓棿浠讹紝鎸?tenant_id + 璧勬簮绫诲瀷闄愭祦銆?func (rl *TenantRateLimiter) Middleware(next http.Handler) http.Handler {
+// Middleware 杩斿洖 HTTP 涓棿浠讹紝鎸?tenant_id + 璧勬簮绫诲瀷闄愭祦銆
+func (rl *TenantRateLimiter) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		claims := auth.GetClaims(r.Context())
 		if claims == nil || claims.TenantID == "" {
@@ -121,7 +124,8 @@ type tokenBucketLocal struct {
 	})
 }
 
-// extractResource 浠?URL 璺緞鎻愬彇璧勬簮鍚嶃€?func extractResource(path string) string {
+// extractResource 浠?URL 璺緞鎻愬彇璧勬簮鍚嶃€
+func extractResource(path string) string {
 	trimmed := strings.Trim(path, "/")
 	if trimmed == "" {
 		return "unknown"

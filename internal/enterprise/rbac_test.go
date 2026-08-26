@@ -158,7 +158,8 @@ func toIface(keys []string) []interface{} {
 	return out
 }
 
-// swapRedis 涓存椂鏇挎崲鍏ㄥ眬 db.Redis 骞跺湪娴嬭瘯缁撴潫鏃惰繕鍘熴€?func swapRedis(t *testing.T, client db.RedisClient) {
+// swapRedis 涓存椂鏇挎崲鍏ㄥ眬 db.Redis 骞跺湪娴嬭瘯缁撴潫鏃惰繕鍘熴€
+func swapRedis(t *testing.T, client db.RedisClient) {
 	t.Helper()
 	old := db.Redis
 	db.Redis = client
@@ -166,7 +167,8 @@ func toIface(keys []string) []interface{} {
 }
 
 // TestLoadEffectivePerms_CacheHit 缂撳瓨鍛戒腑鏃剁洿鎺ヨ繑鍥炵紦瀛樺€硷紝
-// 涓斾笉瑙﹀彂浠讳綍 DB 鍥炲啓锛堟棤 PG 杩炴帴鏃惰嫢鍥炴簮蹇呯劧鎶ラ敊锛夈€?func TestLoadEffectivePerms_CacheHit(t *testing.T) {
+// 涓斾笉瑙﹀彂浠讳綍 DB 鍥炲啓锛堟棤 PG 杩炴帴鏃惰嫢鍥炴簮蹇呯劧鎶ラ敊锛夈€
+func TestLoadEffectivePerms_CacheHit(t *testing.T) {
 	tests := []struct {
 		name   string
 		cached string
@@ -205,7 +207,8 @@ func toIface(keys []string) []interface{} {
 }
 
 // TestLoadEffectivePerms_CorruptedCacheFallback 缂撳瓨鍐呭鎹熷潖鏃舵寜鏈懡涓鐞嗭細
-// 鍒犻櫎鑴忛敭骞跺洖婧?DB锛堟棤 PG 姹犳椂杩斿洖閿欒锛岃瘉鏄庢湭浣跨敤鑴忕紦瀛橈級銆?func TestLoadEffectivePerms_CorruptedCacheFallback(t *testing.T) {
+// 鍒犻櫎鑴忛敭骞跺洖婧?DB锛堟棤 PG 姹犳椂杩斿洖閿欒锛岃瘉鏄庢湭浣跨敤鑴忕紦瀛橈級銆
+func TestLoadEffectivePerms_CorruptedCacheFallback(t *testing.T) {
 	fr := newFakeRedis()
 	key := permsCacheKeyPrefix + "u2"
 	fr.store[key] = "{corrupted"
@@ -221,7 +224,8 @@ func toIface(keys []string) []interface{} {
 }
 
 // TestLoadEffectivePerms_RedisUnavailable 鏃?Redis 鏃堕檷绾х洿鏌?DB锛堜笉鎶?Redis 閿欒锛夛紱
-// 鏃?PG 姹犳椂閿欒淇℃伅搴旀寚鍚?DB 鑰岄潪 Redis銆?func TestLoadEffectivePerms_RedisUnavailable(t *testing.T) {
+// 鏃?PG 姹犳椂閿欒淇℃伅搴旀寚鍚?DB 鑰岄潪 Redis銆
+func TestLoadEffectivePerms_RedisUnavailable(t *testing.T) {
 	swapRedis(t, nil)
 
 	_, err := LoadEffectivePerms(context.Background(), "u3")

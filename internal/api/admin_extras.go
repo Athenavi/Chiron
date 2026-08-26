@@ -299,7 +299,8 @@ func validSettingsCategory(c string) bool {
 
 var settingsCategoryList = strings.Join(settingsCategories, ", ")
 
-// intFromValue 浠?JSON 瑙ｇ爜鍑虹殑鍊煎畨鍏ㄥ彇鏁存暟锛岄潪鏁板€?瓒婄晫鏃惰繑鍥?fallback銆?func intFromValue(v interface{}, fallback int) int {
+// intFromValue 浠?JSON 瑙ｇ爜鍑虹殑鍊煎畨鍏ㄥ彇鏁存暟锛岄潪鏁板€?瓒婄晫鏃惰繑鍥?fallback銆
+func intFromValue(v interface{}, fallback int) int {
 	switch n := v.(type) {
 	case float64:
 		i := int(n)
@@ -320,7 +321,8 @@ var settingsCategoryList = strings.Join(settingsCategories, ", ")
 }
 
 // SaveSettings PUT /v1/admin/settings
-// 灏嗘煇鍒嗙粍閰嶇疆鎸?key 閫愭潯 upsert 鍒?system_settings 琛ㄣ€?// config 涓?value 涓?null 鐨?key 浼氳鍒犻櫎锛屼娇璇ラ厤缃洖钀藉埌 env 榛樿鍊笺€?func (h *AdminHandler) SaveSettings(w http.ResponseWriter, r *http.Request) {
+// 灏嗘煇鍒嗙粍閰嶇疆鎸?key 閫愭潯 upsert 鍒?system_settings 琛ㄣ€?// config 涓?value 涓?null 鐨?key 浼氳鍒犻櫎锛屼娇璇ラ厤缃洖钀藉埌 env 榛樿鍊笺€
+func (h *AdminHandler) SaveSettings(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Category string                 `json:"category"`
 		Config   map[string]interface{} `json:"config"`
@@ -384,14 +386,16 @@ var settingsCategoryList = strings.Join(settingsCategories, ", ")
 	OK(w, map[string]interface{}{"status": "saved", "category": body.Category})
 }
 
-// ensureSettingsStore 鎯版€у垵濮嬪寲 DB 鍔犲瘑璁剧疆瀛樺偍銆?func (h *AdminHandler) ensureSettingsStore() *settings.Store {
+// ensureSettingsStore 鎯版€у垵濮嬪寲 DB 鍔犲瘑璁剧疆瀛樺偍銆
+func (h *AdminHandler) ensureSettingsStore() *settings.Store {
 	if h.settingsStore == nil && db.Pool != nil {
 		h.settingsStore = settings.New(db.Pool, h.appSecret)
 	}
 	return h.settingsStore
 }
 
-// hotReloadRedis 鍦ㄤ繚瀛?redis 鍒嗙粍璁剧疆鍚庣儹鎹?Redis 杩炴帴锛圓tomicRedis.Swap锛夈€?// 浠呭綋閰嶇疆浜嗘柊鍦板潃鎵嶆墽琛岋紱澶辫触浠呰鏃ュ織涓嶅奖鍝嶄繚瀛樼粨鏋溿€?func (h *AdminHandler) hotReloadRedis(cfg map[string]interface{}) {
+// hotReloadRedis 鍦ㄤ繚瀛?redis 鍒嗙粍璁剧疆鍚庣儹鎹?Redis 杩炴帴锛圓tomicRedis.Swap锛夈€?// 浠呭綋閰嶇疆浜嗘柊鍦板潃鎵嶆墽琛岋紱澶辫触浠呰鏃ュ織涓嶅奖鍝嶄繚瀛樼粨鏋溿€
+func (h *AdminHandler) hotReloadRedis(cfg map[string]interface{}) {
 	if h.redis == nil {
 		return
 	}
@@ -415,14 +419,16 @@ var settingsCategoryList = strings.Join(settingsCategories, ", ")
 	slog.Info("redis hot-swapped", "addr", addr)
 }
 
-// strFromValue 浠?JSON 瑙ｇ爜鍑虹殑鍊煎畨鍏ㄥ彇瀛楃涓诧紱闈炲瓧绗︿覆杩斿洖 ""銆?func strFromValue(v interface{}) string {
+// strFromValue 浠?JSON 瑙ｇ爜鍑虹殑鍊煎畨鍏ㄥ彇瀛楃涓诧紱闈炲瓧绗︿覆杩斿洖 ""銆
+func strFromValue(v interface{}) string {
 	if s, ok := v.(string); ok {
 		return s
 	}
 	return ""
 }
 
-// GetSettings GET /v1/admin/settings?category=... 璇诲彇鏌愬垎缁勫凡鎸佷箙鍖栭厤缃€?// 鏃犺褰曟椂杩斿洖绌?config锛堝墠绔繚鐣欓粯璁ゅ€硷級銆?func (h *AdminHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
+// GetSettings GET /v1/admin/settings?category=... 璇诲彇鏌愬垎缁勫凡鎸佷箙鍖栭厤缃€?// 鏃犺褰曟椂杩斿洖绌?config锛堝墠绔繚鐣欓粯璁ゅ€硷級銆
+func (h *AdminHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
 	category := r.URL.Query().Get("category")
 	if category == "" {
 		BadRequest(w, "category is required: "+settingsCategoryList)

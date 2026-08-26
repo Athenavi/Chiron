@@ -123,7 +123,8 @@ func IncToolError() {
 var extraStatsMu sync.RWMutex
 var extraStatsFuncs []func() map[string]interface{}
 
-// RegisterExtraStats 鍏佽澶栭儴鍖呮敞鍐岄澶栫殑缁熻淇℃伅鎻愪緵鑰咃紙濡?DB 杩炴帴姹犮€佺紦瀛樼瓑锛夈€?func RegisterExtraStats(fn func() map[string]interface{}) {
+// RegisterExtraStats 鍏佽澶栭儴鍖呮敞鍐岄澶栫殑缁熻淇℃伅鎻愪緵鑰咃紙濡?DB 杩炴帴姹犮€佺紦瀛樼瓑锛夈€
+func RegisterExtraStats(fn func() map[string]interface{}) {
 	extraStatsMu.Lock()
 	defer extraStatsMu.Unlock()
 	extraStatsFuncs = append(extraStatsFuncs, fn)

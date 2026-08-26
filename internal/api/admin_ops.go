@@ -21,7 +21,8 @@ import (
 // /admin 鍏ㄦ爤瀹炶锛氱鎴?/ 鍩熷悕 / 鏁版嵁搴?/ Redis / 妯″瀷 / 瀹氭椂浠诲姟
 // 鎵€鏈夋暟鎹潎鏉ヨ嚜鐪熷疄瀛樺偍锛堟棤 mock锛夛紝璇诲啓缁?admin 鏉冮檺璺敱锛坅dminReadMW/adminWriteMW锛夈€?// 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
-// registerOpsRoutes 鎸傝浇杩愮淮绫荤鐞嗙鐐癸紙鍦?adminMux 鍐咃紝缁?StripPrefix /v1/admin锛夈€?func (h *AdminHandler) registerOpsRoutes(r *http.ServeMux) {
+// registerOpsRoutes 鎸傝浇杩愮淮绫荤鐞嗙鐐癸紙鍦?adminMux 鍐咃紝缁?StripPrefix /v1/admin锛夈€
+func (h *AdminHandler) registerOpsRoutes(r *http.ServeMux) {
 	// 绉熸埛绠＄悊
 	r.HandleFunc("GET /tenants", h.ListTenants)
 	r.HandleFunc("POST /tenants", h.CreateTenant)
@@ -287,7 +288,8 @@ func (h *AdminHandler) DeleteDomain(w http.ResponseWriter, r *http.Request) {
 	OK(w, map[string]string{"status": "deleted"})
 }
 
-// VerifyDomain 鐪熷疄 DNS 鏍￠獙锛氳В鏋?A/AAAA 璁板綍纭鍩熷悕鍙揪銆?func (h *AdminHandler) VerifyDomain(w http.ResponseWriter, r *http.Request) {
+// VerifyDomain 鐪熷疄 DNS 鏍￠獙锛氳В鏋?A/AAAA 璁板綍纭鍩熷悕鍙揪銆
+func (h *AdminHandler) VerifyDomain(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var domain string
 	if err := db.ReadPool().QueryRow(r.Context(),
@@ -309,7 +311,8 @@ func (h *AdminHandler) DeleteDomain(w http.ResponseWriter, r *http.Request) {
 	OK(w, map[string]interface{}{"verified": true, "addresses": addrs})
 }
 
-// RenewDomainSSL 瑕佹眰鍩熷悕宸查€氳繃楠岃瘉鍚庣疆 ssl_status=active锛圕A 绛惧彂鐢遍儴缃蹭晶鎺ュ叆锛夈€?func (h *AdminHandler) RenewDomainSSL(w http.ResponseWriter, r *http.Request) {
+// RenewDomainSSL 瑕佹眰鍩熷悕宸查€氳繃楠岃瘉鍚庣疆 ssl_status=active锛圕A 绛惧彂鐢遍儴缃蹭晶鎺ュ叆锛夈€
+func (h *AdminHandler) RenewDomainSSL(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var verified bool
 	if err := db.ReadPool().QueryRow(r.Context(),
@@ -821,7 +824,8 @@ func (h *AdminHandler) DeleteCronJob(w http.ResponseWriter, r *http.Request) {
 
 // 鈹€鈹€ 宸ュ叿 鈹€鈹€
 
-// runPGDump 钀界洏 pg_dump锛堝鐢?extractDSN锛夈€?func runPGDump(ctx context.Context, target string) error {
+// runPGDump 钀界洏 pg_dump锛堝鐢?extractDSN锛夈€
+func runPGDump(ctx context.Context, target string) error {
 	cmd := exec.CommandContext(ctx, "pg_dump", "--dbname="+extractDSN())
 	out, err := cmd.Output()
 	if err != nil {

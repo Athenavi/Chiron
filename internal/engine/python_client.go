@@ -58,12 +58,14 @@ func NewPythonClient(addresses ...string) *PythonClient {
 	}
 }
 
-// SetInternalToken 閰嶇疆 Go鈫擯ython 鍏变韩鍐呴儴 token銆?// 杞彂鍒?Python 鐨勮姹備細鑷姩娉ㄥ叆 X-Internal-Token header锛?// Python 渚ф嵁姝ゆ牎楠??tenant_id= 閫忎紶韬唤鐨勫悎娉曟€э紙P0-3 闃蹭吉閫狅級銆?func (c *PythonClient) SetInternalToken(token string) {
+// SetInternalToken 閰嶇疆 Go鈫擯ython 鍏变韩鍐呴儴 token銆?// 杞彂鍒?Python 鐨勮姹備細鑷姩娉ㄥ叆 X-Internal-Token header锛?// Python 渚ф嵁姝ゆ牎楠??tenant_id= 閫忎紶韬唤鐨勫悎娉曟€э紙P0-3 闃蹭吉閫狅級銆
+func (c *PythonClient) SetInternalToken(token string) {
 	c.internalToken = token
 }
 
 // injectInternalToken 鎶?X-Internal-Token header 娉ㄥ叆鍒板嚭绔欒姹傘€?// 鏈厤缃?token 鏃朵负 no-op锛堥儴缃蹭晶鏈惎鐢ㄥ唴閮ㄤ簰淇℃椂闄嶇骇锛屼絾 Python 渚т細
-// fail-close 鎷掔粷 query 閫忎紶韬唤锛屽己鍒惰蛋 JWT/API Key 閴存潈锛夈€?func (c *PythonClient) injectInternalToken(req *http.Request) {
+// fail-close 鎷掔粷 query 閫忎紶韬唤锛屽己鍒惰蛋 JWT/API Key 閴存潈锛夈€
+func (c *PythonClient) injectInternalToken(req *http.Request) {
 	if c.internalToken != "" {
 		req.Header.Set("X-Internal-Token", c.internalToken)
 	}
@@ -71,7 +73,8 @@ func NewPythonClient(addresses ...string) *PythonClient {
 
 // pythonCooldown 鍗曚釜鍦板潃澶辫触鍚庣殑鍐峰嵈鏃堕暱锛氭殏鏃惰烦杩囷紝閬垮厤姣?N 涓姹傚繀璐ヤ竴涓?const pythonCooldown = 5 * time.Second
 
-// markFailure 璁板綍鍦板潃澶辫触锛岃繘鍏ュ喎鍗?func (c *PythonClient) markFailure(addr string) {
+// markFailure 璁板綍鍦板潃澶辫触锛岃繘鍏ュ喎鍗
+func (c *PythonClient) markFailure(addr string) {
 	until := time.Now().Add(pythonCooldown).Unix()
 	for i, a := range c.addresses {
 		if a == addr {
@@ -91,7 +94,8 @@ func (c *PythonClient) markSuccess(addr string) {
 	}
 }
 
-// do 缁熶竴璇锋眰鍑哄彛锛氳褰曟垚鍔?澶辫触骞舵洿鏂扮啍鏂姸鎬?func (c *PythonClient) do(req *http.Request) (*http.Response, error) {
+// do 缁熶竴璇锋眰鍑哄彛锛氳褰曟垚鍔?澶辫触骞舵洿鏂扮啍鏂姸鎬
+func (c *PythonClient) do(req *http.Request) (*http.Response, error) {
 	addr := req.URL.Scheme + "://" + req.URL.Host
 	resp, err := c.client.Do(req)
 	if err != nil {

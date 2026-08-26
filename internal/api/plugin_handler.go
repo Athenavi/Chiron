@@ -20,7 +20,8 @@ import (
 )
 
 // allowedPluginCommands 杩斿洖 PLUGIN_COMMAND_ALLOWLIST 鐜鍙橀噺閰嶇疆鐨勫懡浠ょ櫧鍚嶅崟
-// 锛堜互閫楀彿鍒嗛殧鐨勫彲鎵ц鏂囦欢 basename锛夈€傜┖鍒楄〃 = 榛樿绂佺敤鑷畾涔夋彃浠跺懡浠?// 锛堝畨鍏ㄩ粯璁わ細闃叉浠绘剰鐧诲綍鐢ㄦ埛閰嶇疆浠绘剰鍛戒护骞跺湪缃戝叧/寮曟搸涓绘満鎵ц锛夈€?func allowedPluginCommands() map[string]bool {
+// 锛堜互閫楀彿鍒嗛殧鐨勫彲鎵ц鏂囦欢 basename锛夈€傜┖鍒楄〃 = 榛樿绂佺敤鑷畾涔夋彃浠跺懡浠?// 锛堝畨鍏ㄩ粯璁わ細闃叉浠绘剰鐧诲綍鐢ㄦ埛閰嶇疆浠绘剰鍛戒护骞跺湪缃戝叧/寮曟搸涓绘満鎵ц锛夈€
+func allowedPluginCommands() map[string]bool {
 	raw := strings.TrimSpace(os.Getenv("PLUGIN_COMMAND_ALLOWLIST"))
 	if raw == "" {
 		return nil
@@ -35,7 +36,8 @@ import (
 	return allowed
 }
 
-// checkPluginCommandAllowed 鏍￠獙鍛戒护 basename 鏄惁鍦ㄧ櫧鍚嶅崟鍐呫€?func checkPluginCommandAllowed(command string) error {
+// checkPluginCommandAllowed 鏍￠獙鍛戒护 basename 鏄惁鍦ㄧ櫧鍚嶅崟鍐呫€
+func checkPluginCommandAllowed(command string) error {
 	if strings.TrimSpace(command) == "" {
 		return fmt.Errorf("command is required")
 	}
@@ -50,7 +52,8 @@ import (
 	return nil
 }
 
-// isAdminRole 鍒ゆ柇褰撳墠璇锋眰鏄惁涓?owner/admin锛堟彃浠跺懡浠ゆ墽琛屾晱鎰熸搷浣滐級銆?func isAdminRole(r *http.Request) bool {
+// isAdminRole 鍒ゆ柇褰撳墠璇锋眰鏄惁涓?owner/admin锛堟彃浠跺懡浠ゆ墽琛屾晱鎰熸搷浣滐級銆
+func isAdminRole(r *http.Request) bool {
 	claims := auth.GetClaims(r.Context())
 	if claims == nil {
 		return false
@@ -110,7 +113,8 @@ func NewPluginHandler(cfg *config.Config, authenticator *auth.Authenticator) *Pl
 	return &PluginHandler{cfg: cfg, authenticator: authenticator, dataDir: dir}
 }
 
-// userPluginPath 杩斿洖褰撳墠鐢ㄦ埛鐨勬彃浠堕厤缃枃浠惰矾寰勩€?func (h *PluginHandler) userPluginPath(userID string) string {
+// userPluginPath 杩斿洖褰撳墠鐢ㄦ埛鐨勬彃浠堕厤缃枃浠惰矾寰勩€
+func (h *PluginHandler) userPluginPath(userID string) string {
 	// 瀹夊叏锛氭竻鐞?userID 闃叉璺緞閬嶅巻锛堝 ../tenant/evil锛?	safe := filepath.Clean(filepath.Base(userID))
 	if safe == "." || safe == "" {
 		safe = "unknown"
@@ -118,7 +122,8 @@ func NewPluginHandler(cfg *config.Config, authenticator *auth.Authenticator) *Pl
 	return filepath.Join(h.dataDir, safe, "plugins.json")
 }
 
-// resolveUser 浠庤姹傝璇佷俊鎭彇褰撳墠鐢ㄦ埛 ID锛坅uthMW 宸蹭繚璇佺櫥褰曪級銆?func (h *PluginHandler) resolveUser(r *http.Request) string {
+// resolveUser 浠庤姹傝璇佷俊鎭彇褰撳墠鐢ㄦ埛 ID锛坅uthMW 宸蹭繚璇佺櫥褰曪級銆
+func (h *PluginHandler) resolveUser(r *http.Request) string {
 	claims := auth.GetClaims(r.Context())
 	if claims != nil {
 		return claims.UserID
@@ -126,7 +131,8 @@ func NewPluginHandler(cfg *config.Config, authenticator *auth.Authenticator) *Pl
 	return ""
 }
 
-// resolveTenant 鍙栧綋鍓嶇鎴?ID锛歝laims 浼樺厛锛岀己鐪佸洖閫€榛樿绉熸埛锛堝競鍦洪棬鎺х敤锛夈€?func (h *PluginHandler) resolveTenant(r *http.Request) string {
+// resolveTenant 鍙栧綋鍓嶇鎴?ID锛歝laims 浼樺厛锛岀己鐪佸洖閫€榛樿绉熸埛锛堝競鍦洪棬鎺х敤锛夈€
+func (h *PluginHandler) resolveTenant(r *http.Request) string {
 	claims := auth.GetClaims(r.Context())
 	if claims != nil && claims.TenantID != "" {
 		return claims.TenantID
@@ -165,7 +171,8 @@ func (h *PluginHandler) List(w http.ResponseWriter, r *http.Request) {
 	OK(w, plugins)
 }
 
-// overlayMarketPlugins 灏嗙鎴峰凡瀹夎涓斿惎鐢ㄧ殑甯傚満鎻掍欢杩藉姞鍒板垪琛紙鍘婚噸锛夈€?func (h *PluginHandler) overlayMarketPlugins(r *http.Request, plugins []MCPPlugin) []MCPPlugin {
+// overlayMarketPlugins 灏嗙鎴峰凡瀹夎涓斿惎鐢ㄧ殑甯傚満鎻掍欢杩藉姞鍒板垪琛紙鍘婚噸锛夈€
+func (h *PluginHandler) overlayMarketPlugins(r *http.Request, plugins []MCPPlugin) []MCPPlugin {
 	items, err := ListEnabledMarketItems(r.Context(), "plugin", h.resolveTenant(r))
 	if err != nil {
 		slog.Debug("plugin list: market overlay skipped", "error", err)

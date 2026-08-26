@@ -79,7 +79,8 @@ func (h *UserMarketHandler) List(w http.ResponseWriter, r *http.Request) {
 	OK(w, map[string]interface{}{"items": items})
 }
 
-// itemEnabledForTenant 鏌ヨ绉熸埛瀹夎璁板綍锛坒ail-open锛氭棤璁板綍瑙嗕负鏈畨瑁咃級銆?func itemEnabledForTenant(ctx context.Context, itemID, tenantID string) (bool, error) {
+// itemEnabledForTenant 鏌ヨ绉熸埛瀹夎璁板綍锛坒ail-open锛氭棤璁板綍瑙嗕负鏈畨瑁咃級銆
+func itemEnabledForTenant(ctx context.Context, itemID, tenantID string) (bool, error) {
 	var enabled bool
 	err := db.ReadPool().QueryRow(ctx,
 		`SELECT COALESCE(enabled, false) FROM ent_catalog_installs WHERE item_id = $1 AND tenant_id = $2`,
@@ -131,7 +132,8 @@ func (h *UserMarketHandler) Install(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// installSkill 鎶€鑳藉畨瑁咃細灏?manifest 瀹氫箟鍐欏叆 Python SkillStore锛堢敤鎴峰彲浜庡璇?Agent 涓皟鐢級銆?func (h *UserMarketHandler) installSkill(w http.ResponseWriter, r *http.Request, claims *auth.Claims, m map[string]interface{}) {
+// installSkill 鎶€鑳藉畨瑁咃細灏?manifest 瀹氫箟鍐欏叆 Python SkillStore锛堢敤鎴峰彲浜庡璇?Agent 涓皟鐢級銆
+func (h *UserMarketHandler) installSkill(w http.ResponseWriter, r *http.Request, claims *auth.Claims, m map[string]interface{}) {
 	if h.pythonClient == nil {
 		InternalError(w, "python engine not available")
 		return
@@ -157,7 +159,8 @@ func (h *UserMarketHandler) Install(w http.ResponseWriter, r *http.Request) {
 	OK(w, map[string]interface{}{"success": true, "type": "skill", "name": skillName, "detail": resp})
 }
 
-// installAgent Agent 瀹夎锛歮anifest 蹇収澶嶅埗涓哄綋鍓嶇敤鎴风殑绉佹湁 Agent锛堜弗鏍肩鏈夛級銆?func (h *UserMarketHandler) installAgent(w http.ResponseWriter, r *http.Request, claims *auth.Claims, m map[string]interface{}) {
+// installAgent Agent 瀹夎锛歮anifest 蹇収澶嶅埗涓哄綋鍓嶇敤鎴风殑绉佹湁 Agent锛堜弗鏍肩鏈夛級銆
+func (h *UserMarketHandler) installAgent(w http.ResponseWriter, r *http.Request, claims *auth.Claims, m map[string]interface{}) {
 	agentID, err := id.UUID()
 	if err != nil {
 		InternalError(w, "generate id failed")
@@ -186,7 +189,8 @@ func (h *UserMarketHandler) Install(w http.ResponseWriter, r *http.Request) {
 	OK(w, map[string]interface{}{"success": true, "type": "agent", "id": agentID, "name": name})
 }
 
-// installMCP MCP 瀹夎锛氬皢 manifest 鐨?MCP server 閰嶇疆杩藉姞鍒板綋鍓嶇敤鎴?plugins.json锛堝懡浠ら渶鍛戒腑鐧藉悕鍗曪級銆?func (h *UserMarketHandler) installMCP(w http.ResponseWriter, r *http.Request, claims *auth.Claims, m map[string]interface{}) {
+// installMCP MCP 瀹夎锛氬皢 manifest 鐨?MCP server 閰嶇疆杩藉姞鍒板綋鍓嶇敤鎴?plugins.json锛堝懡浠ら渶鍛戒腑鐧藉悕鍗曪級銆
+func (h *UserMarketHandler) installMCP(w http.ResponseWriter, r *http.Request, claims *auth.Claims, m map[string]interface{}) {
 	pName, _ := m["name"].(string)
 	command, _ := m["command"].(string)
 	if pName == "" || command == "" {
@@ -267,11 +271,13 @@ func toStringMap(v interface{}) map[string]string {
 	return out
 }
 
-// userPluginPath 杩斿洖鐢ㄦ埛鎻掍欢閰嶇疆璺緞锛堜笌 plugin_handler.go 鍚岃鍒欙級銆?func userPluginPath(dataDir, userID string) string {
+// userPluginPath 杩斿洖鐢ㄦ埛鎻掍欢閰嶇疆璺緞锛堜笌 plugin_handler.go 鍚岃鍒欙級銆
+func userPluginPath(dataDir, userID string) string {
 	return dataDir + "/" + userID + "/plugins.json"
 }
 
-// appendPlugin 璇诲彇鐢ㄦ埛 plugins.json 骞惰拷鍔?MCP 鎻掍欢锛堝箓绛夛細鍚屽悕瑕嗙洊锛夈€?func appendPlugin(dataDir, userID string, plugin MCPPlugin) error {
+// appendPlugin 璇诲彇鐢ㄦ埛 plugins.json 骞惰拷鍔?MCP 鎻掍欢锛堝箓绛夛細鍚屽悕瑕嗙洊锛夈€
+func appendPlugin(dataDir, userID string, plugin MCPPlugin) error {
 	path := userPluginPath(dataDir, userID)
 	plugins := []MCPPlugin{}
 	if data, err := os.ReadFile(path); err == nil && len(data) > 0 {

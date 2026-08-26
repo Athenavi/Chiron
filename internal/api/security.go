@@ -59,7 +59,8 @@ func NewInputSanitizer() *InputSanitizer {
 	}
 }
 
-// Sanitize 鍑€鍖栫敤鎴疯緭鍏?// 浣跨敤 XML 鏍囩鍖呰９ + HTML 杞箟锛岄槻姝㈢敤鎴疯緭鍏ヨ LLM 瑙ｉ噴涓烘寚浠?func (s *InputSanitizer) Sanitize(input string) string {
+// Sanitize 鍑€鍖栫敤鎴疯緭鍏?// 浣跨敤 XML 鏍囩鍖呰９ + HTML 杞箟锛岄槻姝㈢敤鎴疯緭鍏ヨ LLM 瑙ｉ噴涓烘寚浠
+func (s *InputSanitizer) Sanitize(input string) string {
 	escaped := htmlEscape(input)
 	return fmt.Sprintf("<user_input>\n%s\n</user_input>", escaped)
 }
@@ -185,7 +186,8 @@ type OutputScanner struct {
 	apiKeyPatterns []*regexp.Regexp
 }
 
-// NewOutputScanner 鍒涘缓杈撳嚭鎵弿鍣?func NewOutputScanner() *OutputScanner {
+// NewOutputScanner 鍒涘缓杈撳嚭鎵弿鍣
+func NewOutputScanner() *OutputScanner {
 	return &OutputScanner{
 		systemPromptKeywords: []string{
 			"system prompt",
@@ -219,7 +221,8 @@ func (s *OutputScanner) Scan(response string) (safe bool, reason string) {
 	return true, ""
 }
 
-// truncate 鎴柇瀛楃涓?func truncate(s string, maxLen int) string {
+// truncate 鎴柇瀛楃涓
+func truncate(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
 	}

@@ -25,7 +25,8 @@ type WechatClient struct {
 	handler *notify.Handler
 }
 
-// NewWechatClient 鏋勯€犲井淇℃敮浠樺鎴风銆?// mchPrivateKeyPEM 涓哄晢鎴?API 璇佷功绉侀挜锛圥EM锛夈€?func NewWechatClient(mchID, appID, apiV3Key, mchCertSerialNo, mchPrivateKeyPEM string) (*WechatClient, error) {
+// NewWechatClient 鏋勯€犲井淇℃敮浠樺鎴风銆?// mchPrivateKeyPEM 涓哄晢鎴?API 璇佷功绉侀挜锛圥EM锛夈€
+func NewWechatClient(mchID, appID, apiV3Key, mchCertSerialNo, mchPrivateKeyPEM string) (*WechatClient, error) {
 	mchPrivateKey, err := utils.LoadPrivateKey(mchPrivateKeyPEM)
 	if err != nil {
 		return nil, fmt.Errorf("load wechat mch private key: %w", err)
@@ -54,7 +55,8 @@ type WechatClient struct {
 	}, nil
 }
 
-// Precreate 寰俊 Native 棰勪笅鍗曪紝杩斿洖浜岀淮鐮佸唴瀹癸紙code_url锛夈€?func (c *WechatClient) Precreate(ctx context.Context, outTradeNo string, amountCents int64, description, notifyURL string) (string, error) {
+// Precreate 寰俊 Native 棰勪笅鍗曪紝杩斿洖浜岀淮鐮佸唴瀹癸紙code_url锛夈€
+func (c *WechatClient) Precreate(ctx context.Context, outTradeNo string, amountCents int64, description, notifyURL string) (string, error) {
 	resp, result, err := c.svc.Prepay(ctx, native.PrepayRequest{
 		Appid:       core.String(c.appID),
 		Mchid:       core.String(c.mchID),
@@ -79,7 +81,8 @@ type WechatClient struct {
 	return *resp.CodeUrl, nil
 }
 
-// ParseCallback 瑙ｆ瀽骞堕獙绛惧井淇℃敮浠樺洖璋冦€?// 杩斿洖 (outTradeNo, transactionId, paid, amountCents, err)锛沘mountCents 涓哄洖璋冭鍗曢噾棰濓紙鍒嗭級锛?// 鐢辫皟鐢ㄦ柟涓庡唴閮ㄨ鍗曟瘮瀵癸紙闃茬鏀癸級銆?func (c *WechatClient) ParseCallback(r *http.Request) (string, string, bool, *int64, error) {
+// ParseCallback 瑙ｆ瀽骞堕獙绛惧井淇℃敮浠樺洖璋冦€?// 杩斿洖 (outTradeNo, transactionId, paid, amountCents, err)锛沘mountCents 涓哄洖璋冭鍗曢噾棰濓紙鍒嗭級锛?// 鐢辫皟鐢ㄦ柟涓庡唴閮ㄨ鍗曟瘮瀵癸紙闃茬鏀癸級銆
+func (c *WechatClient) ParseCallback(r *http.Request) (string, string, bool, *int64, error) {
 	var tx payments.Transaction
 	if _, err := c.handler.ParseNotifyRequest(r.Context(), r, &tx); err != nil {
 		return "", "", false, nil, fmt.Errorf("wechat notify parse: %w", err)
@@ -99,7 +102,8 @@ type WechatClient struct {
 	return *tx.OutTradeNo, tradeNo, paid, amount, nil
 }
 
-// Query 鎸夊晢鎴疯鍗曞彿鏌ヨ鏀粯鐘舵€侊紝杩斿洖 (tradeNo, paid, err)銆?func (c *WechatClient) Query(ctx context.Context, outTradeNo string) (string, bool, error) {
+// Query 鎸夊晢鎴疯鍗曞彿鏌ヨ鏀粯鐘舵€侊紝杩斿洖 (tradeNo, paid, err)銆
+func (c *WechatClient) Query(ctx context.Context, outTradeNo string) (string, bool, error) {
 	resp, _, err := c.svc.QueryOrderByOutTradeNo(ctx, native.QueryOrderByOutTradeNoRequest{
 		OutTradeNo: core.String(outTradeNo),
 		Mchid:      core.String(c.mchID),

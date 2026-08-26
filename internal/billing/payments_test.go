@@ -11,7 +11,8 @@ import (
 	"time"
 )
 
-// TestAlipaySignVerify 楠岃瘉 RSA2 绛惧悕/楠岀鑷唇锛堝悓涓€瀵瑰瘑閽ワ級銆?func TestAlipaySignVerify(t *testing.T) {
+// TestAlipaySignVerify 楠岃瘉 RSA2 绛惧悕/楠岀鑷唇锛堝悓涓€瀵瑰瘑閽ワ級銆
+func TestAlipaySignVerify(t *testing.T) {
 	client := newTestAlipayClient(t)
 
 	params := map[string]string{
@@ -35,7 +36,8 @@ import (
 	}
 }
 
-// TestVerifyCallback 楠岃瘉鍥炶皟楠岀锛堟垚鍔熺姸鎬?+ 绡℃敼鎷掔粷 + 闈炴垚鍔熺姸鎬佹嫆缁濓級銆?func TestVerifyCallback(t *testing.T) {
+// TestVerifyCallback 楠岃瘉鍥炶皟楠岀锛堟垚鍔熺姸鎬?+ 绡℃敼鎷掔粷 + 闈炴垚鍔熺姸鎬佹嫆缁濓級銆
+func TestVerifyCallback(t *testing.T) {
 	client := newTestAlipayClient(t)
 
 	good := map[string]string{
@@ -77,7 +79,8 @@ import (
 	}
 }
 
-// TestConfirmPaymentIdempotent 楠岃瘉璁㈠崟骞傜瓑鍏ヨ处锛氶噸澶嶇‘璁ゅ彧鍏ヨ处涓€娆°€?func TestConfirmPaymentIdempotent(t *testing.T) {
+// TestConfirmPaymentIdempotent 楠岃瘉璁㈠崟骞傜瓑鍏ヨ处锛氶噸澶嶇‘璁ゅ彧鍏ヨ处涓€娆°€
+func TestConfirmPaymentIdempotent(t *testing.T) {
 	store := &orderAwareStore{}
 	mgr := NewManager(store)
 	defer mgr.Close()
@@ -136,7 +139,8 @@ func (s *orderAwareStore) GetPayment(ctx context.Context, id string) (*Payment, 
 	return nil, nil
 }
 
-// MarkPaymentPaid 骞傜瓑鎺ㄨ繘 pending鈫抪aid銆?func (s *orderAwareStore) MarkPaymentPaid(ctx context.Context, id, tradeNo string) (*Payment, error) {
+// MarkPaymentPaid 骞傜瓑鎺ㄨ繘 pending鈫抪aid銆
+func (s *orderAwareStore) MarkPaymentPaid(ctx context.Context, id, tradeNo string) (*Payment, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	p, ok := s.ords[id]

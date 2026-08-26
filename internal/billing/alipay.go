@@ -28,7 +28,8 @@ type AlipayClient struct {
 	httpClient  *http.Client
 }
 
-// NewAlipayClient 鐢?PEM 绉侀挜/鍏挜鏋勯€犲鎴风銆俫ateway 涓虹┖鏃朵娇鐢ㄧ敓浜х綉鍏炽€?func NewAlipayClient(appID, privateKeyPEM, alipayPublicKeyPEM, gateway, notifyURL string) (*AlipayClient, error) {
+// NewAlipayClient 鐢?PEM 绉侀挜/鍏挜鏋勯€犲鎴风銆俫ateway 涓虹┖鏃朵娇鐢ㄧ敓浜х綉鍏炽€
+func NewAlipayClient(appID, privateKeyPEM, alipayPublicKeyPEM, gateway, notifyURL string) (*AlipayClient, error) {
 	priv, err := parseRSAPrivateKey(privateKeyPEM)
 	if err != nil {
 		return nil, fmt.Errorf("parse alipay private key: %w", err)
@@ -91,7 +92,8 @@ func parseRSAPublicKey(pemStr string) (*rsa.PublicKey, error) {
 	return nil, fmt.Errorf("unsupported public key format")
 }
 
-// buildSignContent 鎷兼帴寰呯鍚嶄覆锛氶潪绌哄弬鏁版寜 key 瀛楀吀搴忥紝key=value 鐢?& 杩炴帴銆?func buildSignContent(params map[string]string) string {
+// buildSignContent 鎷兼帴寰呯鍚嶄覆锛氶潪绌哄弬鏁版寜 key 瀛楀吀搴忥紝key=value 鐢?& 杩炴帴銆
+func buildSignContent(params map[string]string) string {
 	keys := make([]string, 0, len(params))
 	for k, v := range params {
 		if k == "sign" || k == "sign_type" || v == "" {
@@ -107,7 +109,8 @@ func parseRSAPublicKey(pemStr string) (*rsa.PublicKey, error) {
 	return strings.Join(parts, "&")
 }
 
-// sign 瀵瑰弬鏁板仛 RSA2锛圫HA256withRSA锛夌鍚嶏紝杩斿洖 base64銆?func (c *AlipayClient) sign(params map[string]string) (string, error) {
+// sign 瀵瑰弬鏁板仛 RSA2锛圫HA256withRSA锛夌鍚嶏紝杩斿洖 base64銆
+func (c *AlipayClient) sign(params map[string]string) (string, error) {
 	content := buildSignContent(params)
 	digest := sha256.Sum256([]byte(content))
 	sig, err := rsa.SignPKCS1v15(rand.Reader, c.privateKey, crypto.SHA256, digest[:])
@@ -117,7 +120,8 @@ func parseRSAPublicKey(pemStr string) (*rsa.PublicKey, error) {
 	return base64.StdEncoding.EncodeToString(sig), nil
 }
 
-// verify 鐢ㄦ敮浠樺疂鍏挜楠岀銆?func (c *AlipayClient) verify(params map[string]string, signature string) error {
+// verify 鐢ㄦ敮浠樺疂鍏挜楠岀銆
+func (c *AlipayClient) verify(params map[string]string, signature string) error {
 	content := buildSignContent(params)
 	digest := sha256.Sum256([]byte(content))
 	sig, err := base64.StdEncoding.DecodeString(signature)
@@ -127,7 +131,8 @@ func parseRSAPublicKey(pemStr string) (*rsa.PublicKey, error) {
 	return rsa.VerifyPKCS1v15(c.publicKey, crypto.SHA256, digest[:], sig)
 }
 
-// Precreate 鏀粯瀹濆綋闈粯棰勪笅鍗曪紝杩斿洖浜岀淮鐮佸唴瀹逛笌娓犻亾璁㈠崟鍙枫€?func (c *AlipayClient) Precreate(ctx context.Context, outTradeNo string, amountCents int64, subject string) (qrCode string, err error) {
+// Precreate 鏀粯瀹濆綋闈粯棰勪笅鍗曪紝杩斿洖浜岀淮鐮佸唴瀹逛笌娓犻亾璁㈠崟鍙枫€
+func (c *AlipayClient) Precreate(ctx context.Context, outTradeNo string, amountCents int64, subject string) (qrCode string, err error) {
 	biz := map[string]any{
 		"out_trade_no": outTradeNo,
 		"total_amount": fmt.Sprintf("%.2f", float64(amountCents)/100),
@@ -199,7 +204,8 @@ func parseRSAPublicKey(pemStr string) (*rsa.PublicKey, error) {
 	return r.Response.QRCode, nil
 }
 
-// Query 鏌ヨ璁㈠崟鏀粯鐘舵€併€傝繑鍥?(tradeNo, paid, err)銆?func (c *AlipayClient) Query(ctx context.Context, outTradeNo string) (string, bool, error) {
+// Query 鏌ヨ璁㈠崟鏀粯鐘舵€併€傝繑鍥?(tradeNo, paid, err)銆
+func (c *AlipayClient) Query(ctx context.Context, outTradeNo string) (string, bool, error) {
 	biz, _ := json.Marshal(map[string]any{"out_trade_no": outTradeNo})
 	params := map[string]string{
 		"app_id":      c.appID,
@@ -251,7 +257,8 @@ func parseRSAPublicKey(pemStr string) (*rsa.PublicKey, error) {
 	return r.Response.TradeNo, paid, nil
 }
 
-// VerifyCallback 鏍￠獙鏀粯瀹濆紓姝ラ€氱煡鍙傛暟锛堥獙绛?+ 浜ゆ槗鎴愬姛鐘舵€侊級銆?// 杩斿洖 (outTradeNo, tradeNo, ok)銆?func (c *AlipayClient) VerifyCallback(params map[string]string) (string, string, bool) {
+// VerifyCallback 鏍￠獙鏀粯瀹濆紓姝ラ€氱煡鍙傛暟锛堥獙绛?+ 浜ゆ槗鎴愬姛鐘舵€侊級銆?// 杩斿洖 (outTradeNo, tradeNo, ok)銆
+func (c *AlipayClient) VerifyCallback(params map[string]string) (string, string, bool) {
 	sign := params["sign"]
 	if sign == "" || params["app_id"] != c.appID {
 		return "", "", false
