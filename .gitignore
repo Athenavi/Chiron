@@ -293,3 +293,5 @@ reasonix.toml
 logs/
 # legacy root plugin config (unused; per-user config in data/plugins/)
 /plugins.json
+/frontend-vue/public/vendor/
+/frontend-vue/public/vendor/
