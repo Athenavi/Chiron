@@ -110,8 +110,33 @@ func runDBStatus(cmd *cobra.Command, args []string) error {
 }
 
 func runDBMigrate(cmd *cobra.Command, args []string) error {
-	TODO("Database migrations are not supported yet")
-	fmt.Println("Database migrations completed")
+	dsn := getDSN()
+	fmt.Printf("Migrating database: %s\n", sanitizeDSN(dsn))
+
+	// 如果指定了 --dry-run 参数，使用 --sql 输出 SQL 而不实际执行
+	for _, a := range args {
+		if a == "--dry-run" || a == "--sql" {
+			os.Setenv("DATABASE_DSN", dsn)
+			python := "python"
+			if v := os.Getenv("PYTHON"); v != "" {
+				python = v
+			} else if v := os.Getenv("CHIRON_PYTHON"); v != "" {
+				python = v
+			}
+			runCmd := exec.Command(python, "-m", "alembic", "--config", "alembic.ini", "upgrade", "head", "--sql")
+			runCmd.Dir = "."
+			runCmd.Stdout = os.Stdout
+			runCmd.Stderr = os.Stderr
+			return runCmd.Run()
+		}
+	}
+
+	fmt.Println("Running: alembic upgrade head")
+	if err := db.RunMigrations(dsn); err != nil {
+		return fmt.Errorf("database migration failed: %w", err)
+	}
+
+	fmt.Println("Database migrations completed successfully")
 	return nil
 }
 

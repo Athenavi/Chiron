@@ -1,12 +1,34 @@
 """
-Alembic 环境配置
-支持从环境变量动态读取数据库URL
+Alembic env configuration.
+Resolves the database URL from:
+  1. DATABASE_DSN environment variable
+  2. install.lock (AES-256-GCM decrypted with APP_SECRET)
+  3. alembic.ini fallback
 """
+import base64
+import hashlib
+import hmac
+import json
 import os
 from logging.config import fileConfig
 from pathlib import Path
 
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from dotenv import load_dotenv
+
+from sqlalchemy import engine_from_config
+from sqlalchemy import pool
+
+from alembic import context
+
+# this is the Alembic Config object, which provides
+# access to the values within the .ini file in use.
+config = context.config
+
+# Interpret the config file for Python logging.
+# This line sets up loggers basically.
+if config.config_file_name is not None:
+    fileConfig(config.config_file_name)
 
 # 加载 .env 文件 - 支持多个位置
 project_root = Path(__file__).parent.parent
@@ -29,40 +51,89 @@ if not env_loaded:
     for p in env_candidates:
         print(f"  - {p}")
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
+# ── install.lock decryption (AES-256-GCM, compatible with Go side) ──────────
 
-from alembic import context
+def _lock_encrypt_key(app_secret: str) -> bytes:
+    """Derive the AES-256-GCM key, matching Go's lockEncryptKey."""
+    h = hmac.new(app_secret.encode('utf-8'), b'chiron-install-lock-key', hashlib.sha256)
+    return h.digest()  # 32 bytes
 
-# this is the Alembic Config object, which provides
-# access to the values within the .ini file in use.
-config = context.config
+def _decrypt_from_install_lock(app_secret: str) -> str | None:
+    """Read install.lock, decrypt the dsn field, return the plaintext DSN."""
+    lock_path = project_root / 'data' / 'install.lock'
+    if not lock_path.exists():
+        return None
+    try:
+        data = json.loads(lock_path.read_text(encoding='utf-8'))
+    except Exception:
+        return None
+    enc_dsn = data.get('dsn') if isinstance(data, dict) else None
+    if not enc_dsn:
+        return None
+    # Go's base64.RawStdEncoding: standard alphabet, no padding
+    try:
+        raw = base64.b64decode(enc_dsn + '==')  # add padding for Python's decoder
+    except Exception:
+        try:
+            raw = base64.b64decode(enc_dsn)  # try without padding
+        except Exception:
+            return None
+    key = _lock_encrypt_key(app_secret)
+    # AES-256-GCM: nonce is first 12 bytes
+    nonce = raw[:12]
+    ct = raw[12:]
+    try:
+        aesgcm = AESGCM(key)
+        plain = aesgcm.decrypt(nonce, ct, None)
+        return plain.decode('utf-8')
+    except Exception:
+        return None
 
-# Interpret the config file for Python logging.
-# This line sets up loggers basically.
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
-
-# Dynamically set database URL from environment variables
-def get_database_url():
-    # TODO: 从install.lock中解密获取数据库DSN
+def get_database_url() -> str | None:
+    """Resolve database URL from DATABASE_DSN env → install.lock → alembic.ini fallback."""
+    # 1) DATABASE_DSN environment variable (highest priority)
     db_dsn = os.getenv("DATABASE_DSN")
-    return db_dsn
+    if db_dsn:
+        return db_dsn
+
+    # 2) install.lock decryption (requires APP_SECRET)
+    app_secret = os.getenv("APP_SECRET")
+    if app_secret:
+        dsn = _decrypt_from_install_lock(app_secret)
+        if dsn:
+            print("[Alembic] Decrypted DSN from install.lock")
+            return dsn
+
+    # 3) alembic.ini fallback
+    fallback = config.get_main_option("sqlalchemy.url")
+    if fallback:
+        print(f"[Alembic] Using fallback URL from alembic.ini")
+        return fallback
+
+    return None
 
 # Set the database URL
 db_url = get_database_url()
 # 隐藏密码打印
-safe_url = db_url
-if '@' in db_url:
-    parts = db_url.split('@')
-    prefix = parts[0]
-    suffix = parts[1]
-    # 把密码部分替换为 ***
-    if ':' in prefix.split('://', 1)[-1]:
-        user_part = prefix.split('://', 1)[0] + '://' + prefix.split('://', 1)[-1].split(':')[0]
-        safe_url = f"{user_part}:***@{suffix}"
+safe_url = "(none)"
+if db_url:
+    if '@' in db_url:
+        parts = db_url.split('@')
+        prefix = parts[0]
+        suffix = parts[1]
+        if ':' in prefix.split('://', 1)[-1]:
+            user_part = prefix.split('://', 1)[0] + '://' + prefix.split('://', 1)[-1].split(':')[0]
+            safe_url = f"{user_part}:***@{suffix}"
+        else:
+            safe_url = db_url
+    else:
+        safe_url = db_url
 print(f"[Alembic] Database URL: {safe_url}")
-config.set_main_option("sqlalchemy.url", db_url)
+if db_url:
+    # Ensure postgresql:// prefix for SQLAlchemy
+    if db_url.startswith('postgres://'):
+        db_url = 'postgresql' + db_url[9:]
+    config.set_main_option("sqlalchemy.url", db_url)
 
 # add your model's MetaData object here
 # for 'autogenerate' support

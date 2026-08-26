@@ -69,7 +69,12 @@ func main() {
 			db.Pool = router.Write() // backward compatibility alias
 			pgConnected = true
 			defer router.Close()
-			// TODO: 数据库迁移
+			// 执行数据库迁移（Alembic upgrade head）
+			if err := db.RunMigrations(cfg.PostgresDSN); err != nil {
+				slog.Warn("database migrations failed", "error", err)
+			} else {
+				slog.Info("database migrations completed")
+			}
 			slog.Info("database router enabled", "read_replicas", len(cfg.PostgresReadDSNs))
 		}
 	}
@@ -85,6 +90,12 @@ func main() {
 			// 幂等 seed 默认租户（不依赖迁移状态；缺失时注册会违反外键 23503）
 			if err := db.EnsureDefaultTenant(ctx, db.Pool); err != nil {
 				slog.Warn("ensure default tenant failed", "error", err)
+			}
+			// 执行数据库迁移（Alembic upgrade head）
+			if err := db.RunMigrations(cfg.PostgresDSN); err != nil {
+				slog.Warn("database migrations failed", "error", err)
+			} else {
+				slog.Info("database migrations completed")
 			}
 		}
 	}
