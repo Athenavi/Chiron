@@ -72,13 +72,16 @@ func (h *MediaHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 先插入数据库获取 UUID（含 parent_id，子文件夹上传不落到根目录）
-	var assetID string
-	err = db.Pool.QueryRow(r.Context(),
+	assetID, err := id.UUID()
+	if err != nil {
+		logAndRespond(w, err, http.StatusInternalServerError, "generate id failed")
+		return
+	}
+	_, err = db.Pool.Exec(r.Context(),
 		`INSERT INTO media_assets (id, tenant_id, user_id, type, name, file_url, mime_type, category, size, parent_id, created_at, updated_at)
-		 VALUES (gen_random_uuid(), $1, $2, $3, $4, '', $5, $6, $7, $8, NOW(), NOW())
-		 RETURNING id`,
-		tenantID, claims.UserID, assetType, name, mimeType, nullableStr(category), fileSize, parentID,
-	).Scan(&assetID)
+		 VALUES ($1, $2, $3, $4, $5, '', $6, $7, $8, $9, NOW(), NOW())`,
+		assetID, tenantID, claims.UserID, assetType, name, mimeType, nullableStr(category), fileSize, parentID,
+	)
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "create asset failed")
 		return

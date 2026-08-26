@@ -132,7 +132,46 @@ print(f"[Alembic] Database URL: {safe_url}")
 if db_url:
     # Ensure postgresql:// prefix for SQLAlchemy
     if db_url.startswith('postgres://'):
-        db_url = 'postgresql' + db_url[9:]
+        db_url = db_url.replace('postgres://', 'postgresql://', 1)
+    
+    # URL-encode the password if it contains special characters
+    # Use regex to extract and re-encode the password portion
+    from urllib.parse import quote
+    import re
+    
+    try:
+        # Match pattern: postgresql://user:password@host...
+        # Use greedy match for password to handle @ in password
+        # The last @ before host is the separator
+        match = re.match(r'(postgresql://[^:]+:)(.+)(@[^@]+:\d+/.+)', db_url)
+        if match:
+            prefix = match.group(1)  # postgresql://user:
+            raw_password = match.group(2)  # raw password (may contain @ and other special chars)
+            suffix = match.group(3)  # @host:port/db?params
+            
+            # URL-encode the password
+            from urllib.parse import quote
+            encoded_password = quote(raw_password, safe='')
+            db_url = prefix + encoded_password + suffix
+            print(f"[Alembic] Password URL-encoded successfully")
+        else:
+            # Try simpler pattern without port
+            match = re.match(r'(postgresql://[^:]+:)(.+)(@[^@:]+\..+)', db_url)
+            if match:
+                prefix = match.group(1)
+                raw_password = match.group(2)
+                suffix = match.group(3)
+                
+                from urllib.parse import quote
+                encoded_password = quote(raw_password, safe='')
+                db_url = prefix + encoded_password + suffix
+                print(f"[Alembic] Password URL-encoded successfully (simple pattern)")
+            else:
+                print(f"[Alembic] Warning: Could not parse URL structure for password encoding")
+                print(f"[Alembic] Debug: db_url = {db_url}")
+    except Exception as e:
+        print(f"[Alembic] Warning: Failed to encode URL: {e}")
+    
     config.set_main_option("sqlalchemy.url", db_url)
 
 # add your model's MetaData object here
