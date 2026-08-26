@@ -1,4 +1,4 @@
-﻿{
+{
   "port": "8080",
   "llm_provider": "openai",
   "llm_model": "gpt-4o",

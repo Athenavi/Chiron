@@ -1,33 +1,7 @@
 # ORM 模型定义 (V1)
-# 由代码生成器消费 - 基于 migrations/20260825000001_initial.up.sql
 # 所有 orm: true 的模型将自动生成 SQLAlchemy 模型文件
 
 models:
-  SchemaMigration:
-    table: schema_migrations
-    orm: true
-    description: 数据库迁移记录
-    properties:
-      version:
-        type: integer
-        description: 迁移版本号
-        primary_key: true
-        db_type: bigint
-      name:
-        type: string
-        maxLength: 255
-        description: 迁移名称
-      checksum:
-        type: string
-        maxLength: 128
-        description: 校验和
-        nullable: true
-      applied_at:
-        type: string
-        format: date-time
-        description: 应用时间
-        default: now()
-
   AgentRegistry:
     table: agent_registry
     orm: true
