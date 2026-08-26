@@ -13,7 +13,7 @@ importers:
         version: 7.0.1(vue@3.5.41(typescript@6.0.3))
       '@file-viewer/preset-all':
         specifier: ^2.2.9
-        version: 2.3.3(three@0.184.0)
+        version: 2.3.3(three@0.185.1)
       '@file-viewer/vue3':
         specifier: ^2.2.9
         version: 2.3.0(typescript@6.0.3)
@@ -74,6 +74,9 @@ importers:
       qrcode:
         specifier: ^1.5.4
         version: 1.5.4
+      three:
+        specifier: ^0.185.1
+        version: 0.185.1
       vue:
         specifier: ^3.5.39
         version: 3.5.41(typescript@6.0.3)
@@ -2811,6 +2814,9 @@ packages:
   three@0.184.0:
     resolution: {integrity: sha512-wtTRjG92pM5eUg/KuUnHsqSAlPM296brTOcLgMRqEeylYTh/CdtvKUvCyyCQTzFuStieWxvZb8mVTMvdPyUpxg==}
 
+  three@0.185.1:
+    resolution: {integrity: sha512-5aojFCXKwnjBRZvUnt3WFfEcvUJgkN5LlijRFN95hMy8WVkG4I0QNcJE+OuWvuJ0bOdStrbfXn0pkd6/QyiAlg==}
+
   throttle-debounce@5.0.2:
     resolution: {integrity: sha512-B71/4oyj61iNH0KeCamLuE2rmKuTO5byTOSVwECM5FA7TiAiAW+UqTKZ9ERueC4qvgSttUhdmq1mXC3kJqGX7A==}
     engines: {node: '>=12.22'}
@@ -3526,12 +3532,12 @@ snapshots:
       tinycolor2: 1.6.0
       utif: 3.1.0
 
-  '@file-viewer/preset-all@2.3.3(three@0.184.0)':
+  '@file-viewer/preset-all@2.3.3(three@0.185.1)':
     dependencies:
       '@file-viewer/core': 2.3.0
       '@file-viewer/renderer-3d': 2.3.0
       '@file-viewer/renderer-archive': 2.3.0
-      '@file-viewer/renderer-cad': 2.3.0(three@0.184.0)
+      '@file-viewer/renderer-cad': 2.3.0(three@0.185.1)
       '@file-viewer/renderer-data': 2.3.0
       '@file-viewer/renderer-drawing': 2.3.0
       '@file-viewer/renderer-eda': 2.3.0
@@ -3567,10 +3573,10 @@ snapshots:
       jszip: 3.10.1
       libarchive.js: 2.0.2
 
-  '@file-viewer/renderer-cad@2.3.0(three@0.184.0)':
+  '@file-viewer/renderer-cad@2.3.0(three@0.185.1)':
     dependencies:
       '@file-viewer/core': 2.3.0
-      '@flyfish-dev/cad-viewer': 0.8.0(three@0.184.0)
+      '@flyfish-dev/cad-viewer': 0.8.0(three@0.185.1)
     transitivePeerDependencies:
       - three
 
@@ -3735,11 +3741,11 @@ snapshots:
 
   '@floating-ui/utils@0.2.12': {}
 
-  '@flyfish-dev/cad-viewer@0.8.0(three@0.184.0)':
+  '@flyfish-dev/cad-viewer@0.8.0(three@0.185.1)':
     dependencies:
       '@mlightcad/libredwg-web': 0.7.9
       '@mlightcad/shx-parser': 1.4.5
-      dwf-viewer: 0.6.4(three@0.184.0)
+      dwf-viewer: 0.6.4(three@0.185.1)
       dxf-parser: 1.1.2
     transitivePeerDependencies:
       - three
@@ -5047,9 +5053,9 @@ snapshots:
       es-errors: 1.3.0
       gopd: 1.2.0
 
-  dwf-viewer@0.6.4(three@0.184.0):
+  dwf-viewer@0.6.4(three@0.185.1):
     optionalDependencies:
-      three: 0.184.0
+      three: 0.185.1
 
   dxf-parser@1.1.2:
     dependencies:
@@ -6098,6 +6104,8 @@ snapshots:
   symbol-tree@3.2.4: {}
 
   three@0.184.0: {}
+
+  three@0.185.1: {}
 
   throttle-debounce@5.0.2: {}
 
