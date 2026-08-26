@@ -225,7 +225,8 @@ func (h *PluginHandler) Install(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 浼佷笟甯傚満闂ㄦ帶锛氬競鍦哄瓨鍦ㄥ悓鍚?published 鏉＄洰涓旂鎴锋湭鍚敤鏃剁姝㈠畨瑁?	// 锛堟煡璇㈠け璐?/ 鏈笂鏋惰兘鍔涚敱 IsItemEnabledForTenant 鍐呴儴 fail-open 鏀捐锛?	if enabled, _ := IsItemEnabledForTenant(r.Context(), "plugin", name, h.resolveTenant(r)); !enabled {
+	// 浼佷笟甯傚満闂ㄦ帶锛氬競鍦哄瓨鍦ㄥ悓鍚?published 鏉＄洰涓旂鎴锋湭鍚敤鏃剁姝㈠畨瑁?	// 锛堟煡璇㈠け璐?/ 鏈笂鏋惰兘鍔涚敱 IsItemEnabledForTenant 鍐呴儴 fail-open 鏀捐锛
+	if enabled, _ := IsItemEnabledForTenant(r.Context(), "plugin", name, h.resolveTenant(r)); !enabled {
 		Forbidden(w, "plugin is not enabled for this tenant by market policy")
 		return
 	}

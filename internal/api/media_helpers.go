@@ -12,7 +12,8 @@ func wouldCreateCycle(getParent func(id string) (string, error), id, newParent s
 	if id == newParent {
 		return true, nil
 	}
-	// 鏍圭洰褰曪紙绌轰覆锛夋病鏈夌埗鑺傜偣锛岀洿鎺ュ垽瀹氭棤鐜?	if newParent == "" {
+	// 鏍圭洰褰曪紙绌轰覆锛夋病鏈夌埗鑺傜偣锛岀洿鎺ュ垽瀹氭棤鐜
+	if newParent == "" {
 		return false, nil
 	}
 	cur := newParent

@@ -117,7 +117,8 @@ func (h *UploadHandler) Init(w http.ResponseWriter, r *http.Request) {
 		BadRequest(w, "invalid file name")
 		return
 	}
-	// P0 瀛樺偍鍨?XSS 闃叉姢锛堝垎鐗囪矾寰勮ˉ榻愶級锛氬彲鎵ц/鑴氭湰 MIME 涓?html/xml 绫绘墿灞曞悕涓€寰嬫嫆缁?	// 锛堢洿浼犺矾寰勫凡鏈?isExecutableMIME锛涙澶勮鐩栧垎鐗囦笂浼狅紝閬垮厤 .html 琚寜 text/html 鍚屾簮杈撳嚭锛?	if isExecutableMIME(body.MimeType, body.Name) {
+	// P0 瀛樺偍鍨?XSS 闃叉姢锛堝垎鐗囪矾寰勮ˉ榻愶級锛氬彲鎵ц/鑴氭湰 MIME 涓?html/xml 绫绘墿灞曞悕涓€寰嬫嫆缁?	// 锛堢洿浼犺矾寰勫凡鏈?isExecutableMIME锛涙澶勮鐩栧垎鐗囦笂浼狅紝閬垮厤 .html 琚寜 text/html 鍚屾簮杈撳嚭锛
+	if isExecutableMIME(body.MimeType, body.Name) {
 		BadRequest(w, "file type not allowed")
 		return
 	}
@@ -133,7 +134,8 @@ func (h *UploadHandler) Init(w http.ResponseWriter, r *http.Request) {
 		BadRequest(w, "purpose must be media / kb_doc / generic")
 		return
 	}
-	// P0-P3 闃叉姢锛歬b_doc 浼氭暣鏂囦欢璇诲叆鍐呭瓨锛堢煡璇嗘枃妗?content 鍒楋級锛岄檺鍒跺ぇ灏?	if body.Purpose == "kb_doc" && body.Size > maxKBDocSize {
+	// P0-P3 闃叉姢锛歬b_doc 浼氭暣鏂囦欢璇诲叆鍐呭瓨锛堢煡璇嗘枃妗?content 鍒楋級锛岄檺鍒跺ぇ灏
+	if body.Purpose == "kb_doc" && body.Size > maxKBDocSize {
 		BadRequest(w, "kb_doc upload too large (max 64MB)")
 		return
 	}
@@ -430,7 +432,8 @@ func (h *UploadHandler) finalizeKBDoc(r *http.Request, tenantID string, up struc
 	if up.ParentID == "" {
 		return "", fmt.Errorf("kb_doc upload requires parent_id (kb_id)")
 	}
-	// 鏍￠獙 KB 瀛樺湪涓斿綊灞炲綋鍓嶇鎴峰綋鍓嶇敤鎴?	var owner string
+	// 鏍￠獙 KB 瀛樺湪涓斿綊灞炲綋鍓嶇鎴峰綋鍓嶇敤鎴
+    var owner string
 	if err := db.Pool.QueryRow(r.Context(),
 		`SELECT user_id FROM knowledge_bases WHERE id = $1 AND tenant_id = $2`, up.ParentID, tenantID).Scan(&owner); err != nil || owner != up.UserID {
 		return "", fmt.Errorf("knowledge base not found or not owned")

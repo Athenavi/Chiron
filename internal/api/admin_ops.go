@@ -39,7 +39,8 @@ func (h *AdminHandler) registerOpsRoutes(r *http.ServeMux) {
 	r.HandleFunc("POST /domains/{id}/verify", h.VerifyDomain)
 	r.HandleFunc("POST /domains/{id}/renew-ssl", h.RenewDomainSSL)
 
-	// 鏁版嵁搴撶鐞?	r.HandleFunc("GET /database/configs", h.DatabaseConfigs)
+	// 鏁版嵁搴撶鐞
+    r.HandleFunc("GET /database/configs", h.DatabaseConfigs)
 	r.HandleFunc("GET /database/backups", h.DatabaseBackups)
 	r.HandleFunc("POST /database/backups", h.CreateDatabaseBackup)
 	r.HandleFunc("POST /database/backups/{backupId}/restore", h.RestoreDatabaseBackup)
@@ -47,15 +48,18 @@ func (h *AdminHandler) registerOpsRoutes(r *http.ServeMux) {
 	r.HandleFunc("POST /database/query", h.DatabaseQuery)
 	r.HandleFunc("POST /database/optimize/{action}", h.DatabaseOptimize)
 
-	// Redis 绠＄悊锛堝崟瀹炰緥鐪熷疄鎿嶄綔锛?	r.HandleFunc("GET /redis/slow-log", h.RedisSlowLog)
+	// Redis 绠＄悊锛堝崟瀹炰緥鐪熷疄鎿嶄綔锛
+    r.HandleFunc("GET /redis/slow-log", h.RedisSlowLog)
 	r.HandleFunc("POST /redis/flush-all", h.RedisFlushAll)
 
-	// 妯″瀷娉ㄥ唽琛?	r.HandleFunc("GET /models", h.ListModels)
+	// 妯″瀷娉ㄥ唽琛
+    r.HandleFunc("GET /models", h.ListModels)
 	r.HandleFunc("POST /models", h.CreateModel)
 	r.HandleFunc("PUT /models/{id}", h.UpdateModel)
 	r.HandleFunc("DELETE /models/{id}", h.DeleteModel)
 
-	// 瀹氭椂浠诲姟锛圖B 鎸佷箙鍖栵紱鎵ц鐢辫皟搴﹀櫒鎺ュ叆锛?	r.HandleFunc("GET /cron-jobs", h.ListCronJobs)
+	// 瀹氭椂浠诲姟锛圖B 鎸佷箙鍖栵紱鎵ц鐢辫皟搴﹀櫒鎺ュ叆锛
+    r.HandleFunc("GET /cron-jobs", h.ListCronJobs)
 	r.HandleFunc("POST /cron-jobs", h.CreateCronJob)
 	r.HandleFunc("PUT /cron-jobs/{id}", h.UpdateCronJob)
 	r.HandleFunc("DELETE /cron-jobs/{id}", h.DeleteCronJob)

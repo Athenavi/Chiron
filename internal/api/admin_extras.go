@@ -419,7 +419,6 @@ func (h *AdminHandler) hotReloadRedis(cfg map[string]interface{}) {
 	slog.Info("redis hot-swapped", "addr", addr)
 }
 
-// strFromValue 浠?JSON 瑙ｇ爜鍑虹殑鍊煎畨鍏ㄥ彇瀛楃涓诧紱闈炲瓧绗︿覆杩斿洖 ""銆
 func strFromValue(v interface{}) string {
 	if s, ok := v.(string); ok {
 		return s
@@ -427,7 +426,7 @@ func strFromValue(v interface{}) string {
 	return ""
 }
 
-// GetSettings GET /v1/admin/settings?category=... 璇诲彇鏌愬垎缁勫凡鎸佷箙鍖栭厤缃€?// 鏃犺褰曟椂杩斿洖绌?config锛堝墠绔繚鐣欓粯璁ゅ€硷級銆
+// GetSettings GET /v1/admin/settings?category=...
 func (h *AdminHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
 	category := r.URL.Query().Get("category")
 	if category == "" {

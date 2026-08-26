@@ -175,7 +175,8 @@ func (h *RPAHub) SendCommand(ctx context.Context, clientID string, cmd *RPAComma
 		h.mu.Unlock()
 	}()
 
-	// 鍙戦€佸懡浠?	if err := client.SendMessage(msg); err != nil {
+	// 鍙戦€佸懡浠
+	if err := client.SendMessage(msg); err != nil {
 		return nil, fmt.Errorf("send command: %w", err)
 	}
 

@@ -29,7 +29,8 @@ func handleSSE(w http.ResponseWriter, r *http.Request, hub *broadcast.Hub, subID
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 
-	// P1 淇锛歋SE 闀胯繛鎺ヨ眮鍏嶆湇鍔″櫒 WriteTimeout锛堥粯璁?60s 浼氬垏鏂祦锛夈€?	// 瀹㈡埛绔柇寮€浠嶇敱 r.Context().Done() 妫€娴嬨€?	if rc := http.NewResponseController(w); rc != nil {
+	// P1 淇锛歋SE 闀胯繛鎺ヨ眮鍏嶆湇鍔″櫒 WriteTimeout锛堥粯璁?60s 浼氬垏鏂祦锛夈€?	// 瀹㈡埛绔柇寮€浠嶇敱 r.Context().Done() 妫€娴嬨€
+	if rc := http.NewResponseController(w); rc != nil {
 		_ = rc.SetWriteDeadline(time.Time{})
 	}
 

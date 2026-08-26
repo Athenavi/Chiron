@@ -22,19 +22,19 @@ type Activity struct {
 func activityStatusText(status string) string {
 	switch status {
 	case "running", "processing", "pending":
-		return "杩涜涓?
+		return "处理中"
 	case "completed", "done", "active", "success":
-		return "宸插畬鎴?
+		return "完成"
 	case "failed", "error":
 		return "澶辫触"
 	case "uploading", "building":
-		return "澶勭悊涓?
+		return "上传中"
 	default:
 		return status
 	}
 }
 
-// handleActivities 杩斿洖褰撳墠鐢ㄦ埛璺ㄥ叚澶у伐浣滃彴鐨勬渶杩戞椿鍔紙鎸夋椂闂村€掑簭锛岀鎴?鐢ㄦ埛闅旂锛夈€?// 浼樺寲锛氶€氳繃 UNION ALL 鍚堝苟涓夋鏌ヨ涓哄崟娆℃暟鎹簱寰€杩斻€
+
 func handleActivities(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	if claims == nil || claims.TenantID == "" {

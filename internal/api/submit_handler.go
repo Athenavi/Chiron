@@ -52,7 +52,8 @@ func (h *SubmitHandler) SubmitApproval(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var out map[string]any
-	// S 淇锛氭妸宸查獙璇?JWT claims 鐨?user_id 涓€骞堕€忎紶锛屼緵 Python 绔牎楠?	// 鏉ョ數鑰呮槸鍚︿负浼氳瘽 owner锛岄槻姝粬浜轰唬鎵?鎷掓壒鍗遍櫓宸ュ叿銆?	if claims := auth.GetClaims(r.Context()); claims != nil {
+	// S 淇锛氭妸宸查獙璇?JWT claims 鐨?user_id 涓€骞堕€忎紶锛屼緵 Python 绔牎楠?	// 鏉ョ數鑰呮槸鍚︿负浼氳瘽 owner锛岄槻姝粬浜轰唬鎵?鎷掓壒鍗遍櫓宸ュ叿銆
+	if claims := auth.GetClaims(r.Context()); claims != nil {
 		req.UserID = claims.UserID
 	}
 	if err := h.python.PostJSON(r.Context(), "/v1/agent/approval", req, &out); err != nil {

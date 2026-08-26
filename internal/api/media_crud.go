@@ -397,7 +397,8 @@ func (h *MediaHandler) Update(w http.ResponseWriter, r *http.Request) {
 		logAndRespond(w, err, http.StatusInternalServerError, "update media asset failed")
 		return
 	}
-	// 閺嶅洨顒烽悪顒傜彌閺囧瓨鏌婇敍鍫滅瑝瑜板崬鎼烽崥宥囆?閻栧墎娲拌ぐ鏇燁梾閺屻儻绱?	if body.Tags != nil {
+	// 閺嶅洨顒烽悪顒傜彌閺囧瓨鏌婇敍鍫滅瑝瑜板崬鎼烽崥宥囆?閻栧墎娲拌ぐ鏇燁梾閺屻儻绱
+	if body.Tags != nil {
 		if _, err := db.Pool.Exec(r.Context(),
 			`UPDATE media_assets SET tags=$1, updated_at=NOW() WHERE id=$2 AND tenant_id=$3 AND user_id=$4`,
 			*body.Tags, id, claims.TenantID, claims.UserID); err != nil {
@@ -476,7 +477,8 @@ func (h *MediaHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 閺屻儴顕楃挧鍕獓楠炶埖鐗庢灞惧閺堝娼?	if err := db.ReadPool().QueryRow(ctx,
+	// 閺屻儴顕楃挧鍕獓楠炶埖鐗庢灞惧閺堝娼
+	if err := db.ReadPool().QueryRow(ctx,
 		`SELECT 1 FROM media_assets WHERE id = $1 AND tenant_id = $2 AND user_id = $3`,
 		id, claims.TenantID, claims.UserID,
 	).Scan(new(int)); err != nil {

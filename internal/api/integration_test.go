@@ -223,7 +223,8 @@ func TestIntegration_SystemTraces(t *testing.T) {
 	req2.Header.Set("Authorization", "Bearer "+adminToken)
 	w2 := httptest.NewRecorder()
 	router.ServeHTTP(w2, req2)
-	// 鏃?DB 鐜涓?traces 鏌ヨ涓嶅彲鐢紱浠呴獙璇?authMW 涓嶅啀鎷掔粷绠＄悊鍛樿姹?	if resp := w2.Result(); resp.StatusCode == http.StatusUnauthorized {
+	// 鏃?DB 鐜涓?traces 鏌ヨ涓嶅彲鐢紱浠呴獙璇?authMW 涓嶅啀鎷掔粷绠＄悊鍛樿姹
+	if resp := w2.Result(); resp.StatusCode == http.StatusUnauthorized {
 		t.Fatalf("admin token should pass authMW, got 401")
 	}
 

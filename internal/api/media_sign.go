@@ -78,7 +78,8 @@ func (h *MediaHandler) ServeSignedMedia(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "invalid signature", http.StatusForbidden)
 		return
 	}
-	// 鍙栨枃浠惰矾寰?	var filePath string
+	// 鍙栨枃浠惰矾寰
+    var filePath string
 	if err := db.ReadPool().QueryRow(r.Context(),
 		`SELECT COALESCE(file_path, '') FROM media_assets WHERE id = $1`, assetID).Scan(&filePath); err != nil || filePath == "" {
 		http.Error(w, "media not found", http.StatusNotFound)

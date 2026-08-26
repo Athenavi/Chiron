@@ -17,12 +17,10 @@ import (
 	"github.com/athenavi/chiron/internal/id"
 )
 
-// AgentHandler 绠＄悊鑷畾涔?Agent锛圖B agents 琛級+ 杩愯浼氳瘽锛坅gent_sessions锛夈€?// 鎵ц閾捐矾锛歊un 钀?session(pending) 鈫?寮傛璋?Python /v1/agents/dispatch
-// 锛圥ython 鐢?SubAgent 鐪熸墽琛岋級鈫?缁撴灉鍥炲啓 session(completed/failed)銆
 type AgentHandler struct {
 	authenticator *auth.Authenticator
 	pythonClient  *engine.PythonClient
-	sem           chan struct{} // 骞跺彂鎵ц涓婇檺锛堜笌 /submit 鐨?agentSem 鍚屾簮锛?}
+	sem           chan struct{}
 
 func NewAgentHandler(a *auth.Authenticator, pc *engine.PythonClient, sem chan struct{}) *AgentHandler {
 	h := &AgentHandler{authenticator: a, pythonClient: pc, sem: sem}
@@ -37,7 +35,6 @@ func NewAgentHandler(a *auth.Authenticator, pc *engine.PythonClient, sem chan st
 	return h
 }
 
-// Agent 鏄嚜瀹氫箟 Agent 鐨?DB 琛ㄧず銆
 type Agent struct {
 	ID             string          `json:"id"`
 	Name           string          `json:"name"`
@@ -52,7 +49,6 @@ type Agent struct {
 	UpdatedAt      time.Time       `json:"updated_at"`
 }
 
-// AgentSession 鏄竴娆?Agent 杩愯鐨勬寔涔呭寲璁板綍銆
 type AgentSession struct {
 	ID        string    `json:"id"`
 	AgentID   string    `json:"agent_id,omitempty"`
@@ -64,7 +60,6 @@ type AgentSession struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// 鈹€鈹€ 棰勭疆 Agent 鎾锛圖B agents 琛ㄤ负绌烘椂鎻掑叆鍐呯疆 3 绫伙級 鈹€鈹€
 
 type presetAgent struct {
 	Name        string         `json:"name"`
@@ -75,7 +70,6 @@ type presetAgent struct {
 	Turns       int            `json:"turns"`
 }
 
-// loadPresetAgents 浠?configs/preset_agents.json 鍔犺浇棰勭疆 Agent 瀹氫箟銆?// 鏂囦欢涓嶅瓨鍦ㄦ椂杩斿洖绌哄垪琛紙涓嶆挱绉嶄换浣曢缃?Agent锛夈€
 func loadPresetAgents() []presetAgent {
 	candidates := []string{
 		"configs/preset_agents.json",
@@ -141,9 +135,7 @@ func (h *AgentHandler) seedPresetAgents() {
 	}
 }
 
-// 鈹€鈹€ CRUD 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
-// List 杩斿洖褰撳墠绉熸埛鐨勫叏閮?Agent锛堟寜鍒涘缓鏃堕棿鍊掑簭锛夈€
 func (h *AgentHandler) List(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	rows, err := db.Pool.Query(r.Context(),
@@ -217,7 +209,6 @@ func (h *AgentHandler) Create(w http.ResponseWriter, r *http.Request) {
 	OK(w, body)
 }
 
-// Get 杩斿洖鍗曚釜 Agent锛堝繀椤诲綊灞炲綋鍓嶇鎴凤級銆
 func (h *AgentHandler) Get(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	agentID := r.PathValue("id")
@@ -233,7 +224,6 @@ func (h *AgentHandler) Get(w http.ResponseWriter, r *http.Request) {
 	OK(w, a)
 }
 
-// Update 鏇存柊 Agent 瀛楁锛坣ame/description/system_prompt/tools/llm_config/max_turns/timeout_seconds/enabled锛夈€
 func (h *AgentHandler) Update(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	agentID := r.PathValue("id")
@@ -241,8 +231,7 @@ func (h *AgentHandler) Update(w http.ResponseWriter, r *http.Request) {
 		BadRequest(w, "id is required")
 		return
 	}
-	// P1 淇锛氭敼鐢ㄦ寚閽堝瓧娈垫寜闇€鏇存柊鈥斺€斿師瀹炵幇 description/system_prompt 鎴愬瑕嗙洊
-	// 锛堝彧浼犲叾涓€娓呯┖鍙︿竴涓級锛屼笖 enabled 鏃犳潯浠跺啓鍏ワ紙涓嶄紶鍗宠閲嶇疆涓?false锛夈€?	var body struct {
+    var body struct {
 		Name           *string         `json:"name"`
 		Description    *string         `json:"description"`
 		SystemPrompt   *string         `json:"system_prompt"`
@@ -257,7 +246,6 @@ func (h *AgentHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 鍔ㄦ€?SET锛氶潪闆跺瓧娈垫墠鏇存柊锛堥伩鍏嶆妸绌哄€煎綋鈥滄竻闄も€濓級
 	sets := []string{}
 	args := []any{}
 	push := func(expr string, v any) {
@@ -323,9 +311,6 @@ func (h *AgentHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	OK(w, map[string]string{"status": "deleted"})
 }
 
-// 鈹€鈹€ 杩愯涓庝細璇?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
-
-// Run 娲惧彂浠诲姟缁?Agent锛氳惤 session(pending) 鍚庡紓姝ユ墽琛岋紝缁撴灉鍥炲啓銆
 func (h *AgentHandler) Run(w http.ResponseWriter, r *http.Request) {
 	agentID := r.PathValue("id")
 	if agentID == "" {
@@ -374,7 +359,7 @@ func (h *AgentHandler) Run(w http.ResponseWriter, r *http.Request) {
 	if timeout <= 0 {
 		timeout = 120 * time.Second
 	}
-	// P1 淇锛氭墽琛屽墠鑾峰彇骞跺彂淇″彿閲忥紝闃叉鏃犱笂闄愬苟鍙戞墦鐖嗗紩鎿?	if h.sem != nil {
+	if h.sem != nil {
 		h.sem <- struct{}{}
 	}
 	go func() {
@@ -412,7 +397,8 @@ func (h *AgentHandler) executeAgent(agent *Agent, task, sessionID, userID, tenan
 
 	_, _ = db.Pool.Exec(ctx, `UPDATE agent_sessions SET status = 'running', updated_at = NOW() WHERE id = $1`, sessionID)
 
-	// tools/llm_config 杞?map 浼犵粰 Python锛坱ools 淇濇寔 []map 缁撴瀯锛?	var tools []map[string]any
+	// tools/llm_config 杞?map 浼犵粰 Python锛坱ools 淇濇寔 []map 缁撴瀯锛
+    var tools []map[string]any
 	if len(agent.Tools) > 0 && string(agent.Tools) != "[]" {
 		_ = json.Unmarshal(agent.Tools, &tools)
 	}

@@ -160,7 +160,8 @@ func filterDiscoverByMarket(ctx context.Context, result map[string]interface{}, 
 	if db.ReadPool() == nil {
 		return
 	}
-	// 鍏煎澶氱鍝嶅簲缁撴瀯锛氬湪甯歌鍒楄〃閿腑瀹氫綅鎶€鑳芥暟缁?	var list []interface{}
+	// 鍏煎澶氱鍝嶅簲缁撴瀯锛氬湪甯歌鍒楄〃閿腑瀹氫綅鎶€鑳芥暟缁
+    var list []interface{}
 	var listKey string
 	for _, key := range []string{"skills", "items", "data", "list"} {
 		if arr, ok := result[key].([]interface{}); ok {

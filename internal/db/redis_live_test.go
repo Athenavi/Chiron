@@ -45,7 +45,8 @@ func TestRealRedis_Client(t *testing.T) {
 		t.Fatalf("del: n=%d err=%v", n, err)
 	}
 
-	// Do() 浠绘剰鍛戒护锛堟參鏃ュ織/绠＄悊鎿嶄綔锛?	if cmd := client.Do(ctx, "ECHO", "mini"); cmd.Err() != nil || cmd.Val() != "mini" {
+	// Do() 浠绘剰鍛戒护锛堟參鏃ュ織/绠＄悊鎿嶄綔锛
+	if cmd := client.Do(ctx, "ECHO", "mini"); cmd.Err() != nil || cmd.Val() != "mini" {
 		t.Fatalf("Do ECHO failed: %v", cmd.Err())
 	}
 }

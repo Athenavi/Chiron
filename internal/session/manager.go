@@ -299,7 +299,8 @@ func (m *Manager) SaveAssistantMessage(ctx context.Context, sessionID, assistant
 	if toolCallsJSON == "" {
 		toolCallsJSON = "[]"
 	}
-	// 鍏佽"绾伐鍏疯皟鐢ㄨ疆"锛坈ontent 绌?+ tool_calls 闈炵┖锛夎惤搴擄紙S 淇锛?	if assistantContent == "" && toolCallsJSON == "[]" {
+	// 鍏佽"绾伐鍏疯皟鐢ㄨ疆"锛坈ontent 绌?+ tool_calls 闈炵┖锛夎惤搴擄紙S 淇锛
+	if assistantContent == "" && toolCallsJSON == "[]" {
 		return
 	}
 	msgID, err := genID()

@@ -58,28 +58,23 @@ func (h *AdminHandler) RegisterRoutes(r *http.ServeMux) {
 	r.HandleFunc("PUT /redis", h.UpdateRedis)
 	r.HandleFunc("POST /redis/test", h.TestRedis)
 
-	// 鏂板绔偣锛氶槦鍒楃鐞?	r.HandleFunc("GET /queue", h.GetQueueStats)
+	r.HandleFunc("GET /queue", h.GetQueueStats)
 	r.HandleFunc("POST /queue/flush", h.FlushQueue)
 	r.HandleFunc("POST /queue/pause", h.PauseQueue)
 
-	// 鏂板绔偣锛氱紦瀛樼洃鎺?	r.HandleFunc("GET /cache/stats", h.GetCacheStats)
+    r.HandleFunc("GET /cache/stats", h.GetCacheStats)
 
-	// 鏂板绔偣锛氭€ц兘鐩戞帶
 	r.HandleFunc("GET /performance", h.GetPerformance)
 
-	// 鏂板绔偣锛欰PI Key 绠＄悊
 	r.HandleFunc("GET /api-keys", h.ListApiKeys)
-	// 杩愮淮绫荤鐐癸紙绉熸埛/鍩熷悕/鏁版嵁搴?Redis/妯″瀷/瀹氭椂浠诲姟锛夆€斺€?/admin 鍏ㄦ爤瀹炶
 	h.registerOpsRoutes(r)
 	r.HandleFunc("POST /api-keys", h.AddApiKey)
 	r.HandleFunc("PUT /api-keys/{id}", h.UpdateApiKey)
 	r.HandleFunc("DELETE /api-keys/{id}", h.DeleteApiKey)
 
-	// 鏂板绔偣锛氱郴缁熻缃?	r.HandleFunc("PUT /settings", h.SaveSettings)
+    r.HandleFunc("PUT /settings", h.SaveSettings)
 	r.HandleFunc("GET /settings", h.GetSettings)
 }
-
-// 閳光偓閳光偓 Metrics 閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓
 
 func (h *AdminHandler) Metrics(w http.ResponseWriter, r *http.Request) {
 	snap := monitor.Snapshot()
@@ -90,8 +85,6 @@ func (h *AdminHandler) Metrics(w http.ResponseWriter, r *http.Request) {
 	snap["api_latency_p99"] = 0
 	OK(w, snap)
 }
-
-// 閳光偓閳光偓 User Management 閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓
 
 type AdminUser struct {
 	ID        string `json:"id"`
@@ -192,14 +185,13 @@ func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		BadRequest(w, "invalid role: must be owner, admin, or user")
 		return
 	}
-	// S 瀹夊叏淇锛氶潪 owner 涓嶅彲灏嗚鑹叉彁鍗囦负 owner锛堥槻姝?admin 鎻愭潈锛?	claims := auth.GetClaims(r.Context())
+	claims := auth.GetClaims(r.Context())
 	if body.Role == "owner" && (claims == nil || claims.Role != "owner") {
 		BadRequest(w, "only owner can assign owner role")
 		return
 	}
 
-	// Build dynamic UPDATE with column name whitelist 鈥?tenant_id 浣滀负棰濆 WHERE 鏉′欢闃茶秺鏉?	// S 瀹夊叏淇锛氬垪鍚嶅繀椤绘潵鑷櫧鍚嶅崟锛岄槻姝?SQL 娉ㄥ叆
-	userColumnMap := map[string]string{
+    userColumnMap := map[string]string{
 		"email": "email",
 		"name":  "name",
 		"role":  "role",
@@ -278,8 +270,6 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 
 	OK(w, map[string]string{"status": "deleted"})
 }
-
-// 閳光偓閳光偓 System Management 閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓
 
 func (h *AdminHandler) SystemInfo(w http.ResponseWriter, r *http.Request) {
 	info := map[string]interface{}{
@@ -371,10 +361,8 @@ func dbNameFromDSN() string {
 	return "chiron"
 }
 
-// 閳光偓閳光偓 Backup & Restore 閳光偓閳光偓
 
 func (h *AdminHandler) CreateBackup(w http.ResponseWriter, r *http.Request) {
-	// P0-P4 淇锛歱g_dump 杈撳嚭娴佸紡杞彂锛岄伩鍏嶆暣搴撶紦鍐插叆鍐呭瓨瀵艰嚧 OOM
 	cmd := exec.CommandContext(r.Context(), "pg_dump", "--dbname="+extractDSN())
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -402,7 +390,6 @@ func (h *AdminHandler) RestoreBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
-	// P0-P4 闃叉姢锛氶檺鍒舵仮澶嶆枃浠跺ぇ灏忥紝閬垮厤鏁存枃浠惰鍏ュ唴瀛?	sqlData, err := io.ReadAll(io.LimitReader(file, 512<<20))
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "read file failed")
 		return
@@ -431,8 +418,6 @@ func (h *AdminHandler) RestoreBackup(w http.ResponseWriter, r *http.Request) {
 func extractDSN() string {
 	return os.Getenv("POSTGRES_DSN")
 }
-
-// 鈹€鈹€鈹€ Storage Management 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 type StorageConfig struct {
 	Backend     string `json:"backend"`
@@ -510,9 +495,9 @@ func (h *AdminHandler) UpdateStorage(w http.ResponseWriter, r *http.Request) {
 	warning := ""
 	if previous != body.Backend {
 		if previous == "local" {
-			warning = "瀛樺偍鍚庣宸蹭粠 local 鍒囨崲涓?s3銆傛棫鍚庣涓殑鏂囦欢涓嶄細鑷姩杩佺Щ銆?
+			warning = "Switched from local to s3. Local storage is not migrated to S3. Please manually migrate your data if needed. ", previous, body.Backend)
 		} else {
-			warning = "瀛樺偍鍚庣宸蹭粠 s3 鍒囨崲涓?local銆傛棫鍚庣涓殑鏂囦欢涓嶄細鑷姩杩佺Щ銆?
+			warning = "Switched from s3 to local. S3 storage is not migrated to local. Please manually migrate your data if needed. ", previous, body.Backend)
 		}
 	}
 
