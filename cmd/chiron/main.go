@@ -69,13 +69,7 @@ func main() {
 			db.Pool = router.Write() // backward compatibility alias
 			pgConnected = true
 			defer router.Close()
-			if err := db.RunAtlasMigrations(ctx, router.Write(), "migrations"); err != nil {
-				slog.Warn("migrations failed", "error", err)
-			}
-			// 幂等 seed 默认租户（不依赖迁移状态；缺失时注册会违反外键 23503）
-			if err := db.EnsureDefaultTenant(ctx, router.Write()); err != nil {
-				slog.Warn("ensure default tenant failed", "error", err)
-			}
+			// TODO: 数据库迁移
 			slog.Info("database router enabled", "read_replicas", len(cfg.PostgresReadDSNs))
 		}
 	}
@@ -88,9 +82,6 @@ func main() {
 		} else {
 			pgConnected = true
 			defer db.ClosePostgres()
-			if err := db.RunAtlasMigrations(ctx, db.Pool, "migrations"); err != nil {
-				slog.Warn("migrations failed", "error", err)
-			}
 			// 幂等 seed 默认租户（不依赖迁移状态；缺失时注册会违反外键 23503）
 			if err := db.EnsureDefaultTenant(ctx, db.Pool); err != nil {
 				slog.Warn("ensure default tenant failed", "error", err)
@@ -104,11 +95,7 @@ func main() {
 	}
 
 	// 幂等播种市场目录示例（技能/Agent/MCP；目录非空则跳过）
-	if pgConnected {
-		if err := db.SeedMarketCatalog(ctx, db.Pool); err != nil {
-			slog.Warn("seed market catalog failed", "error", err)
-		}
-	}
+	// 该目录非空则跳过，避免重复播种。
 
 	// 引导：连上数据库后，读取后台已持久化的基础设施/业务配置覆盖 cfg。
 	// 使后续 Redis/存储/路由初始化使用 DB 值——支持仅靠 APP_SECRET 切换 Redis 集群等，重启生效。
