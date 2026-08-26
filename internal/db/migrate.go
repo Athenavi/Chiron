@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -59,6 +60,82 @@ func getCurrentDBRevision(python string) (string, error) {
 	return parts[0], nil
 }
 
+// listMigrationFiles 列出迁移目录下的所有 .py 文件
+func listMigrationFiles(dir string) ([]string, error) {
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	var pyFiles []string
+	for _, f := range files {
+		if !f.IsDir() && strings.HasSuffix(f.Name(), ".py") {
+			pyFiles = append(pyFiles, f.Name())
+		}
+	}
+	return pyFiles, nil
+}
+
+// findNewFile 找出新增的文件
+func findNewFile(before, after []string) string {
+	beforeSet := make(map[string]bool)
+	for _, f := range before {
+		beforeSet[f] = true
+	}
+	for _, f := range after {
+		if !beforeSet[f] {
+			return f
+		}
+	}
+	return ""
+}
+
+// isEmptyMigration 检查迁移文件是否为空（只包含模板代码）
+func isEmptyMigration(filePath string) (bool, error) {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return false, err
+	}
+	
+	text := string(content)
+	// 检查是否包含实际的数据库操作
+	hasOperations := strings.Contains(text, "op.create_table") ||
+		strings.Contains(text, "op.add_column") ||
+		strings.Contains(text, "op.drop_column") ||
+		strings.Contains(text, "op.alter_column") ||
+		strings.Contains(text, "op.create_index") ||
+		strings.Contains(text, "op.drop_index") ||
+		strings.Contains(text, "op.create_foreign_key") ||
+		strings.Contains(text, "op.drop_table")
+	
+	return !hasOperations, nil
+}
+
+// updateVersionLockDB 更新 version.lock 文件中的 db revision
+func updateVersionLockDB(newRevision string) error {
+	data, err := os.ReadFile("data/version.lock")
+	if err != nil {
+		return fmt.Errorf("failed to read version.lock: %w", err)
+	}
+
+	var lock versionLock
+	if err := json.Unmarshal(data, &lock); err != nil {
+		return fmt.Errorf("failed to parse version.lock: %w", err)
+	}
+
+	lock.DB = newRevision
+
+	updated, err := json.MarshalIndent(lock, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal version.lock: %w", err)
+	}
+
+	if err := os.WriteFile("data/version.lock", updated, 0644); err != nil {
+		return fmt.Errorf("failed to write version.lock: %w", err)
+	}
+
+	return nil
+}
+
 // RunMigrations 执行 Alembic 数据库迁移（alembic upgrade head）
 // dsn 为 PostgreSQL 连接串，通过环境变量 DATABASE_DSN 传递给 Alembic
 func RunMigrations(dsn string) error {
@@ -94,7 +171,12 @@ func RunMigrations(dsn string) error {
 		return nil
 	}
 
-	// Step 2: 版本不一致时，自动生成迁移脚本
+	// Step 2: 版本不一致时，检查是否需要生成迁移脚本
+	// 先获取当前迁移文件列表
+	migrationsDir := filepath.Join(".", "migrations", "versions")
+	beforeFiles, _ := listMigrationFiles(migrationsDir)
+
+	// 执行 autogenerate
 	versionDescribe := fmt.Sprintf("db_%s", lockRevision)
 	revisionCmd := exec.Command(python, "-m", "alembic", "--config", "alembic.ini",
 		"revision", "--autogenerate", "-m", versionDescribe)
@@ -102,6 +184,22 @@ func RunMigrations(dsn string) error {
 	revisionCmd.Stdout = os.Stdout
 	revisionCmd.Stderr = os.Stderr
 	_ = revisionCmd.Run() // 忽略错误（空迁移会报错，不影响）
+
+	// 检查是否生成了新的迁移文件
+	afterFiles, _ := listMigrationFiles(migrationsDir)
+	newFile := findNewFile(beforeFiles, afterFiles)
+
+	if newFile != "" {
+		// 检查新文件是否为空迁移
+		isEmpty, err := isEmptyMigration(filepath.Join(migrationsDir, newFile))
+		if err == nil && isEmpty {
+			// 删除空迁移文件
+			os.Remove(filepath.Join(migrationsDir, newFile))
+			fmt.Printf("Empty migration detected and removed, skipping migration generation\n")
+		} else if err == nil {
+			fmt.Printf("Migration generated: %s\n", newFile)
+		}
+	}
 
 	// Step 3: 执行迁移
 	runCmd := exec.Command(python, "-m", "alembic", "--config", "alembic.ini", "upgrade", "head")
