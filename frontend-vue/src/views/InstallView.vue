@@ -157,6 +157,14 @@ async function skipStep1() {
 // ── 三步骤向导提交 ──
 async function submitStep2() {
   console.log('[Install] submitStep2 called', dbForm.value)
+  
+  // 验证 APP_SECRET 长度（至少32字符）
+  const appSecret = dbForm.value.app_secret?.trim()
+  if (appSecret && appSecret.length < 32) {
+    message.warning('APP_SECRET 长度不足，请使用至少 32 字符的随机字符串')
+    return
+  }
+  
   if (!dbForm.value.postgres_dsn.trim()) {
     message.warning('PostgreSQL 连接串（DSN）必填')
     return
@@ -165,7 +173,7 @@ async function submitStep2() {
   try {
     console.log('[Install] calling postInstallStep2...')
     const result = await postInstallStep2({
-      app_secret: dbForm.value.app_secret.trim() || undefined,
+      app_secret: appSecret || undefined,
       postgres_dsn: dbForm.value.postgres_dsn.trim(),
       redis_addr: dbForm.value.redis_addr.trim() || undefined,
       redis_password: dbForm.value.redis_password || undefined,

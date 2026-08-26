@@ -157,6 +157,10 @@ func main() {
 	if setupMode {
 		slog.Warn("auth skipped: setup mode (APP_SECRET 未配置，安装完成后重启生效)")
 	} else {
+		// 确保 JWT_SECRET 环境变量已设置（从 cfg.JWTSecret 派生）
+		if cfg.JWTSecret != "" {
+			os.Setenv("JWT_SECRET", cfg.JWTSecret)
+		}
 		auth.InitJWTAuth()
 		if !config.ValidateJWTSecret(cfg.JWTSecret) {
 			slog.Error("FATAL: JWT_SECRET is weak or not set. Generate a strong secret (32+ chars) and set JWT_SECRET env var")
