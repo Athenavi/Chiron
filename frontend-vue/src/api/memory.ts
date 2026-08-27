@@ -56,7 +56,8 @@ export async function listMemory(includeArchived = false): Promise<ProfileListRe
   const { data } = await api.get('/v1/memory/profile', {
     params: includeArchived ? { archived: 'true' } : {},
   })
-  return data
+  // 兼容两种响应格式：{ success: true, data: {...} } 或 {...}
+  return data.data ?? data
 }
 
 /** 新建 / 更新一条记忆（同 slot+key 自动更新） */

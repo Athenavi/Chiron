@@ -649,7 +649,13 @@ class MemoryService:
         user_id: str,
     ) -> dict[str, Any]:
         """整理任务状态（API 层桥接）。"""
-        return {"status": "idle"}
+        return {
+            "running": False,
+            "started_at": None,
+            "finished_at": None,
+            "result": None,
+            "error": None,
+        }
 
     async def list_summaries(
         self,

@@ -240,8 +240,8 @@ async function loadProfile() {
   error.value = false
   try {
     const data = await listMemory()
-    entries.value = data.entries
-    counts.value = data.counts
+    entries.value = data.items || []
+    counts.value = data.counts || {}
     total.value = data.total
     organize.value = data.organize
   } catch (e: any) {

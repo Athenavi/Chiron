@@ -223,8 +223,12 @@ func (h *UploadHandler) PutChunk(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if _, err := db.Pool.Exec(r.Context(),
-		`UPDATE uploads SET chunks_received = array_append(chunks_received, $1), updated_at = NOW()
-		 WHERE id = $2 AND tenant_id = $3 AND NOT ($1 = ANY(chunks_received))`, idxStr, uploadID, claims.TenantID); err != nil {
+		`UPDATE uploads SET chunks_received = jsonb_set(
+			COALESCE(NULLIF(chunks_received, '')::jsonb, '[]'::jsonb),
+			ARRAY[CAST($1 AS text)],
+			to_jsonb(true)
+		)::text, updated_at = NOW()
+		 WHERE id = $2 AND tenant_id = $3`, idxStr, uploadID, claims.TenantID); err != nil {
 		slog.Warn("failed to record upload", "error", err)
 	}
 	OK(w, map[string]interface{}{"upload_id": uploadID, "index": idx, "received": true})
