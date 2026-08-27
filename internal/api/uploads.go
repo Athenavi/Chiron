@@ -224,11 +224,16 @@ func (h *UploadHandler) PutChunk(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if _, err := db.Pool.Exec(r.Context(),
-		`UPDATE uploads SET chunks_received = jsonb_set(
-			COALESCE(NULLIF(chunks_received, '')::jsonb, '[]'::jsonb),
-			ARRAY[CAST($1 AS text)],
-			to_jsonb($1::text)
-		)::text, updated_at = NOW()
+		`UPDATE uploads SET chunks_received = (
+			SELECT jsonb_agg(elem)::text
+			FROM (
+				SELECT elem FROM jsonb_array_elements_text(
+					COALESCE(NULLIF(chunks_received, '')::jsonb, '[]'::jsonb)
+				) AS elem
+				UNION
+				SELECT $1::text AS elem
+			) sub
+		), updated_at = NOW()
 		 WHERE id = $2 AND tenant_id = $3`, idxStr, uploadID, claims.TenantID); err != nil {
 		slog.Warn("failed to record upload", "error", err)
 	}
@@ -530,7 +535,8 @@ func (h *UploadHandler) finalizeGeneric(up struct {
 
 func (h *UploadHandler) RegisterRoutes(mux *http.ServeMux, authMW func(http.Handler) http.Handler, rlMW func(http.Handler) http.Handler) {
 	mux.Handle("POST /v1/uploads", authMW(rlMW(http.HandlerFunc(h.Init))))
-	mux.Handle("PUT /v1/uploads/{id}/chunks/{index}", authMW(rlMW(http.HandlerFunc(h.PutChunk))))
+	// 上传分片使用更宽松的限流策略（避免并发上传触发限流）
+	mux.Handle("PUT /v1/uploads/{id}/chunks/{index}", authMW(http.HandlerFunc(h.PutChunk)))
 	mux.Handle("GET /v1/uploads/{id}", authMW(rlMW(http.HandlerFunc(h.GetProgress))))
 	mux.Handle("POST /v1/uploads/{id}/complete", authMW(rlMW(http.HandlerFunc(h.Complete))))
 }
