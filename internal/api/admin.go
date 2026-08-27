@@ -106,12 +106,7 @@ func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 		Unauthorized(w, "missing tenant context")
 		return
 	}
-	pool := db.ReadPool()
-	if pool == nil {
-		ServiceUnavailable(w, "database not available")
-		return
-	}
-	rows, err := pool.Query(r.Context(),
+	rows, err := db.GlobalDBManager.Query(r.Context(),
 		`SELECT id, email, name, role, created_at, updated_at
 		 FROM users WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT 100`,
 		tenantID)
@@ -152,15 +147,9 @@ func (h *AdminHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pool := db.ReadPool()
-	if pool == nil {
-		ServiceUnavailable(w, "database not available")
-		return
-	}
-
 	var u AdminUser
 	var createdAt, updatedAt time.Time
-	err := pool.QueryRow(r.Context(),
+	err := db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT id, email, name, role, created_at, updated_at
 		 FROM users WHERE id = $1 AND tenant_id = $2`, id, tenantID).
 		Scan(&u.ID, &u.Email, &u.Name, &u.Role, &createdAt, &updatedAt)
@@ -248,7 +237,7 @@ func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	args = append(args, id, tenantID)
 
 	query := fmt.Sprintf("UPDATE users SET %s WHERE id = $%d AND tenant_id = $%d", setClauses, argIdx, argIdx+1)
-	result, err := db.Pool.Exec(r.Context(), query, args...)
+	result, err := db.GlobalDBManager.Exec(r.Context(), query, args...)
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "update user failed")
 		return
@@ -280,7 +269,7 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err := db.Pool.Exec(r.Context(),
+	_, err := db.GlobalDBManager.Exec(r.Context(),
 		`DELETE FROM users WHERE id = $1 AND tenant_id = $2`, id, tenantID)
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "delete user failed")
@@ -319,7 +308,7 @@ func (h *AdminHandler) TriggerMaintenance(w http.ResponseWriter, r *http.Request
 
 	switch body.Action {
 	case "vacuum":
-		if _, err := db.Pool.Exec(r.Context(), "VACUUM ANALYZE"); err != nil {
+		if _, err := db.GlobalDBManager.Exec(r.Context(), "VACUUM ANALYZE"); err != nil {
 			logAndRespond(w, err, http.StatusInternalServerError, "vacuum failed")
 			return
 		}
@@ -329,12 +318,12 @@ func (h *AdminHandler) TriggerMaintenance(w http.ResponseWriter, r *http.Request
 			InternalError(w, "invalid database name")
 			return
 		}
-		if _, err := db.Pool.Exec(r.Context(), fmt.Sprintf("REINDEX DATABASE %s", dbName)); err != nil {
+		if _, err := db.GlobalDBManager.Exec(r.Context(), fmt.Sprintf("REINDEX DATABASE %s", dbName)); err != nil {
 			logAndRespond(w, err, http.StatusInternalServerError, "reindex failed")
 			return
 		}
 	case "analyze":
-		if _, err := db.Pool.Exec(r.Context(), "ANALYZE"); err != nil {
+		if _, err := db.GlobalDBManager.Exec(r.Context(), "ANALYZE"); err != nil {
 			logAndRespond(w, err, http.StatusInternalServerError, "analyze failed")
 			return
 		}
@@ -423,7 +412,7 @@ func (h *AdminHandler) RestoreBackup(w http.ResponseWriter, r *http.Request) {
 		BadRequest(w, "backup file too large (max 512MB)")
 		return
 	}
-	tx, err := db.Pool.Begin(r.Context())
+	tx, err := db.GlobalDBManager.Begin(r.Context())
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "begin tx failed")
 		return

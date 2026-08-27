@@ -1,8 +1,8 @@
-"""auto_migration
+"""initial_schema
 
-Revision ID: 3e447730490a
+Revision ID: 433e78cd17b7
 Revises: 
-Create Date: 2026-08-27 08:46:59.866937
+Create Date: 2026-08-27 17:46:58.684171
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '3e447730490a'
+revision: str = '433e78cd17b7'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -40,6 +40,22 @@ def upgrade() -> None:
     sa.Column('rate_limit_qps', sa.Integer(), nullable=True),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('key_hash')
+    )
+    op.create_table('admin_cron_jobs',
+    sa.Column('id', sa.String(length=36), nullable=False),
+    sa.Column('job_id', sa.String(length=50), nullable=True),
+    sa.Column('name', sa.String(length=100), nullable=True),
+    sa.Column('schedule', sa.String(length=50), nullable=True),
+    sa.Column('last_run_at', sa.String(length=255), nullable=True),
+    sa.Column('last_run_status', sa.String(length=20), nullable=True),
+    sa.Column('last_error', sa.Text(), nullable=True),
+    sa.Column('next_run_at', sa.String(length=255), nullable=True),
+    sa.Column('enabled', sa.Boolean(), nullable=True),
+    sa.Column('metadata_data', sa.JSON(), nullable=True),
+    sa.Column('created_at', sa.String(length=255), nullable=True),
+    sa.Column('updated_at', sa.String(length=255), nullable=True),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('job_id')
     )
     op.create_table('admin_database_backups',
     sa.Column('id', sa.String(length=36), nullable=False),
@@ -89,7 +105,7 @@ def upgrade() -> None:
     sa.Column('is_default', sa.Boolean(), nullable=True),
     sa.Column('input_cost_per_1m', sa.String(length=255), nullable=True),
     sa.Column('output_cost_per_1m', sa.String(length=255), nullable=True),
-    sa.Column('config_json', sa.String(length=255), nullable=True),
+    sa.Column('config_json', sa.JSON(), nullable=True),
     sa.Column('created_at', sa.String(length=255), nullable=True),
     sa.Column('updated_at', sa.String(length=255), nullable=True),
     sa.PrimaryKeyConstraint('id'),
@@ -131,7 +147,7 @@ def upgrade() -> None:
     sa.Column('created_at', sa.String(length=255), nullable=True),
     sa.Column('updated_at', sa.String(length=255), nullable=True),
     sa.Column('created_by', sa.String(length=50), nullable=True),
-    sa.Column('features', sa.String(length=255), nullable=True),
+    sa.Column('features', sa.JSON(), nullable=True),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('tenant_id')
     )
@@ -143,11 +159,11 @@ def upgrade() -> None:
     sa.Column('started_at', sa.String(length=255), nullable=True),
     sa.Column('completed_at', sa.String(length=255), nullable=True),
     sa.Column('duration_ms', sa.Integer(), nullable=True),
-    sa.Column('input_data', sa.String(length=255), nullable=True),
-    sa.Column('output_data', sa.String(length=255), nullable=True),
+    sa.Column('input_data', sa.JSON(), nullable=True),
+    sa.Column('output_data', sa.JSON(), nullable=True),
     sa.Column('error_message', sa.Text(), nullable=True),
     sa.Column('triggered_by', sa.String(length=50), nullable=True),
-    sa.Column('node_results', sa.String(length=255), nullable=True),
+    sa.Column('node_results', sa.JSON(), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('admin_workflows',
@@ -155,8 +171,8 @@ def upgrade() -> None:
     sa.Column('workflow_id', sa.String(length=50), nullable=True),
     sa.Column('name', sa.String(length=100), nullable=True),
     sa.Column('description', sa.Text(), nullable=True),
-    sa.Column('nodes', sa.String(length=255), nullable=True),
-    sa.Column('edges', sa.String(length=255), nullable=True),
+    sa.Column('nodes', sa.JSON(), nullable=True),
+    sa.Column('edges', sa.JSON(), nullable=True),
     sa.Column('error_handling_strategy', sa.String(length=20), nullable=True),
     sa.Column('timeout_ms', sa.Integer(), nullable=True),
     sa.Column('max_retries', sa.Integer(), nullable=True),
@@ -175,7 +191,7 @@ def upgrade() -> None:
     sa.Column('name', sa.String(length=128), nullable=True),
     sa.Column('description', sa.Text(), nullable=False),
     sa.Column('enabled', sa.Boolean(), nullable=True),
-    sa.Column('config', sa.String(length=255), nullable=True),
+    sa.Column('config', sa.JSON(), nullable=True),
     sa.Column('created_at', sa.String(length=255), nullable=True),
     sa.PrimaryKeyConstraint('agent_type')
     )
@@ -216,7 +232,7 @@ def upgrade() -> None:
     sa.Column('type', sa.String(length=8), nullable=True),
     sa.Column('name', sa.String(length=128), nullable=True),
     sa.Column('version', sa.String(length=32), nullable=True),
-    sa.Column('manifest', sa.String(length=255), nullable=True),
+    sa.Column('manifest', sa.JSON(), nullable=True),
     sa.Column('status', sa.String(length=16), nullable=True),
     sa.Column('created_by', sa.String(length=36), nullable=True),
     sa.Column('created_at', sa.String(length=255), nullable=True),
@@ -238,7 +254,7 @@ def upgrade() -> None:
     sa.Column('type', sa.String(length=16), nullable=True),
     sa.Column('name', sa.String(length=128), nullable=True),
     sa.Column('description', sa.Text(), nullable=False),
-    sa.Column('payload', sa.String(length=255), nullable=True),
+    sa.Column('payload', sa.JSON(), nullable=True),
     sa.Column('published', sa.Boolean(), nullable=True),
     sa.Column('created_at', sa.String(length=255), nullable=True),
     sa.Column('updated_at', sa.String(length=255), nullable=True),
@@ -249,7 +265,7 @@ def upgrade() -> None:
     sa.Column('privacy_mode', sa.Boolean(), nullable=True),
     sa.Column('data_retention_days', sa.Integer(), nullable=True),
     sa.Column('training_allowed', sa.Boolean(), nullable=True),
-    sa.Column('redaction_rules', sa.String(length=255), nullable=True),
+    sa.Column('redaction_rules', sa.JSON(), nullable=True),
     sa.Column('updated_at', sa.String(length=255), nullable=True),
     sa.PrimaryKeyConstraint('tenant_id')
     )
@@ -282,8 +298,8 @@ def upgrade() -> None:
     sa.Column('user_id', sa.String(length=64), nullable=True),
     sa.Column('session_id', sa.String(length=64), nullable=True),
     sa.Column('content', sa.Text(), nullable=False),
-    sa.Column('topics', sa.String(length=255), nullable=True),
-    sa.Column('entities', sa.String(length=255), nullable=True),
+    sa.Column('topics', sa.JSON(), nullable=True),
+    sa.Column('entities', sa.JSON(), nullable=True),
     sa.Column('turn_start', sa.Integer(), nullable=True),
     sa.Column('turn_end', sa.Integer(), nullable=True),
     sa.Column('content_hash', sa.String(length=80), nullable=True),
@@ -330,7 +346,7 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('category', sa.String(length=32), nullable=True),
     sa.Column('key', sa.String(length=64), nullable=True),
-    sa.Column('value', sa.String(length=255), nullable=True),
+    sa.Column('value', sa.JSON(), nullable=True),
     sa.Column('updated_at', sa.String(length=255), nullable=True),
     sa.Column('updated_by', sa.String(length=36), nullable=True),
     sa.Column('encrypted', sa.Boolean(), nullable=True),
@@ -348,7 +364,7 @@ def upgrade() -> None:
     sa.Column('session_id', sa.String(length=36), nullable=True),
     sa.Column('message_id', sa.String(length=36), nullable=True),
     sa.Column('tool_name', sa.String(length=128), nullable=True),
-    sa.Column('input', sa.String(length=255), nullable=True),
+    sa.Column('input', sa.JSON(), nullable=True),
     sa.Column('output', sa.Text(), nullable=False),
     sa.Column('is_error', sa.Boolean(), nullable=True),
     sa.Column('duration_ms', sa.BigInteger(), nullable=True),
@@ -361,7 +377,7 @@ def upgrade() -> None:
     sa.Column('user_id', sa.String(length=36), nullable=True),
     sa.Column('title', sa.String(length=255), nullable=True),
     sa.Column('mode', sa.String(length=16), nullable=True),
-    sa.Column('shared_context', sa.String(length=255), nullable=True),
+    sa.Column('shared_context', sa.JSON(), nullable=True),
     sa.Column('created_at', sa.String(length=255), nullable=True),
     sa.Column('updated_at', sa.String(length=255), nullable=True),
     sa.PrimaryKeyConstraint('id')
@@ -371,7 +387,7 @@ def upgrade() -> None:
     sa.Column('user_id', sa.String(length=64), nullable=False),
     sa.Column('slot', sa.String(length=32), nullable=False),
     sa.Column('item_key', sa.String(length=128), nullable=False),
-    sa.Column('item_value', sa.String(length=255), nullable=True),
+    sa.Column('item_value', sa.JSON(), nullable=True),
     sa.Column('confidence', sa.Integer(), nullable=True),
     sa.Column('source', sa.String(length=16), nullable=True),
     sa.Column('version', sa.Integer(), nullable=True),
@@ -387,7 +403,7 @@ def upgrade() -> None:
     sa.Column('workflow_id', sa.String(length=64), nullable=True),
     sa.Column('workflow_name', sa.String(length=255), nullable=True),
     sa.Column('status', sa.String(length=16), nullable=True),
-    sa.Column('results', sa.String(length=255), nullable=True),
+    sa.Column('results', sa.JSON(), nullable=True),
     sa.Column('error', sa.Text(), nullable=True),
     sa.Column('created_at', sa.String(length=255), nullable=True),
     sa.Column('updated_at', sa.String(length=255), nullable=True),
@@ -449,8 +465,8 @@ def upgrade() -> None:
     sa.Column('name', sa.String(length=255), nullable=True),
     sa.Column('description', sa.Text(), nullable=True),
     sa.Column('system_prompt', sa.Text(), nullable=True),
-    sa.Column('tools', sa.String(length=255), nullable=True),
-    sa.Column('llm_config', sa.String(length=255), nullable=True),
+    sa.Column('tools', sa.JSON(), nullable=True),
+    sa.Column('llm_config', sa.JSON(), nullable=True),
     sa.Column('max_turns', sa.Integer(), nullable=True),
     sa.Column('timeout_seconds', sa.Integer(), nullable=True),
     sa.Column('enabled', sa.Boolean(), nullable=True),
@@ -505,7 +521,7 @@ def upgrade() -> None:
     sa.Column('scopes', sa.String(length=255), nullable=True),
     sa.Column('enabled', sa.Boolean(), nullable=True),
     sa.Column('auto_provision', sa.Boolean(), nullable=True),
-    sa.Column('role_mapping', sa.String(length=255), nullable=True),
+    sa.Column('role_mapping', sa.JSON(), nullable=True),
     sa.Column('created_at', sa.String(length=255), nullable=True),
     sa.Column('updated_at', sa.String(length=255), nullable=True),
     sa.Column('protocol', sa.String(length=16), nullable=True),
@@ -516,7 +532,7 @@ def upgrade() -> None:
     sa.Column('auth_url', sa.String(length=512), nullable=True),
     sa.Column('token_url', sa.String(length=512), nullable=True),
     sa.Column('userinfo_url', sa.String(length=512), nullable=True),
-    sa.Column('extra', sa.String(length=255), nullable=True),
+    sa.Column('extra', sa.JSON(), nullable=True),
     sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
@@ -578,10 +594,30 @@ def upgrade() -> None:
     sa.Column('name', sa.String(length=255), nullable=True),
     sa.Column('description', sa.Text(), nullable=False),
     sa.Column('campaign_type', sa.String(length=32), nullable=True),
-    sa.Column('config', sa.String(length=255), nullable=True),
+    sa.Column('config', sa.JSON(), nullable=True),
     sa.Column('status', sa.String(length=16), nullable=True),
     sa.Column('created_at', sa.String(length=255), nullable=True),
     sa.Column('updated_at', sa.String(length=255), nullable=True),
+    sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('media_assets',
+    sa.Column('id', sa.String(length=36), nullable=False),
+    sa.Column('tenant_id', sa.String(length=36), nullable=True),
+    sa.Column('user_id', sa.String(length=36), nullable=True),
+    sa.Column('type', sa.String(length=16), nullable=True),
+    sa.Column('name', sa.String(length=255), nullable=True),
+    sa.Column('file_url', sa.String(length=1024), nullable=True),
+    sa.Column('file_path', sa.String(length=512), nullable=True),
+    sa.Column('mime_type', sa.String(length=64), nullable=True),
+    sa.Column('thumbnail', sa.String(length=512), nullable=True),
+    sa.Column('metadata_data', sa.JSON(), nullable=True),
+    sa.Column('tags', sa.String(length=255), nullable=True),
+    sa.Column('category', sa.String(length=64), nullable=True),
+    sa.Column('size', sa.BigInteger(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.Column('updated_at', sa.DateTime(), nullable=True),
+    sa.Column('parent_id', sa.String(length=64), nullable=True),
     sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
@@ -603,7 +639,7 @@ def upgrade() -> None:
     sa.Column('tenant_id', sa.String(length=36), nullable=True),
     sa.Column('user_id', sa.String(length=32), nullable=True),
     sa.Column('objective', sa.String(length=255), nullable=True),
-    sa.Column('key_results', sa.String(length=255), nullable=True),
+    sa.Column('key_results', sa.JSON(), nullable=True),
     sa.Column('quarter', sa.String(length=16), nullable=True),
     sa.Column('status', sa.String(length=16), nullable=True),
     sa.Column('created_at', sa.String(length=255), nullable=True),
@@ -623,6 +659,17 @@ def upgrade() -> None:
     sa.Column('created_at', sa.String(length=255), nullable=True),
     sa.Column('updated_at', sa.String(length=255), nullable=True),
     sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('unified_messages',
+    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+    sa.Column('session_id', sa.String(length=36), nullable=True),
+    sa.Column('role', sa.String(length=16), nullable=True),
+    sa.Column('content', sa.Text(), nullable=False),
+    sa.Column('metadata_data', sa.JSON(), nullable=True),
+    sa.Column('error', sa.Text(), nullable=False),
+    sa.Column('created_at', sa.String(length=255), nullable=True),
+    sa.ForeignKeyConstraint(['session_id'], ['unified_sessions.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('uploads',
@@ -657,7 +704,7 @@ def upgrade() -> None:
     sa.Column('updated_at', sa.String(length=255), nullable=True),
     sa.Column('phone', sa.String(length=32), nullable=True),
     sa.Column('password_set', sa.Boolean(), nullable=True),
-    sa.Column('settings', sa.String(length=255), nullable=True),
+    sa.Column('settings', sa.JSON(), nullable=True),
     sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('storage_id')
@@ -709,7 +756,7 @@ def upgrade() -> None:
     sa.Column('action', sa.String(length=64), nullable=True),
     sa.Column('resource_type', sa.String(length=64), nullable=True),
     sa.Column('resource_id', sa.String(length=64), nullable=True),
-    sa.Column('details', sa.String(length=255), nullable=True),
+    sa.Column('details', sa.JSON(), nullable=True),
     sa.Column('ip_address', sa.String(length=45), nullable=True),
     sa.Column('created_at', sa.String(length=255), nullable=True),
     sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ),
@@ -731,7 +778,7 @@ def upgrade() -> None:
     sa.Column('tenant_id', sa.String(length=36), nullable=True),
     sa.Column('role_id', sa.String(length=36), nullable=True),
     sa.Column('allowed_models', sa.String(length=255), nullable=True),
-    sa.Column('per_model_limits', sa.String(length=255), nullable=True),
+    sa.Column('per_model_limits', sa.JSON(), nullable=True),
     sa.Column('created_at', sa.String(length=255), nullable=True),
     sa.Column('updated_at', sa.String(length=255), nullable=True),
     sa.ForeignKeyConstraint(['role_id'], ['ent_roles.id'], ),
@@ -771,7 +818,7 @@ def upgrade() -> None:
     sa.Column('document_count', sa.Integer(), nullable=True),
     sa.Column('total_size_bytes', sa.BigInteger(), nullable=True),
     sa.Column('credits_consumed', sa.Integer(), nullable=True),
-    sa.Column('config', sa.String(length=255), nullable=True),
+    sa.Column('config', sa.JSON(), nullable=True),
     sa.Column('created_at', sa.String(length=255), nullable=True),
     sa.Column('updated_at', sa.String(length=255), nullable=True),
     sa.Column('doc_count', sa.Integer(), nullable=True),
@@ -800,8 +847,8 @@ def upgrade() -> None:
     sa.Column('type', sa.String(length=32), nullable=True),
     sa.Column('status', sa.String(length=16), nullable=True),
     sa.Column('priority', sa.Integer(), nullable=True),
-    sa.Column('payload', sa.String(length=255), nullable=True),
-    sa.Column('result', sa.String(length=255), nullable=True),
+    sa.Column('payload', sa.JSON(), nullable=True),
+    sa.Column('result', sa.JSON(), nullable=True),
     sa.Column('error', sa.Text(), nullable=True),
     sa.Column('retries', sa.Integer(), nullable=True),
     sa.Column('max_retries', sa.Integer(), nullable=True),
@@ -814,7 +861,7 @@ def upgrade() -> None:
     sa.Column('id', sa.String(length=32), nullable=False),
     sa.Column('name', sa.String(length=255), nullable=True),
     sa.Column('user_id', sa.String(length=36), nullable=True),
-    sa.Column('graph_json', sa.String(length=255), nullable=True),
+    sa.Column('graph_json', sa.JSON(), nullable=True),
     sa.Column('created_at', sa.String(length=255), nullable=True),
     sa.Column('updated_at', sa.String(length=255), nullable=True),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
@@ -835,14 +882,50 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_table('knowledge_documents',
+    sa.Column('id', sa.String(length=36), nullable=False),
+    sa.Column('knowledge_base_id', sa.String(length=36), nullable=True),
+    sa.Column('tenant_id', sa.String(length=36), nullable=True),
+    sa.Column('user_id', sa.String(length=36), nullable=True),
+    sa.Column('name', sa.String(length=255), nullable=True),
+    sa.Column('file_url', sa.String(length=1024), nullable=True),
+    sa.Column('file_type', sa.String(length=32), nullable=True),
+    sa.Column('file_size_bytes', sa.BigInteger(), nullable=True),
+    sa.Column('chunk_count', sa.Integer(), nullable=True),
+    sa.Column('status', sa.String(length=32), nullable=True),
+    sa.Column('error_message', sa.Text(), nullable=True),
+    sa.Column('metadata_data', sa.JSON(), nullable=True),
+    sa.Column('created_at', sa.String(length=255), nullable=True),
+    sa.Column('updated_at', sa.String(length=255), nullable=True),
+    sa.Column('content', sa.String(length=255), nullable=True),
+    sa.ForeignKeyConstraint(['knowledge_base_id'], ['knowledge_bases.id'], ),
+    sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
     op.create_table('messages',
     sa.Column('id', sa.String(length=36), nullable=False),
     sa.Column('session_id', sa.String(length=36), nullable=True),
     sa.Column('role', sa.String(length=16), nullable=True),
     sa.Column('content', sa.Text(), nullable=False),
-    sa.Column('tool_calls', sa.String(length=255), nullable=True),
+    sa.Column('tool_calls', sa.JSON(), nullable=True),
     sa.Column('created_at', sa.String(length=255), nullable=True),
     sa.ForeignKeyConstraint(['session_id'], ['sessions.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('knowledge_chunks',
+    sa.Column('id', sa.String(length=36), nullable=False),
+    sa.Column('document_id', sa.String(length=36), nullable=True),
+    sa.Column('knowledge_base_id', sa.String(length=36), nullable=True),
+    sa.Column('tenant_id', sa.String(length=36), nullable=True),
+    sa.Column('chunk_index', sa.Integer(), nullable=True),
+    sa.Column('content', sa.Text(), nullable=False),
+    sa.Column('metadata_data', sa.JSON(), nullable=True),
+    sa.Column('search_vector', sa.String(length=255), nullable=True),
+    sa.Column('created_at', sa.String(length=255), nullable=True),
+    sa.ForeignKeyConstraint(['document_id'], ['knowledge_documents.id'], ),
+    sa.ForeignKeyConstraint(['knowledge_base_id'], ['knowledge_bases.id'], ),
+    sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     # ### end Alembic commands ###
@@ -851,7 +934,9 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Downgrade schema."""
     # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_table('knowledge_chunks')
     op.drop_table('messages')
+    op.drop_table('knowledge_documents')
     op.drop_table('billing_records')
     op.drop_table('workflow_graphs')
     op.drop_table('tasks')
@@ -867,9 +952,11 @@ def downgrade() -> None:
     op.drop_table('wiki_pages')
     op.drop_table('users')
     op.drop_table('uploads')
+    op.drop_table('unified_messages')
     op.drop_table('support_tickets')
     op.drop_table('okrs')
     op.drop_table('meeting_notes')
+    op.drop_table('media_assets')
     op.drop_table('marketing_campaigns')
     op.drop_table('kb_articles')
     op.drop_table('enterprise_tasks')
@@ -912,5 +999,6 @@ def downgrade() -> None:
     op.drop_table('admin_model_configs')
     op.drop_table('admin_db_configs')
     op.drop_table('admin_database_backups')
+    op.drop_table('admin_cron_jobs')
     op.drop_table('admin_api_keys')
     # ### end Alembic commands ###

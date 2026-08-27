@@ -112,11 +112,11 @@ func (h *AgentHandler) seedPresetAgents() {
 	}
 
 	var n int
-	if err := db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM agents WHERE tenant_id = $1`, ownerTenantID).Scan(&n); err != nil || n > 0 {
+	if err := db.GlobalDBManager.QueryRow(ctx, `SELECT COUNT(*) FROM agents WHERE tenant_id = $1`, ownerTenantID).Scan(&n); err != nil || n > 0 {
 		return
 	}
 	var ownerUserID string
-	if err := db.Pool.QueryRow(ctx, `SELECT id::text FROM users WHERE tenant_id = $1 AND role = 'owner' ORDER BY created_at LIMIT 1`, ownerTenantID).Scan(&ownerUserID); err != nil || ownerUserID == "" {
+	if err := db.GlobalDBManager.QueryRow(ctx, `SELECT id::text FROM users WHERE tenant_id = $1 AND role = 'owner' ORDER BY created_at LIMIT 1`, ownerTenantID).Scan(&ownerUserID); err != nil || ownerUserID == "" {
 		slog.Warn("seed preset agents: no owner user", "tenant", ownerTenantID)
 		return
 	}
@@ -134,7 +134,7 @@ func (h *AgentHandler) seedPresetAgents() {
 		}
 		toolsJSON, _ := json.Marshal(p.Tools)
 		llmJSON, _ := json.Marshal(p.LLM)
-		if _, err := db.Pool.Exec(ctx,
+		if _, err := db.GlobalDBManager.Exec(ctx,
 			`INSERT INTO agents (id, tenant_id, user_id, name, description, system_prompt, tools, llm_config, max_turns, timeout_seconds, enabled)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true)`,
 			agentID, ownerTenantID, ownerUserID, p.Name, p.Description, p.Prompt,
@@ -149,7 +149,7 @@ func (h *AgentHandler) seedPresetAgents() {
 // List 返回当前租户的全部 Agent（按创建时间倒序）。
 func (h *AgentHandler) List(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
-	rows, err := db.Pool.Query(r.Context(),
+	rows, err := db.GlobalDBManager.Query(r.Context(),
 		`SELECT id::text, name, COALESCE(description,''), COALESCE(system_prompt,''), COALESCE(tools,'[]'::jsonb), COALESCE(llm_config,'{}'::jsonb), max_turns, timeout_seconds, enabled, created_at, updated_at
 		 FROM agents WHERE tenant_id = $1 AND (user_id = $2 OR (visibility = 'tenant' AND tenant_id = $1)) ORDER BY created_at DESC`, claims.TenantID, claims.UserID)
 	if err != nil {
@@ -205,7 +205,7 @@ func (h *AgentHandler) Create(w http.ResponseWriter, r *http.Request) {
 		logAndRespond(w, err, http.StatusInternalServerError, "generate id failed")
 		return
 	}
-	_, err = db.Pool.Exec(r.Context(),
+	_, err = db.GlobalDBManager.Exec(r.Context(),
 		`INSERT INTO agents (id, tenant_id, user_id, name, description, system_prompt, tools, llm_config, max_turns, timeout_seconds, enabled)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
 		id, claims.TenantID, claims.UserID, body.Name, body.Description, body.SystemPrompt,
@@ -299,7 +299,7 @@ func (h *AgentHandler) Update(w http.ResponseWriter, r *http.Request) {
 		BadRequest(w, "nothing to update")
 		return
 	}
-	if _, err := db.Pool.Exec(r.Context(),
+	if _, err := db.GlobalDBManager.Exec(r.Context(),
 		`UPDATE agents SET `+joinComma(sets)+`, updated_at = NOW() WHERE tenant_id = $`+itoa(len(args)-1)+` AND id = $`+itoa(len(args))+" AND user_id = $"+itoa(len(args)+1), append(args, claims.UserID)...); err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "update agent failed")
 		return
@@ -320,7 +320,7 @@ func (h *AgentHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		BadRequest(w, "id is required")
 		return
 	}
-	if _, err := db.Pool.Exec(r.Context(), `DELETE FROM agents WHERE tenant_id = $1 AND id = $2 AND user_id = $3`, claims.TenantID, agentID, claims.UserID); err != nil {
+	if _, err := db.GlobalDBManager.Exec(r.Context(), `DELETE FROM agents WHERE tenant_id = $1 AND id = $2 AND user_id = $3`, claims.TenantID, agentID, claims.UserID); err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "delete agent failed")
 		return
 	}
@@ -366,7 +366,7 @@ func (h *AgentHandler) Run(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now()
-	if _, err := db.Pool.Exec(r.Context(),
+	if _, err := db.GlobalDBManager.Exec(r.Context(),
 		`INSERT INTO agent_sessions (id, tenant_id, user_id, agent_id, name, task, status, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $7)`,
 		sessionID, claims.TenantID, claims.UserID, agent.ID, agent.Name, body.Task, now); err != nil {
@@ -389,7 +389,7 @@ func (h *AgentHandler) Run(w http.ResponseWriter, r *http.Request) {
 				// Mark session as failed on panic
 				updateCtx, updateCancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer updateCancel()
-				_, _ = db.Pool.Exec(updateCtx,
+				_, _ = db.GlobalDBManager.Exec(updateCtx,
 					`UPDATE agent_sessions SET status = 'failed', result = $1, updated_at = NOW() WHERE id = $2`,
 					fmt.Sprintf(`{"error":"agent execution panicked: %v"}`, r), sessionID)
 			}
@@ -415,7 +415,7 @@ func (h *AgentHandler) executeAgent(agent *Agent, task, sessionID, userID, tenan
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	_, _ = db.Pool.Exec(ctx, `UPDATE agent_sessions SET status = 'running', updated_at = NOW() WHERE id = $1`, sessionID)
+	_, _ = db.GlobalDBManager.Exec(ctx, `UPDATE agent_sessions SET status = 'running', updated_at = NOW() WHERE id = $1`, sessionID)
 
 	// tools/llm_config 转 map 传给 Python（tools 保持 []map 结构）
 	var tools []map[string]any
@@ -454,7 +454,7 @@ func (h *AgentHandler) executeAgent(agent *Agent, task, sessionID, userID, tenan
 	if m, ok := result.(map[string]any); ok && !boolOf(m["success"]) {
 		status = "failed"
 	}
-	_, _ = db.Pool.Exec(ctx,
+	_, _ = db.GlobalDBManager.Exec(ctx,
 		`UPDATE agent_sessions SET status = $1, result = $2, updated_at = NOW() WHERE id = $3`,
 		status, string(resultJSON), sessionID)
 }
@@ -479,7 +479,7 @@ func (h *AgentHandler) SetVisibility(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// owner-only：更新必须命中 user_id
-	tag, err := db.Pool.Exec(r.Context(),
+	tag, err := db.GlobalDBManager.Exec(r.Context(),
 		`UPDATE agents SET visibility = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3 AND user_id = $4`,
 		body.Visibility, r.PathValue("id"), claims.TenantID, claims.UserID)
 	if err != nil {
@@ -495,7 +495,7 @@ func (h *AgentHandler) SetVisibility(w http.ResponseWriter, r *http.Request) {
 
 func (h *AgentHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
-	rows, err := db.Pool.Query(r.Context(),
+	rows, err := db.GlobalDBManager.Query(r.Context(),
 		`SELECT s.id, COALESCE(s.agent_id::text,''), COALESCE(a.name,''), s.task, s.status, COALESCE(s.result,''), s.created_at, s.updated_at
 		 FROM agent_sessions s LEFT JOIN agents a ON a.id = s.agent_id
 		 WHERE s.user_id = $1 AND s.tenant_id = $2 ORDER BY s.created_at DESC LIMIT 100`, claims.UserID, claims.TenantID)
@@ -526,7 +526,7 @@ func (h *AgentHandler) GetSession(w http.ResponseWriter, r *http.Request) {
 	}
 	claims := auth.GetClaims(r.Context())
 	var s AgentSession
-	err := db.Pool.QueryRow(r.Context(),
+	err := db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT s.id, COALESCE(s.agent_id::text,''), COALESCE(a.name,''), s.task, s.status, COALESCE(s.result,''), s.created_at, s.updated_at
 		 FROM agent_sessions s LEFT JOIN agents a ON a.id = s.agent_id
 		 WHERE s.id = $1 AND s.user_id = $2 AND s.tenant_id = $3`, sessionID, claims.UserID, claims.TenantID).
@@ -542,7 +542,7 @@ func (h *AgentHandler) GetSession(w http.ResponseWriter, r *http.Request) {
 
 func (h *AgentHandler) queryAgent(ctx context.Context, tenantID, userID, agentID string) (*Agent, error) {
 	var a Agent
-	err := db.Pool.QueryRow(ctx,
+	err := db.GlobalDBManager.QueryRow(ctx,
 		`SELECT id::text, name, COALESCE(description,''), COALESCE(system_prompt,''), COALESCE(tools,'[]'::jsonb), COALESCE(llm_config,'{}'::jsonb), max_turns, timeout_seconds, enabled, created_at, updated_at
 		 FROM agents WHERE tenant_id = $1 AND id = $2 AND (user_id = $3 OR (visibility = 'tenant' AND tenant_id = $1))`, tenantID, agentID, userID).
 		Scan(&a.ID, &a.Name, &a.Description, &a.SystemPrompt, &a.Tools, &a.LLMConfig,
@@ -557,7 +557,7 @@ func (h *AgentHandler) queryAgent(ctx context.Context, tenantID, userID, agentID
 // 多租户场景下预置 Agent 仅在 owner 租户播种一次（其它租户需自行通过 API 创建）。
 func (h *AgentHandler) resolveOwnerTenantID(ctx context.Context) (string, error) {
 	var tenantID string
-	err := db.Pool.QueryRow(ctx,
+	err := db.GlobalDBManager.QueryRow(ctx,
 		`SELECT tenant_id FROM users WHERE role = 'owner' ORDER BY created_at LIMIT 1`).Scan(&tenantID)
 	if err != nil {
 		return "", fmt.Errorf("no owner found: %w", err)

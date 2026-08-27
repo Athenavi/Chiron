@@ -42,21 +42,41 @@ def model_name_to_filename(name: str) -> str:
     return s2.lower()
 
 
+# SQLAlchemy 保留字列表
+SQLALCHEMY_RESERVED_NAMES = {'metadata', 'query', 'session'}
+
+
 def convert_properties_to_fields(properties: Dict, model_name: str, all_models: Dict) -> Dict:
     """将 properties 转换为字段定义"""
     fields = {}
     for field_name, prop in properties.items():
+        # 处理保留字：自动重命名 metadata -> metadata_data，但保持数据库列名为原始名称
+        python_name = prop.get('python_name', field_name)
+        db_column = prop.get('db_column', '')
+        if python_name in SQLALCHEMY_RESERVED_NAMES:
+            # Python 属性名使用别名
+            python_name = f'{python_name}_data'
+            # 数据库列名保持原始名称（如果没有显式指定 db_column）
+            if not db_column:
+                db_column = field_name
+
+        # 处理 default: now() -> datetime.utcnow (仅对 datetime 类型)
+        default_value = prop.get('default')
+        field_type = prop.get('type', 'string')
+        if default_value == 'now()' and field_type in ('datetime', 'timestamp'):
+            default_value = 'datetime.utcnow'
+
         field = {
-            'type': prop.get('type', 'string'),
+            'type': field_type,
             'nullable': prop.get('nullable', False),
             'primary_key': prop.get('primary_key', False),
             'unique': prop.get('unique', False),
             'index': prop.get('index', False),
-            'default': prop.get('default'),
+            'default': default_value,
             'max_length': prop.get('maxLength', prop.get('max_length', 255)),
             'description': prop.get('description', ''),
-            'db_column': prop.get('db_column', ''),
-            'python_name': prop.get('python_name', field_name),
+            'db_column': db_column,
+            'python_name': python_name,
             'doc': prop.get('description', field_name),
             'autoincrement': prop.get('autoincrement', True),
         }

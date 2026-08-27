@@ -196,7 +196,7 @@ func (h *AdminHandler) GetPerformance(w http.ResponseWriter, r *http.Request) {
 	// 测量 DB 延迟
 	ctx := r.Context()
 	start := time.Now()
-	db.Pool.Ping(ctx)
+	db.GlobalDBManager.Ping(ctx)
 	stats.Gateway.DBLatencyMs = float64(time.Since(start).Microseconds()) / 1000
 
 	OK(w, stats)

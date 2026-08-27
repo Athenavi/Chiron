@@ -132,7 +132,7 @@ func (h *BillingHandler) GetUsage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := db.ReadPool().Query(r.Context(),
+	rows, err := db.GlobalDBManager.Query(r.Context(),
 		`SELECT DATE(created_at) as day,
 			COUNT(*) as tx_count,
 			SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as credits_spent,
@@ -534,7 +534,7 @@ func (h *BillingHandler) PayPalCapture(w http.ResponseWriter, r *http.Request) {
 
 	// 从 payments 表按 provider_order_id 定位订单并幂等入账
 	var payID, credits string
-	err := db.Pool.QueryRow(r.Context(),
+	err := db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT id, credits::text FROM payments
 		 WHERE provider_order_id = $1 AND user_id = $2 AND status = 'pending'`,
 		body.OrderID, userID).Scan(&payID, &credits)
