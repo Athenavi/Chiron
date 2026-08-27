@@ -1,15 +1,21 @@
 # 结构化日志 — structlog + trace_id 注入
 from __future__ import annotations
 
-import logging
 import contextvars
+import logging
 
 import structlog
 
 # 请求上下文变量（middleware 层注入）
-request_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("request_id", default="")
-tenant_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("tenant_id", default="")
-trace_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("trace_id", default="")
+request_id_var: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "request_id", default=""
+)
+tenant_id_var: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "tenant_id", default=""
+)
+trace_id_var: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "trace_id", default=""
+)
 span_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("span_id", default="")
 
 
@@ -31,9 +37,7 @@ def configure_logging(level: str = "INFO") -> None:
     )
 
 
-def _add_request_context(
-    logger: logging.Logger, method: str, event_dict: dict
-) -> dict:
+def _add_request_context(logger: logging.Logger, method: str, event_dict: dict) -> dict:
     """注入 request_id / tenant_id / trace_id 到每条日志"""
     req_id = request_id_var.get("")
     if req_id:

@@ -3,21 +3,21 @@ from __future__ import annotations
 
 import time
 
-from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.middleware.base import (BaseHTTPMiddleware,
+                                       RequestResponseEndpoint)
 from starlette.requests import Request
 from starlette.responses import Response
 
-from app.observability.metrics import (
-    HTTP_REQUESTS,
-    HTTP_REQUEST_DURATION,
-    INSTANCE_ACTIVE_REQUESTS,
-)
+from app.observability.metrics import (HTTP_REQUEST_DURATION, HTTP_REQUESTS,
+                                       INSTANCE_ACTIVE_REQUESTS)
 
 
 class MetricsMiddleware(BaseHTTPMiddleware):
     """采集 HTTP 请求指标"""
 
-    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         INSTANCE_ACTIVE_REQUESTS.inc()
         start = time.monotonic()
         response = None

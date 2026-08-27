@@ -99,49 +99,115 @@ onMounted(() => {
     <Spin :spinning="loading">
       <div class="metric-grid">
         <Card>
-          <Statistic title="并发连接数" :value="metrics.connections" />
+          <Statistic
+            title="并发连接数"
+            :value="metrics.connections"
+          />
         </Card>
         <Card>
-          <Statistic title="推理延迟(均值)" :value="metrics.avgLatencyMs" suffix="ms" />
+          <Statistic
+            title="推理延迟(均值)"
+            :value="metrics.avgLatencyMs"
+            suffix="ms"
+          />
         </Card>
         <Card>
-          <Statistic title="网关 DB 延迟" :value="metrics.dbLatencyMs" suffix="ms" />
+          <Statistic
+            title="网关 DB 延迟"
+            :value="metrics.dbLatencyMs"
+            suffix="ms"
+          />
         </Card>
       </div>
 
-      <Card title="Go 网关状态" style="margin-top: 16px">
+      <Card
+        title="Go 网关状态"
+        style="margin-top: 16px"
+      >
         <div class="status-grid">
-          <Descriptions bordered :column="1">
-            <DescriptionsItem label="实例数">{{ gatewayStatus.instances }}</DescriptionsItem>
-            <DescriptionsItem label="CPU 使用率">{{ gatewayStatus.cpuUsage }}%</DescriptionsItem>
-            <DescriptionsItem label="内存使用">{{ gatewayStatus.memoryUsage }}</DescriptionsItem>
-            <DescriptionsItem label="Goroutines">{{ gatewayStatus.goroutines }}</DescriptionsItem>
+          <Descriptions
+            bordered
+            :column="1"
+          >
+            <DescriptionsItem label="实例数">
+              {{ gatewayStatus.instances }}
+            </DescriptionsItem>
+            <DescriptionsItem label="CPU 使用率">
+              {{ gatewayStatus.cpuUsage }}%
+            </DescriptionsItem>
+            <DescriptionsItem label="内存使用">
+              {{ gatewayStatus.memoryUsage }}
+            </DescriptionsItem>
+            <DescriptionsItem label="Goroutines">
+              {{ gatewayStatus.goroutines }}
+            </DescriptionsItem>
           </Descriptions>
-          <Descriptions bordered :column="1">
-            <DescriptionsItem label="连接数">{{ gatewayStatus.connections }}</DescriptionsItem>
-            <DescriptionsItem label="Redis 延迟">{{ gatewayStatus.redisLatency }}ms</DescriptionsItem>
-            <DescriptionsItem label="DB 延迟">{{ gatewayStatus.dbLatency }}ms</DescriptionsItem>
-            <DescriptionsItem label="运行时间">{{ gatewayStatus.uptime }}</DescriptionsItem>
+          <Descriptions
+            bordered
+            :column="1"
+          >
+            <DescriptionsItem label="连接数">
+              {{ gatewayStatus.connections }}
+            </DescriptionsItem>
+            <DescriptionsItem label="Redis 延迟">
+              {{ gatewayStatus.redisLatency }}ms
+            </DescriptionsItem>
+            <DescriptionsItem label="DB 延迟">
+              {{ gatewayStatus.dbLatency }}ms
+            </DescriptionsItem>
+            <DescriptionsItem label="运行时间">
+              {{ gatewayStatus.uptime }}
+            </DescriptionsItem>
           </Descriptions>
-          <Descriptions bordered :column="1">
-            <DescriptionsItem label="版本">{{ gatewayStatus.version }}</DescriptionsItem>
+          <Descriptions
+            bordered
+            :column="1"
+          >
+            <DescriptionsItem label="版本">
+              {{ gatewayStatus.version }}
+            </DescriptionsItem>
           </Descriptions>
         </div>
       </Card>
 
-      <Card title="Python 引擎状态" style="margin-top: 16px">
+      <Card
+        title="Python 引擎状态"
+        style="margin-top: 16px"
+      >
         <div class="status-grid">
-          <Descriptions bordered :column="1">
-            <DescriptionsItem label="Pod 数量">{{ pythonStatus.pods }}</DescriptionsItem>
-            <DescriptionsItem label="CPU 使用率">{{ pythonStatus.cpuUsage }}%</DescriptionsItem>
-            <DescriptionsItem label="内存使用">{{ pythonStatus.memoryUsage }}</DescriptionsItem>
-            <DescriptionsItem label="活跃任务">{{ pythonStatus.activeTasks }}</DescriptionsItem>
+          <Descriptions
+            bordered
+            :column="1"
+          >
+            <DescriptionsItem label="Pod 数量">
+              {{ pythonStatus.pods }}
+            </DescriptionsItem>
+            <DescriptionsItem label="CPU 使用率">
+              {{ pythonStatus.cpuUsage }}%
+            </DescriptionsItem>
+            <DescriptionsItem label="内存使用">
+              {{ pythonStatus.memoryUsage }}
+            </DescriptionsItem>
+            <DescriptionsItem label="活跃任务">
+              {{ pythonStatus.activeTasks }}
+            </DescriptionsItem>
           </Descriptions>
-          <Descriptions bordered :column="1">
-            <DescriptionsItem label="平均推理时间">{{ pythonStatus.avgInferenceTime }}ms</DescriptionsItem>
-            <DescriptionsItem label="Redis 延迟">{{ pythonStatus.redisLatency }}ms</DescriptionsItem>
-            <DescriptionsItem label="运行时间">{{ pythonStatus.uptime }}</DescriptionsItem>
-            <DescriptionsItem label="版本">{{ pythonStatus.version }}</DescriptionsItem>
+          <Descriptions
+            bordered
+            :column="1"
+          >
+            <DescriptionsItem label="平均推理时间">
+              {{ pythonStatus.avgInferenceTime }}ms
+            </DescriptionsItem>
+            <DescriptionsItem label="Redis 延迟">
+              {{ pythonStatus.redisLatency }}ms
+            </DescriptionsItem>
+            <DescriptionsItem label="运行时间">
+              {{ pythonStatus.uptime }}
+            </DescriptionsItem>
+            <DescriptionsItem label="版本">
+              {{ pythonStatus.version }}
+            </DescriptionsItem>
           </Descriptions>
         </div>
       </Card>

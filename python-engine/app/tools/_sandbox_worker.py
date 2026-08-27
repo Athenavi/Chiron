@@ -23,6 +23,7 @@
 模型代码在子进程内通过 ``await tools.<name>(**args)`` 触发 IPC 调用主进程的真实工具；
 主进程持有 registry 与所有宿主资源（DB/Redis/文件系统），子进程无直接访问权限。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -36,11 +37,13 @@ from typing import Any
 
 try:
     import resource as _resource  # POSIX only
+
     _HAS_RESOURCE = True
 except ImportError:
     _HAS_RESOURCE = False
 
-from app.tools.code_guard import check_static as _check_static, safe_builtins as _safe_builtins
+from app.tools.code_guard import check_static as _check_static
+from app.tools.code_guard import safe_builtins as _safe_builtins
 
 logger = logging.getLogger(__name__)
 
@@ -57,8 +60,12 @@ def _apply_rlimit() -> None:
         return
     try:
         _resource.setrlimit(_resource.RLIMIT_AS, (_MEM_LIMIT_BYTES, _MEM_LIMIT_BYTES))
-        _resource.setrlimit(_resource.RLIMIT_CPU, (_CPU_LIMIT_SECONDS, _CPU_LIMIT_SECONDS))
-        _resource.setrlimit(_resource.RLIMIT_FSIZE, (_FILE_LIMIT_BYTES, _FILE_LIMIT_BYTES))
+        _resource.setrlimit(
+            _resource.RLIMIT_CPU, (_CPU_LIMIT_SECONDS, _CPU_LIMIT_SECONDS)
+        )
+        _resource.setrlimit(
+            _resource.RLIMIT_FSIZE, (_FILE_LIMIT_BYTES, _FILE_LIMIT_BYTES)
+        )
     except (ValueError, OSError) as e:
         # 沙箱降级：仅记录到 stderr（不写 stdout，避免污染协议）
         sys.stderr.write(f"[sandbox] setrlimit failed (relaxed): {e}\n")
@@ -98,12 +105,14 @@ class ToolProxy:
             call_id = self._call_id
 
         # 写 stdout（os.write 绕过 stdio 缓冲，立即推送）
-        _write_msg({
-            "type": "tool_call",
-            "call_id": call_id,
-            "name": name,
-            "args": args,
-        })
+        _write_msg(
+            {
+                "type": "tool_call",
+                "call_id": call_id,
+                "name": name,
+                "args": args,
+            }
+        )
 
         # 阻塞读 stdin（async 中用 run_in_executor 避免阻塞事件循环）
         loop = asyncio.get_event_loop()
@@ -113,7 +122,9 @@ class ToolProxy:
                 timeout=30.0,  # 防止父进程崩溃后子进程无限阻塞
             )
         except asyncio.TimeoutError:
-            raise ToolCallError(name, "parent process did not respond within 30s (timeout)")
+            raise ToolCallError(
+                name, "parent process did not respond within 30s (timeout)"
+            )
         if not line:
             raise ToolCallError(name, "parent closed stdin (worker killed?)")
 
@@ -138,12 +149,14 @@ class ToolProxy:
         """
         if name.startswith("_"):
             raise AttributeError(name)
+
         async def _wrapped(*args, **kwargs):
             if len(args) == 1 and isinstance(args[0], dict) and not kwargs:
                 params: dict[str, Any] = args[0]
             else:
                 params = kwargs
             return await self._call(name, params)
+
         return _wrapped
 
 
@@ -176,11 +189,13 @@ def _run_program(code: str, tool_names: list[str]) -> int:
     # 静态守卫（禁止 os/subprocess/socket 等危险 import/attr）
     denied = _check_static(code)
     if denied:
-        _write_msg({
-            "type": "error",
-            "message": f"blocked by static guard: {denied}",
-            "logs": "",
-        })
+        _write_msg(
+            {
+                "type": "error",
+                "message": f"blocked by static guard: {denied}",
+                "logs": "",
+            }
+        )
         return 1
 
     log_buf = io.StringIO()
@@ -193,7 +208,9 @@ def _run_program(code: str, tool_names: list[str]) -> int:
     }
 
     # 包装为 async def _main()
-    body = "\n".join("    " + line if line.strip() else line for line in code.splitlines())
+    body = "\n".join(
+        "    " + line if line.strip() else line for line in code.splitlines()
+    )
     src = f"async def _main():\n{body}\n"
 
     # 安全假设：
@@ -202,7 +219,9 @@ def _run_program(code: str, tool_names: list[str]) -> int:
     # - safe_builtins() 移除 __builtins__ 键，防止通过 __builtins__["open"] 索引访问原始内置函数
     # 纵深防御：子进程 OS 级隔离（RLIMIT + wall-clock 超时 SIGKILL 兜底）
     try:
-        exec(compile(src, "<sandbox>", "exec"), ns)  # noqa: S102 — 沙箱语义由部署策略约束
+        exec(
+            compile(src, "<sandbox>", "exec"), ns
+        )  # noqa: S102 — 沙箱语义由部署策略约束
         main_fn = ns["_main"]
 
         async def _run():
@@ -211,32 +230,40 @@ def _run_program(code: str, tool_names: list[str]) -> int:
             return result
 
         result = asyncio.run(_run())
-        _write_msg({
-            "type": "done",
-            "result": result,
-            "logs": log_buf.getvalue()[-MAX_LOG_CHARS:],
-        })
+        _write_msg(
+            {
+                "type": "done",
+                "result": result,
+                "logs": log_buf.getvalue()[-MAX_LOG_CHARS:],
+            }
+        )
         return 0
     except ToolCallError as e:
-        _write_msg({
-            "type": "error",
-            "message": f"tool call failed: {e.tool_name} — {e.message}",
-            "logs": log_buf.getvalue()[-MAX_LOG_CHARS:],
-        })
+        _write_msg(
+            {
+                "type": "error",
+                "message": f"tool call failed: {e.tool_name} — {e.message}",
+                "logs": log_buf.getvalue()[-MAX_LOG_CHARS:],
+            }
+        )
         return 1
     except SyntaxError as e:
-        _write_msg({
-            "type": "error",
-            "message": f"syntax error: {e}",
-            "logs": "",
-        })
+        _write_msg(
+            {
+                "type": "error",
+                "message": f"syntax error: {e}",
+                "logs": "",
+            }
+        )
         return 1
     except Exception as e:  # noqa: BLE001 — 模型程序异常按结构化错误返回
-        _write_msg({
-            "type": "error",
-            "message": f"{type(e).__name__}: {e}",
-            "logs": log_buf.getvalue()[-MAX_LOG_CHARS:],
-        })
+        _write_msg(
+            {
+                "type": "error",
+                "message": f"{type(e).__name__}: {e}",
+                "logs": log_buf.getvalue()[-MAX_LOG_CHARS:],
+            }
+        )
         return 1
 
 
@@ -257,7 +284,13 @@ def main() -> int:
         return 1
 
     if init.get("type") != "init":
-        _write_msg({"type": "error", "message": f"expected init, got {init.get('type')}", "logs": ""})
+        _write_msg(
+            {
+                "type": "error",
+                "message": f"expected init, got {init.get('type')}",
+                "logs": "",
+            }
+        )
         return 1
 
     code = init.get("code", "")

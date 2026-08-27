@@ -23,16 +23,36 @@ function reload() {
 
 <template>
   <template v-if="error">
-    <div class="error-boundary" role="alert">
-      <div class="error-icon"><ExclamationCircleOutlined /></div>
-      <div class="error-title">页面渲染出错</div>
-      <div class="error-message">{{ isProduction ? 'An unexpected error occurred. Please try again.' : error.message }}</div>
+    <div
+      class="error-boundary"
+      role="alert"
+    >
+      <div class="error-icon">
+        <ExclamationCircleOutlined />
+      </div>
+      <div class="error-title">
+        页面渲染出错
+      </div>
+      <div class="error-message">
+        {{ isProduction ? 'An unexpected error occurred. Please try again.' : error.message }}
+      </div>
       <div class="error-actions">
-        <Button type="primary" size="small" @click="retry">
-          <template #icon><ReloadOutlined /></template>
+        <Button
+          type="primary"
+          size="small"
+          @click="retry"
+        >
+          <template #icon>
+            <ReloadOutlined />
+          </template>
           重试
         </Button>
-        <Button size="small" @click="reload">刷新页面</Button>
+        <Button
+          size="small"
+          @click="reload"
+        >
+          刷新页面
+        </Button>
       </div>
     </div>
   </template>

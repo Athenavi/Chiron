@@ -118,41 +118,97 @@ onMounted(() => {
     <Spin :spinning="loading">
       <div class="metric-grid">
         <Card title="缓存命中率">
-            <Progress type="dashboard" :percent="cacheStats.hitRate" :strokeColor="progressColor" size="small">
-              <template #format><span style="font-size: 24px; font-weight: 600">{{ cacheStats.hitRate }}%</span></template>
-            </Progress>
-            <Descriptions bordered :column="1" style="margin-top: 16px">
-              <DescriptionsItem label="L1 命中">{{ cacheStats.l1Hit }}%</DescriptionsItem>
-              <DescriptionsItem label="L2 命中">{{ cacheStats.l2Hit }}%</DescriptionsItem>
-              <DescriptionsItem label="L3 命中">{{ cacheStats.l3Hit }}%</DescriptionsItem>
-            </Descriptions>
-          </Card>
+          <Progress
+            type="dashboard"
+            :percent="cacheStats.hitRate"
+            :stroke-color="progressColor"
+            size="small"
+          >
+            <template #format>
+              <span style="font-size: 24px; font-weight: 600">{{ cacheStats.hitRate }}%</span>
+            </template>
+          </Progress>
+          <Descriptions
+            bordered
+            :column="1"
+            style="margin-top: 16px"
+          >
+            <DescriptionsItem label="L1 命中">
+              {{ cacheStats.l1Hit }}%
+            </DescriptionsItem>
+            <DescriptionsItem label="L2 命中">
+              {{ cacheStats.l2Hit }}%
+            </DescriptionsItem>
+            <DescriptionsItem label="L3 命中">
+              {{ cacheStats.l3Hit }}%
+            </DescriptionsItem>
+          </Descriptions>
+        </Card>
         <Card title="缓存统计">
-            <Descriptions bordered :column="1">
-              <DescriptionsItem label="总请求数">{{ cacheStats.totalRequests }}</DescriptionsItem>
-              <DescriptionsItem label="缓存命中">{{ cacheStats.hits }}</DescriptionsItem>
-              <DescriptionsItem label="缓存未命中">{{ cacheStats.misses }}</DescriptionsItem>
-              <DescriptionsItem label="平均延迟">{{ cacheStats.avgLatency }}ms</DescriptionsItem>
-            </Descriptions>
-          </Card>
+          <Descriptions
+            bordered
+            :column="1"
+          >
+            <DescriptionsItem label="总请求数">
+              {{ cacheStats.totalRequests }}
+            </DescriptionsItem>
+            <DescriptionsItem label="缓存命中">
+              {{ cacheStats.hits }}
+            </DescriptionsItem>
+            <DescriptionsItem label="缓存未命中">
+              {{ cacheStats.misses }}
+            </DescriptionsItem>
+            <DescriptionsItem label="平均延迟">
+              {{ cacheStats.avgLatency }}ms
+            </DescriptionsItem>
+          </Descriptions>
+        </Card>
         <Card title="缓存大小">
-            <Descriptions bordered :column="1">
-              <DescriptionsItem label="L1 容量">{{ cacheStats.l1Size }} / {{ cacheStats.l1Capacity }}</DescriptionsItem>
-              <DescriptionsItem label="L2 容量">{{ cacheStats.l2Size }}</DescriptionsItem>
-              <DescriptionsItem label="L3 容量">{{ cacheStats.l3Size }}</DescriptionsItem>
-              <DescriptionsItem label="总内存">{{ cacheStats.totalMemory }}</DescriptionsItem>
-            </Descriptions>
-          </Card>
+          <Descriptions
+            bordered
+            :column="1"
+          >
+            <DescriptionsItem label="L1 容量">
+              {{ cacheStats.l1Size }} / {{ cacheStats.l1Capacity }}
+            </DescriptionsItem>
+            <DescriptionsItem label="L2 容量">
+              {{ cacheStats.l2Size }}
+            </DescriptionsItem>
+            <DescriptionsItem label="L3 容量">
+              {{ cacheStats.l3Size }}
+            </DescriptionsItem>
+            <DescriptionsItem label="总内存">
+              {{ cacheStats.totalMemory }}
+            </DescriptionsItem>
+          </Descriptions>
+        </Card>
       </div>
 
-      <Card title="缓存命中率趋势" style="margin-top: 16px">
-        <VChart :option="hitRateChartOption" style="height: var(--chart-h, 300px)" autoresize />
+      <Card
+        title="缓存命中率趋势"
+        style="margin-top: 16px"
+      >
+        <VChart
+          :option="hitRateChartOption"
+          style="height: var(--chart-h, 300px)"
+          autoresize
+        />
       </Card>
 
-      <Card title="热门查询" style="margin-top: 16px">
-        <Table :columns="columns" :dataSource="hotQueries" :pagination="false" :scroll="{ x: 560 }">
+      <Card
+        title="热门查询"
+        style="margin-top: 16px"
+      >
+        <Table
+          :columns="columns"
+          :data-source="hotQueries"
+          :pagination="false"
+          :scroll="{ x: 560 }"
+        >
           <template #emptyText>
-            <div class="empty-block"><span class="empty-icon">📭</span><span class="empty-text">暂无数据</span></div>
+            <div class="empty-block">
+              <span class="empty-icon">📭</span><span class="empty-text">暂无数据</span>
+            </div>
           </template>
         </Table>
       </Card>

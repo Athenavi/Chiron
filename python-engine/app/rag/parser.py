@@ -1,6 +1,6 @@
 # 文档解析器 - 支持 PDF/MD/TXT/CSV/DOCX
-import logging
 import io
+import logging
 
 logger = logging.getLogger(__name__)
 
@@ -194,7 +194,9 @@ class DocumentParser:
 class TextChunker:
     """文本分块器"""
 
-    def chunk(self, text: str, chunk_size: int = 1000, chunk_overlap: int = 200) -> list[dict]:
+    def chunk(
+        self, text: str, chunk_size: int = 1000, chunk_overlap: int = 200
+    ) -> list[dict]:
         """
         将文本分块
 
@@ -227,12 +229,14 @@ class TextChunker:
 
             chunk_text = text[start:end].strip()
             if chunk_text:
-                chunks.append({
-                    "index": len(chunks),
-                    "content": chunk_text,
-                    "start": start,
-                    "end": end,
-                })
+                chunks.append(
+                    {
+                        "index": len(chunks),
+                        "content": chunk_text,
+                        "start": start,
+                        "end": end,
+                    }
+                )
 
             # 下一块的起始位置（考虑重叠）
             start = end - chunk_overlap if end < text_len else text_len

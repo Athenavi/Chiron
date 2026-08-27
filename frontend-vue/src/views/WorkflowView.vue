@@ -676,45 +676,109 @@ function statusClass(nodeProps: any): string {
     <!-- Toolbar -->
     <div class="toolbar">
       <div class="toolbar-left">
-        <Input v-model:value="workflowName" style="width: 200px" size="small" />
-        <Button size="small" type="primary" @click="saveWorkflow">
-          <template #icon><SaveOutlined /></template>
+        <Input
+          v-model:value="workflowName"
+          style="width: 200px"
+          size="small"
+        />
+        <Button
+          size="small"
+          type="primary"
+          @click="saveWorkflow"
+        >
+          <template #icon>
+            <SaveOutlined />
+          </template>
           保存
         </Button>
-        <Button size="small" type="primary" ghost @click="executeWorkflow" :disabled="isExecuting">
-          <template #icon><PlayCircleOutlined /></template>
+        <Button
+          size="small"
+          type="primary"
+          ghost
+          :disabled="isExecuting"
+          @click="executeWorkflow"
+        >
+          <template #icon>
+            <PlayCircleOutlined />
+          </template>
           {{ isExecuting ? '执行中…' : '执行' }}
         </Button>
-        <Button size="small" title="在当前对话中运行该工作流" @click="runInChat">
-          <template #icon><MessageOutlined /></template>
+        <Button
+          size="small"
+          title="在当前对话中运行该工作流"
+          @click="runInChat"
+        >
+          <template #icon>
+            <MessageOutlined />
+          </template>
           运行到对话
         </Button>
-        <Button size="small" title="自动布局 (按层排列)" @click="autoLayout">
-          <template #icon><AlignCenterOutlined /></template>
+        <Button
+          size="small"
+          title="自动布局 (按层排列)"
+          @click="autoLayout"
+        >
+          <template #icon>
+            <AlignCenterOutlined />
+          </template>
         </Button>
-        <Button size="small" title="复制选中节点 (Ctrl+D)" :disabled="!selectedNode" @click="duplicateSelectedNode">
-          <template #icon><CopyOutlined /></template>
+        <Button
+          size="small"
+          title="复制选中节点 (Ctrl+D)"
+          :disabled="!selectedNode"
+          @click="duplicateSelectedNode"
+        >
+          <template #icon>
+            <CopyOutlined />
+          </template>
         </Button>
-        <Button size="small" @click="resetCanvas">新建</Button>
+        <Button
+          size="small"
+          @click="resetCanvas"
+        >
+          新建
+        </Button>
       </div>
       <div class="toolbar-right">
-        <Button size="small" @click="showDrawer = true">
-          <template #icon><UnorderedListOutlined /></template>
+        <Button
+          size="small"
+          @click="showDrawer = true"
+        >
+          <template #icon>
+            <UnorderedListOutlined />
+          </template>
           工作流列表
         </Button>
-        <Button size="small" @click="showHistory = !showHistory">
-          <template #icon><HistoryOutlined /></template>
+        <Button
+          size="small"
+          @click="showHistory = !showHistory"
+        >
+          <template #icon>
+            <HistoryOutlined />
+          </template>
           执行历史
         </Button>
-        <Tag v-if="workflowId" color="success">已保存</Tag>
-        <Tag v-else color="warning">未保存</Tag>
+        <Tag
+          v-if="workflowId"
+          color="success"
+        >
+          已保存
+        </Tag>
+        <Tag
+          v-else
+          color="warning"
+        >
+          未保存
+        </Tag>
       </div>
     </div>
 
     <div class="main-area">
       <!-- Left: Node Palette -->
       <div class="node-palette">
-        <div class="palette-title">节点</div>
+        <div class="palette-title">
+          节点
+        </div>
         <div
           v-for="nt in nodeTypes"
           :key="nt.type"
@@ -725,11 +789,17 @@ function statusClass(nodeProps: any): string {
           <span class="palette-icon">{{ nt.icon }}</span>
           <span class="palette-label">{{ nt.label }}</span>
         </div>
-        <div class="palette-hint">拖拽到画布<br />Shift/⌘ 多选<br />Delete 删除</div>
+        <div class="palette-hint">
+          拖拽到画布<br>Shift/⌘ 多选<br>Delete 删除
+        </div>
       </div>
 
       <!-- Center: Canvas -->
-      <div class="canvas-wrapper" @drop="onDrop" @dragover="onDragOver">
+      <div
+        class="canvas-wrapper"
+        @drop="onDrop"
+        @dragover="onDragOver"
+      >
         <VueFlow
           v-model:nodes="nodes"
           v-model:edges="edges"
@@ -741,161 +811,365 @@ function statusClass(nodeProps: any): string {
           @pane-click="onPaneClick"
           @connect="onConnect"
         >
-          <Background :gap="15" :size="1" />
+          <Background
+            :gap="15"
+            :size="1"
+          />
           <Controls />
           <MiniMap />
 
           <template #node-input="nodeProps">
-            <div class="custom-node" :class="statusClass(nodeProps)" :style="{ borderColor: '#22c55e' }">
-              <div class="node-header" style="background: #22c55e20;"><span>📥 {{ nodeProps.data?.label || '输入' }}</span></div>
-              <div class="node-body"><span class="node-type-tag">input</span></div>
-              <Handle type="source" :position="Position.Bottom" />
+            <div
+              class="custom-node"
+              :class="statusClass(nodeProps)"
+              :style="{ borderColor: '#22c55e' }"
+            >
+              <div
+                class="node-header"
+                style="background: #22c55e20;"
+              >
+                <span>📥 {{ nodeProps.data?.label || '输入' }}</span>
+              </div>
+              <div class="node-body">
+                <span class="node-type-tag">input</span>
+              </div>
+              <Handle
+                type="source"
+                :position="Position.Bottom"
+              />
             </div>
           </template>
 
           <template #node-llm="nodeProps">
-            <div class="custom-node" :class="statusClass(nodeProps)" :style="{ borderColor: '#8b5cf6' }">
-              <Handle type="target" :position="Position.Top" />
-              <div class="node-header" style="background: #8b5cf620;"><span>🧠 {{ nodeProps.data?.label || 'LLM' }}</span></div>
+            <div
+              class="custom-node"
+              :class="statusClass(nodeProps)"
+              :style="{ borderColor: '#8b5cf6' }"
+            >
+              <Handle
+                type="target"
+                :position="Position.Top"
+              />
+              <div
+                class="node-header"
+                style="background: #8b5cf620;"
+              >
+                <span>🧠 {{ nodeProps.data?.label || 'LLM' }}</span>
+              </div>
               <div class="node-body">
                 <span class="node-type-tag">llm</span>
-                <span v-if="nodeProps.data?.config?.model" class="node-detail">{{ nodeProps.data.config.model }}</span>
+                <span
+                  v-if="nodeProps.data?.config?.model"
+                  class="node-detail"
+                >{{ nodeProps.data.config.model }}</span>
               </div>
-              <Handle type="source" :position="Position.Bottom" />
+              <Handle
+                type="source"
+                :position="Position.Bottom"
+              />
             </div>
           </template>
 
           <template #node-tool="nodeProps">
-            <div class="custom-node" :class="statusClass(nodeProps)" :style="{ borderColor: '#3b82f6' }">
-              <Handle type="target" :position="Position.Top" />
-              <div class="node-header" style="background: #3b82f620;"><span>🔧 {{ nodeProps.data?.label || '工具' }}</span></div>
+            <div
+              class="custom-node"
+              :class="statusClass(nodeProps)"
+              :style="{ borderColor: '#3b82f6' }"
+            >
+              <Handle
+                type="target"
+                :position="Position.Top"
+              />
+              <div
+                class="node-header"
+                style="background: #3b82f620;"
+              >
+                <span>🔧 {{ nodeProps.data?.label || '工具' }}</span>
+              </div>
               <div class="node-body">
                 <span class="node-type-tag">tool</span>
-                <span v-if="nodeProps.data?.config?.tool_name" class="node-detail">{{ nodeProps.data.config.tool_name }}</span>
+                <span
+                  v-if="nodeProps.data?.config?.tool_name"
+                  class="node-detail"
+                >{{ nodeProps.data.config.tool_name }}</span>
               </div>
-              <Handle type="source" :position="Position.Bottom" />
+              <Handle
+                type="source"
+                :position="Position.Bottom"
+              />
             </div>
           </template>
 
           <template #node-skill="nodeProps">
-            <div class="custom-node" :class="statusClass(nodeProps)" :style="{ borderColor: '#ec4899' }">
-              <Handle type="target" :position="Position.Top" />
-              <div class="node-header" style="background: #ec489920;"><span>🎯 {{ nodeProps.data?.label || '技能' }}</span></div>
+            <div
+              class="custom-node"
+              :class="statusClass(nodeProps)"
+              :style="{ borderColor: '#ec4899' }"
+            >
+              <Handle
+                type="target"
+                :position="Position.Top"
+              />
+              <div
+                class="node-header"
+                style="background: #ec489920;"
+              >
+                <span>🎯 {{ nodeProps.data?.label || '技能' }}</span>
+              </div>
               <div class="node-body">
                 <span class="node-type-tag">skill</span>
-                <span v-if="nodeProps.data?.config?.skill_name" class="node-detail">{{ nodeProps.data.config.skill_name }}</span>
+                <span
+                  v-if="nodeProps.data?.config?.skill_name"
+                  class="node-detail"
+                >{{ nodeProps.data.config.skill_name }}</span>
               </div>
-              <Handle type="source" :position="Position.Bottom" />
+              <Handle
+                type="source"
+                :position="Position.Bottom"
+              />
             </div>
           </template>
 
           <template #node-knowledge="nodeProps">
-            <div class="custom-node" :class="statusClass(nodeProps)" :style="{ borderColor: '#14b8a6' }">
-              <Handle type="target" :position="Position.Top" />
-              <div class="node-header" style="background: #14b8a620;"><span>📚 {{ nodeProps.data?.label || '知识库' }}</span></div>
+            <div
+              class="custom-node"
+              :class="statusClass(nodeProps)"
+              :style="{ borderColor: '#14b8a6' }"
+            >
+              <Handle
+                type="target"
+                :position="Position.Top"
+              />
+              <div
+                class="node-header"
+                style="background: #14b8a620;"
+              >
+                <span>📚 {{ nodeProps.data?.label || '知识库' }}</span>
+              </div>
               <div class="node-body">
                 <span class="node-type-tag">knowledge</span>
-                <span v-if="nodeProps.data?.config?.kb_id" class="node-detail">{{ nodeProps.data.config.kb_id }}</span>
+                <span
+                  v-if="nodeProps.data?.config?.kb_id"
+                  class="node-detail"
+                >{{ nodeProps.data.config.kb_id }}</span>
               </div>
-              <Handle type="source" :position="Position.Bottom" />
+              <Handle
+                type="source"
+                :position="Position.Bottom"
+              />
             </div>
           </template>
 
           <template #node-agent="nodeProps">
-            <div class="custom-node" :class="statusClass(nodeProps)" :style="{ borderColor: '#6366f1' }">
-              <Handle type="target" :position="Position.Top" />
-              <div class="node-header" style="background: #6366f120;"><span>🤖 {{ nodeProps.data?.label || 'Agent' }}</span></div>
+            <div
+              class="custom-node"
+              :class="statusClass(nodeProps)"
+              :style="{ borderColor: '#6366f1' }"
+            >
+              <Handle
+                type="target"
+                :position="Position.Top"
+              />
+              <div
+                class="node-header"
+                style="background: #6366f120;"
+              >
+                <span>🤖 {{ nodeProps.data?.label || 'Agent' }}</span>
+              </div>
               <div class="node-body">
                 <span class="node-type-tag">agent</span>
-                <span v-if="nodeProps.data?.config?.name" class="node-detail">{{ nodeProps.data.config.name }}</span>
+                <span
+                  v-if="nodeProps.data?.config?.name"
+                  class="node-detail"
+                >{{ nodeProps.data.config.name }}</span>
               </div>
-              <Handle type="source" :position="Position.Bottom" />
+              <Handle
+                type="source"
+                :position="Position.Bottom"
+              />
             </div>
           </template>
 
           <template #node-condition="nodeProps">
-            <div class="custom-node" :class="statusClass(nodeProps)" :style="{ borderColor: '#f59e0b' }">
-              <Handle type="target" :position="Position.Top" />
-              <div class="node-header" style="background: #f59e0b20;"><span>🔀 {{ nodeProps.data?.label || '条件' }}</span></div>
-              <div class="node-body"><span class="node-type-tag">condition</span></div>
-              <Handle id="true" type="source" :position="Position.Bottom" style="left: 30%" />
-              <Handle id="false" type="source" :position="Position.Bottom" style="left: 70%" />
+            <div
+              class="custom-node"
+              :class="statusClass(nodeProps)"
+              :style="{ borderColor: '#f59e0b' }"
+            >
+              <Handle
+                type="target"
+                :position="Position.Top"
+              />
+              <div
+                class="node-header"
+                style="background: #f59e0b20;"
+              >
+                <span>🔀 {{ nodeProps.data?.label || '条件' }}</span>
+              </div>
+              <div class="node-body">
+                <span class="node-type-tag">condition</span>
+              </div>
+              <Handle
+                id="true"
+                type="source"
+                :position="Position.Bottom"
+                style="left: 30%"
+              />
+              <Handle
+                id="false"
+                type="source"
+                :position="Position.Bottom"
+                style="left: 70%"
+              />
             </div>
           </template>
 
           <template #node-output="nodeProps">
-            <div class="custom-node" :class="statusClass(nodeProps)" :style="{ borderColor: '#6b7280' }">
-              <Handle type="target" :position="Position.Top" />
-              <div class="node-header" style="background: #6b728020;"><span>📤 {{ nodeProps.data?.label || '输出' }}</span></div>
-              <div class="node-body"><span class="node-type-tag">output</span></div>
+            <div
+              class="custom-node"
+              :class="statusClass(nodeProps)"
+              :style="{ borderColor: '#6b7280' }"
+            >
+              <Handle
+                type="target"
+                :position="Position.Top"
+              />
+              <div
+                class="node-header"
+                style="background: #6b728020;"
+              >
+                <span>📤 {{ nodeProps.data?.label || '输出' }}</span>
+              </div>
+              <div class="node-body">
+                <span class="node-type-tag">output</span>
+              </div>
             </div>
           </template>
         </VueFlow>
       </div>
 
       <!-- Right: Property Panel -->
-      <div v-if="showPanel && selectedNode" class="property-panel">
+      <div
+        v-if="showPanel && selectedNode"
+        class="property-panel"
+      >
         <div class="panel-header">
           <span>节点属性</span>
-          <Button type="text" size="small" @click="showPanel = false">
-            <template #icon><CloseOutlined /></template>
+          <Button
+            type="text"
+            size="small"
+            @click="showPanel = false"
+          >
+            <template #icon>
+              <CloseOutlined />
+            </template>
           </Button>
         </div>
         <div class="panel-body">
-          <Form layout="vertical" size="small">
+          <Form
+            layout="vertical"
+            size="small"
+          >
             <FormItem label="标签">
-              <Input v-model:value="editLabel" placeholder="节点标签" />
+              <Input
+                v-model:value="editLabel"
+                placeholder="节点标签"
+              />
             </FormItem>
 
             <template v-if="selectedNode.data?.nodeType === 'llm'">
-              <div class="section-divider"></div>
+              <div class="section-divider" />
               <FormItem label="模型">
-                <Select v-model:value="editModel" :options="modelOptions" style="width: 100%" allow-clear />
+                <Select
+                  v-model:value="editModel"
+                  :options="modelOptions"
+                  style="width: 100%"
+                  allow-clear
+                />
               </FormItem>
               <FormItem label="System Prompt">
-                <Input.TextArea v-model:value="editSystemPrompt" :rows="4" placeholder="系统提示词" />
+                <Input.TextArea
+                  v-model:value="editSystemPrompt"
+                  :rows="4"
+                  placeholder="系统提示词"
+                />
               </FormItem>
               <FormItem label="用户消息模板">
-                <Input.TextArea v-model:value="editUserMessage" :rows="3" placeholder="使用 {{变量名}} 引用上游输出或状态变量" />
+                <Input.TextArea
+                  v-model:value="editUserMessage"
+                  :rows="3"
+                  placeholder="使用 {{变量名}} 引用上游输出或状态变量"
+                />
               </FormItem>
             </template>
 
             <template v-if="selectedNode.data?.nodeType === 'tool'">
-              <div class="section-divider"></div>
+              <div class="section-divider" />
               <FormItem label="工具名称">
-                <Select v-model:value="editToolName" :options="toolOptions" placeholder="选择工具" style="width: 100%" />
+                <Select
+                  v-model:value="editToolName"
+                  :options="toolOptions"
+                  placeholder="选择工具"
+                  style="width: 100%"
+                />
               </FormItem>
               <FormItem label="失败重试次数">
-                <InputNumber v-model:value="editRetries" :min="0" :max="5" style="width: 100%" />
+                <InputNumber
+                  v-model:value="editRetries"
+                  :min="0"
+                  :max="5"
+                  style="width: 100%"
+                />
               </FormItem>
             </template>
 
             <template v-if="selectedNode.data?.nodeType === 'skill'">
-              <div class="section-divider"></div>
+              <div class="section-divider" />
               <FormItem label="技能名称">
-                <Input v-model:value="editSkillName" placeholder="已安装技能名（如 greeting-summary）" />
+                <Input
+                  v-model:value="editSkillName"
+                  placeholder="已安装技能名（如 greeting-summary）"
+                />
               </FormItem>
               <FormItem label="参数 JSON">
-                <Input.TextArea v-model:value="editSkillParams" :rows="3" placeholder='{"name": "Alice"}' />
+                <Input.TextArea
+                  v-model:value="editSkillParams"
+                  :rows="3"
+                  placeholder="{&quot;name&quot;: &quot;Alice&quot;}"
+                />
               </FormItem>
             </template>
 
             <template v-if="selectedNode.data?.nodeType === 'knowledge'">
-              <div class="section-divider"></div>
+              <div class="section-divider" />
               <FormItem label="知识库 ID">
-                <Input v-model:value="editKbId" placeholder="kb_id（知识库页面查看）" />
+                <Input
+                  v-model:value="editKbId"
+                  placeholder="kb_id（知识库页面查看）"
+                />
               </FormItem>
               <FormItem label="检索问题">
-                <Input.TextArea v-model:value="editKbQuery" :rows="2" placeholder="留空则用上游输出作为检索词" />
+                <Input.TextArea
+                  v-model:value="editKbQuery"
+                  :rows="2"
+                  placeholder="留空则用上游输出作为检索词"
+                />
               </FormItem>
               <FormItem label="返回条数">
-                <InputNumber v-model:value="editKbTopK" :min="1" :max="20" style="width: 100%" />
+                <InputNumber
+                  v-model:value="editKbTopK"
+                  :min="1"
+                  :max="20"
+                  style="width: 100%"
+                />
               </FormItem>
             </template>
 
             <template v-if="selectedNode.data?.nodeType === 'agent'">
-              <div class="section-divider"></div>
-              <div class="section-title">Agent 配置</div>
+              <div class="section-divider" />
+              <div class="section-title">
+                Agent 配置
+              </div>
               <FormItem label="Agent">
                 <Select
                   v-if="!agentManualMode"
@@ -912,38 +1186,77 @@ function statusClass(nodeProps: any): string {
                   v-model:value="editAgentName"
                   placeholder="手动输入 Agent 名称"
                 />
-                <div v-if="agentManualMode && !agentLoading" class="agent-hint">Agent 列表不可用，已切换为手动输入</div>
+                <div
+                  v-if="agentManualMode && !agentLoading"
+                  class="agent-hint"
+                >
+                  Agent 列表不可用，已切换为手动输入
+                </div>
               </FormItem>
               <FormItem label="名称（自动填入，可覆盖）">
-                <Input v-model:value="editAgentName" placeholder="Agent 名称" />
+                <Input
+                  v-model:value="editAgentName"
+                  placeholder="Agent 名称"
+                />
               </FormItem>
               <FormItem label="System Prompt（自动填入，可覆盖）">
-                <Input.TextArea v-model:value="editSystemPrompt" :rows="3" placeholder="留空则使用 Agent 默认提示词" />
+                <Input.TextArea
+                  v-model:value="editSystemPrompt"
+                  :rows="3"
+                  placeholder="留空则使用 Agent 默认提示词"
+                />
               </FormItem>
               <FormItem label="模型（自动填入，可覆盖）">
-                <Select v-model:value="editModel" :options="agentModelOptions" style="width: 100%" allow-clear />
+                <Select
+                  v-model:value="editModel"
+                  :options="agentModelOptions"
+                  style="width: 100%"
+                  allow-clear
+                />
               </FormItem>
               <FormItem label="最大轮数（自动填入，可覆盖）">
-                <InputNumber v-model:value="editMaxTurns" :min="1" :max="50" style="width: 100%" />
+                <InputNumber
+                  v-model:value="editMaxTurns"
+                  :min="1"
+                  :max="50"
+                  style="width: 100%"
+                />
               </FormItem>
               <FormItem label="任务输入">
-                <Input.TextArea v-model:value="editAgentTask" :rows="3" placeholder="子任务描述；支持 $节点ID 引用前置节点输出（如 $llm_1），留空则使用前置输出" />
+                <Input.TextArea
+                  v-model:value="editAgentTask"
+                  :rows="3"
+                  placeholder="子任务描述；支持 $节点ID 引用前置节点输出（如 $llm_1），留空则使用前置输出"
+                />
               </FormItem>
             </template>
 
             <template v-if="selectedNode.data?.nodeType === 'condition'">
-              <div class="section-divider"></div>
+              <div class="section-divider" />
               <FormItem label="条件表达式">
-                <Input.TextArea v-model:value="editCondition" :rows="3" placeholder="如: state.status == 'ok'（对上游输出求值）" />
+                <Input.TextArea
+                  v-model:value="editCondition"
+                  :rows="3"
+                  placeholder="如: state.status == 'ok'（对上游输出求值）"
+                />
               </FormItem>
               <FormItem label="输入变量引用">
-                <Input v-model:value="editVariable" placeholder="$变量名（空 = 上游输出）" />
+                <Input
+                  v-model:value="editVariable"
+                  placeholder="$变量名（空 = 上游输出）"
+                />
               </FormItem>
             </template>
 
-            <div class="section-divider"></div>
-            <Button danger @click="deleteSelectedNode" block>
-              <template #icon><DeleteOutlined /></template>
+            <div class="section-divider" />
+            <Button
+              danger
+              block
+              @click="deleteSelectedNode"
+            >
+              <template #icon>
+                <DeleteOutlined />
+              </template>
               删除节点
             </Button>
           </Form>
@@ -952,19 +1265,47 @@ function statusClass(nodeProps: any): string {
     </div>
 
     <!-- Execution logs + results bar -->
-    <div v-if="executionLogs.length > 0 || Object.keys(executionResults).length > 0" class="execution-bar">
+    <div
+      v-if="executionLogs.length > 0 || Object.keys(executionResults).length > 0"
+      class="execution-bar"
+    >
       <div class="execution-header">
         <span>执行日志</span>
-        <Button type="text" size="small" @click="executionLogs = []; executionResults = {}" class="exec-clear">清除</Button>
+        <Button
+          type="text"
+          size="small"
+          class="exec-clear"
+          @click="executionLogs = []; executionResults = {}"
+        >
+          清除
+        </Button>
       </div>
       <div class="execution-logs">
-        <div v-for="(log, i) in executionLogs" :key="i" class="log-line">{{ log }}</div>
+        <div
+          v-for="(log, i) in executionLogs"
+          :key="i"
+          class="log-line"
+        >
+          {{ log }}
+        </div>
       </div>
-      <div v-if="Object.keys(executionResults).length" class="execution-results">
-        <div v-for="(r, nid) in executionResults" :key="nid" class="result-item">
+      <div
+        v-if="Object.keys(executionResults).length"
+        class="execution-results"
+      >
+        <div
+          v-for="(r, nid) in executionResults"
+          :key="nid"
+          class="result-item"
+        >
           <div class="result-item-head">
             <span class="result-node">{{ nid }}</span>
-            <Tag :color="r.status === 'completed' ? 'success' : 'error'" class="result-status">{{ r.status }}</Tag>
+            <Tag
+              :color="r.status === 'completed' ? 'success' : 'error'"
+              class="result-status"
+            >
+              {{ r.status }}
+            </Tag>
           </div>
           <pre class="result-output">{{ typeof r.output === 'string' ? r.output : JSON.stringify(r.output, null, 2) }}</pre>
         </div>
@@ -972,18 +1313,46 @@ function statusClass(nodeProps: any): string {
     </div>
 
     <!-- History drawer -->
-    <Drawer v-if="showHistory" :open="showHistory" title="执行历史" placement="right" :width="420" @update:open="showHistory = $event">
-      <Empty v-if="instances.length === 0" description="暂无执行记录" />
-      <div v-else class="history-list">
-        <div v-for="inst in instances" :key="inst.id" class="history-item">
+    <Drawer
+      v-if="showHistory"
+      :open="showHistory"
+      title="执行历史"
+      placement="right"
+      :width="420"
+      @update:open="showHistory = $event"
+    >
+      <Empty
+        v-if="instances.length === 0"
+        description="暂无执行记录"
+      />
+      <div
+        v-else
+        class="history-list"
+      >
+        <div
+          v-for="inst in instances"
+          :key="inst.id"
+          class="history-item"
+        >
           <div class="history-head">
-            <Tag :color="inst.status === 'completed' ? 'success' : inst.status === 'error' ? 'error' : 'processing'">{{ inst.status }}</Tag>
+            <Tag :color="inst.status === 'completed' ? 'success' : inst.status === 'error' ? 'error' : 'processing'">
+              {{ inst.status }}
+            </Tag>
             <span class="history-name">{{ inst.workflow_name }}</span>
             <span class="history-time">{{ formatDate(inst.created_at) }}</span>
           </div>
-          <div v-if="inst.error" class="history-error">{{ inst.error }}</div>
+          <div
+            v-if="inst.error"
+            class="history-error"
+          >
+            {{ inst.error }}
+          </div>
           <div class="history-results">
-            <div v-for="(r, nid) in inst.results" :key="nid" class="history-result">
+            <div
+              v-for="(r, nid) in inst.results"
+              :key="nid"
+              class="history-result"
+            >
               <span class="history-node">{{ nid }}</span>
               <pre class="history-output">{{ typeof r.output === 'string' ? r.output.slice(0, 200) : JSON.stringify(r.output).slice(0, 200) }}</pre>
             </div>
@@ -993,9 +1362,22 @@ function statusClass(nodeProps: any): string {
     </Drawer>
 
     <!-- Workflow List Drawer -->
-    <Drawer v-if="showDrawer" :open="showDrawer" title="已保存的工作流" placement="right" :width="380" @update:open="showDrawer = $event">
-      <Empty v-if="savedWorkflows.length === 0" description="暂无工作流" />
-      <div v-else class="workflow-list">
+    <Drawer
+      v-if="showDrawer"
+      :open="showDrawer"
+      title="已保存的工作流"
+      placement="right"
+      :width="380"
+      @update:open="showDrawer = $event"
+    >
+      <Empty
+        v-if="savedWorkflows.length === 0"
+        description="暂无工作流"
+      />
+      <div
+        v-else
+        class="workflow-list"
+      >
         <div
           v-for="wf in savedWorkflows"
           :key="wf.id"
@@ -1003,12 +1385,26 @@ function statusClass(nodeProps: any): string {
           @click="loadWorkflow(wf); showDrawer = false"
         >
           <div class="wf-item-info">
-            <div class="wf-item-name">{{ wf.name || '未命名工作流' }}</div>
-            <div class="wf-item-time">{{ formatDate(wf.updated_at) || formatDate(wf.created_at) }}</div>
+            <div class="wf-item-name">
+              {{ wf.name || '未命名工作流' }}
+            </div>
+            <div class="wf-item-time">
+              {{ formatDate(wf.updated_at) || formatDate(wf.created_at) }}
+            </div>
           </div>
-          <Popconfirm title="确认删除？" @confirm="deleteWorkflow(wf.id)">
-            <Button type="text" danger size="small" @click.stop>
-              <template #icon><DeleteOutlined /></template>
+          <Popconfirm
+            title="确认删除？"
+            @confirm="deleteWorkflow(wf.id)"
+          >
+            <Button
+              type="text"
+              danger
+              size="small"
+              @click.stop
+            >
+              <template #icon>
+                <DeleteOutlined />
+              </template>
             </Button>
           </Popconfirm>
         </div>

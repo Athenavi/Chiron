@@ -5,8 +5,8 @@ import asyncio
 import logging
 import re
 import uuid
-from typing import AsyncIterator
 from enum import Enum
+from typing import AsyncIterator
 
 from app.config import settings
 from app.gateway.router import GatewayRouter
@@ -17,12 +17,14 @@ logger = logging.getLogger(__name__)
 
 class VectorDBType(str, Enum):
     """向量数据库类型"""
+
     MILVUS = "milvus"
     PGVECTOR = "pgvector"
 
 
 class ParserType(str, Enum):
     """解析器类型"""
+
     UNSTRUCTURED = "unstructured"
     MARKITDOWN = "markitdown"
     LIGHTWEIGHT = "lightweight"
@@ -62,8 +64,13 @@ class RAGBuilder:
         """确保 Milvus 连接"""
         if not self._milvus_connected:
             from pymilvus import connections
+
             host = settings.milvus_address.split(":")[0]
-            port = int(settings.milvus_address.split(":")[1]) if ":" in settings.milvus_address else 19530
+            port = (
+                int(settings.milvus_address.split(":")[1])
+                if ":" in settings.milvus_address
+                else 19530
+            )
             connections.connect(alias="default", host=host, port=port)
             self._milvus_connected = True
             logger.info("Milvus connected: %s:%d", host, port)
@@ -87,7 +94,11 @@ class RAGBuilder:
             try:
                 db_type = VectorDBType(vector_db)
             except ValueError:
-                logger.warning("未知 vector_db=%r，使用默认 %s", vector_db, self._vector_db_type.value)
+                logger.warning(
+                    "未知 vector_db=%r，使用默认 %s",
+                    vector_db,
+                    self._vector_db_type.value,
+                )
                 db_type = self._vector_db_type
         else:
             db_type = self._vector_db_type
@@ -96,7 +107,9 @@ class RAGBuilder:
         try:
             # Step 1: 解析
             yield {"type": "progress", "step": "parsing", "progress": 0.1}
-            parse_result = self._parse_document(content, file_type, filename, parse_type)
+            parse_result = self._parse_document(
+                content, file_type, filename, parse_type
+            )
             if parse_result.get("error"):
                 yield {"type": "error", "message": parse_result["error"]}
                 return
@@ -161,11 +174,12 @@ class RAGBuilder:
     ) -> dict:
         """使用 Unstructured 解析"""
         try:
-            from unstructured.partition.auto import partition
-
+            import os
             # 使用通用 partition 函数自动处理所有文件类型
             import tempfile
-            import os
+
+            from unstructured.partition.auto import partition
+
             suffix = f".{file_type}" if file_type else ""
             with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
                 tmp.write(content)
@@ -179,7 +193,9 @@ class RAGBuilder:
             return {
                 "text": text,
                 "char_count": len(text),
-                "page_count": len([el for el in elements if type(el).__name__ == "PageBreak"]),
+                "page_count": len(
+                    [el for el in elements if type(el).__name__ == "PageBreak"]
+                ),
             }
         except Exception as e:
             logger.warning("Unstructured 解析失败: %s", e)
@@ -223,7 +239,11 @@ class RAGBuilder:
             elif file_type == "html":
                 return self._parse_html_lightweight(content)
             elif file_type == "markdown":
-                return {"text": content.decode("utf-8"), "char_count": len(content), "page_count": 1}
+                return {
+                    "text": content.decode("utf-8"),
+                    "char_count": len(content),
+                    "page_count": 1,
+                }
             else:
                 return {"error": f"轻量级解析器不支持: {file_type}"}
         except Exception as e:
@@ -250,12 +270,15 @@ class RAGBuilder:
 
     def _parse_docx_lightweight(self, content: bytes) -> dict:
         """使用 python-docx 解析 Word"""
-        from docx import Document
         import io
+
+        from docx import Document
 
         doc = Document(io.BytesIO(content))
         try:
-            text = "\n\n".join([para.text for para in doc.paragraphs if para.text.strip()])
+            text = "\n\n".join(
+                [para.text for para in doc.paragraphs if para.text.strip()]
+            )
             return {
                 "text": text,
                 "char_count": len(text),
@@ -266,15 +289,18 @@ class RAGBuilder:
 
     def _parse_xlsx_lightweight(self, content: bytes) -> dict:
         """使用 openpyxl 解析 Excel"""
-        from openpyxl import load_workbook
         import io
+
+        from openpyxl import load_workbook
 
         wb = load_workbook(io.BytesIO(content))
         try:
             text_parts = []
             for sheet in wb:
                 for row in sheet.iter_rows(values_only=True):
-                    row_text = " | ".join([str(cell) for cell in row if cell is not None])
+                    row_text = " | ".join(
+                        [str(cell) for cell in row if cell is not None]
+                    )
                     if row_text.strip():
                         text_parts.append(row_text)
             text = "\n".join(text_parts)
@@ -310,10 +336,7 @@ class RAGBuilder:
                 separators=["\n\n", "\n", "。", ".", "!", "！", "?", "？", " "],
             )
             chunks = splitter.split_text(text)
-            return [
-                {"index": i, "content": chunk}
-                for i, chunk in enumerate(chunks)
-            ]
+            return [{"index": i, "content": chunk} for i, chunk in enumerate(chunks)]
         except Exception as e:
             logger.warning("LangChain 分块失败: %s", e)
             # fallback 到简单分块
@@ -407,15 +430,23 @@ class RAGBuilder:
         """存储到 Milvus"""
         if self._vector_store:
             # 使用 VectorStore 接口
-            await self._store_with_interface(kb_id, doc_id, tenant_id, chunks, embeddings)
+            await self._store_with_interface(
+                kb_id, doc_id, tenant_id, chunks, embeddings
+            )
         else:
             # 直接使用 pymilvus
-            await self._store_milvus_direct(kb_id, doc_id, tenant_id, chunks, embeddings)
+            await self._store_milvus_direct(
+                kb_id, doc_id, tenant_id, chunks, embeddings
+            )
 
     async def _store_with_interface(self, kb_id, doc_id, tenant_id, chunks, embeddings):
         """使用 VectorStore 接口存储"""
         collection = f"kb_{kb_id.replace('-', '_')}"
-        dim = len(embeddings[0]) if embeddings and embeddings[0] else settings.embedding_dim
+        dim = (
+            len(embeddings[0])
+            if embeddings and embeddings[0]
+            else settings.embedding_dim
+        )
 
         await self._vector_store.ensure_collection(collection, dim)
 
@@ -427,13 +458,15 @@ class RAGBuilder:
                 continue
             ids.append(str(uuid.uuid4()))
             vectors.append(embedding)
-            payloads.append({
-                "content": chunk["content"][:65000],
-                "kb_id": kb_id,
-                "doc_id": doc_id,
-                "tenant_id": tenant_id,
-                "chunk_index": chunk["index"],
-            })
+            payloads.append(
+                {
+                    "content": chunk["content"][:65000],
+                    "kb_id": kb_id,
+                    "doc_id": doc_id,
+                    "tenant_id": tenant_id,
+                    "chunk_index": chunk["index"],
+                }
+            )
 
         if ids:
             await self._vector_store.insert(collection, ids, vectors, payloads)
@@ -443,13 +476,20 @@ class RAGBuilder:
 
     async def _store_milvus_direct(self, kb_id, doc_id, tenant_id, chunks, embeddings):
         """直接存储到 Milvus"""
-        from pymilvus import Collection, FieldSchema, CollectionSchema, DataType
+        from pymilvus import (Collection, CollectionSchema, DataType,
+                              FieldSchema)
 
         self._ensure_milvus()
-        dim = len(embeddings[0]) if embeddings and embeddings[0] else settings.embedding_dim
+        dim = (
+            len(embeddings[0])
+            if embeddings and embeddings[0]
+            else settings.embedding_dim
+        )
 
         fields = [
-            FieldSchema(name="id", dtype=DataType.VARCHAR, is_primary=True, max_length=64),
+            FieldSchema(
+                name="id", dtype=DataType.VARCHAR, is_primary=True, max_length=64
+            ),
             FieldSchema(name="kb_id", dtype=DataType.VARCHAR, max_length=64),
             FieldSchema(name="doc_id", dtype=DataType.VARCHAR, max_length=64),
             FieldSchema(name="tenant_id", dtype=DataType.VARCHAR, max_length=64),
@@ -463,13 +503,24 @@ class RAGBuilder:
             collection = Collection(collection_name)
         except Exception:
             collection = Collection(collection_name, schema)
-            collection.create_index("embedding", {
-                "metric_type": "COSINE",
-                "index_type": "IVF_FLAT",
-                "params": {"nlist": 1024},
-            })
+            collection.create_index(
+                "embedding",
+                {
+                    "metric_type": "COSINE",
+                    "index_type": "IVF_FLAT",
+                    "params": {"nlist": 1024},
+                },
+            )
 
-        ids, kb_ids, doc_ids, tenant_ids, chunk_indices, contents, valid_embeddings = [], [], [], [], [], [], []
+        ids, kb_ids, doc_ids, tenant_ids, chunk_indices, contents, valid_embeddings = (
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+        )
         for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
             if embedding is None:
                 continue
@@ -486,7 +537,18 @@ class RAGBuilder:
             # doc_id 为服务端生成的 uuid，转义引号防御表达式注入
             safe_doc_id = doc_id.replace('"', '\\"')
             await asyncio.to_thread(collection.delete, f'doc_id == "{safe_doc_id}"')
-            await asyncio.to_thread(collection.insert, [ids, kb_ids, doc_ids, tenant_ids, chunk_indices, contents, valid_embeddings])
+            await asyncio.to_thread(
+                collection.insert,
+                [
+                    ids,
+                    kb_ids,
+                    doc_ids,
+                    tenant_ids,
+                    chunk_indices,
+                    contents,
+                    valid_embeddings,
+                ],
+            )
             await asyncio.to_thread(collection.flush)
         else:
             raise ValueError("无有效向量可存储，Milvus 存储失败")
@@ -519,18 +581,22 @@ class RAGBuilder:
                 skipped += 1
                 logger.warning(
                     "chunk %d 维度 %d 与 embedding_dim=%d 不一致，跳过",
-                    chunk["index"], len(embedding), settings.embedding_dim,
+                    chunk["index"],
+                    len(embedding),
+                    settings.embedding_dim,
                 )
                 continue
-            rows.append((
-                str(uuid.uuid4()),
-                kb_id,
-                doc_id,
-                tenant_id,
-                chunk["index"],
-                chunk["content"][:65000],
-                f"[{','.join(format(float(x), '.8f') for x in embedding)}]",
-            ))
+            rows.append(
+                (
+                    str(uuid.uuid4()),
+                    kb_id,
+                    doc_id,
+                    tenant_id,
+                    chunk["index"],
+                    chunk["content"][:65000],
+                    f"[{','.join(format(float(x), '.8f') for x in embedding)}]",
+                )
+            )
 
         if not rows:
             if skipped:
@@ -543,7 +609,9 @@ class RAGBuilder:
         try:
             async with conn.transaction():
                 # 重建幂等：先按文档清理旧向量再插入，避免文档重建累积重复
-                await conn.execute(f"DELETE FROM {table} WHERE document_id = $1", doc_id)
+                await conn.execute(
+                    f"DELETE FROM {table} WHERE document_id = $1", doc_id
+                )
                 await conn.execute(
                     f"""
                     INSERT INTO {table}
@@ -580,7 +648,11 @@ class RAGBuilder:
             try:
                 db_type = VectorDBType(vector_db)
             except ValueError:
-                logger.warning("未知 vector_db=%r，使用默认 %s", vector_db, self._vector_db_type.value)
+                logger.warning(
+                    "未知 vector_db=%r，使用默认 %s",
+                    vector_db,
+                    self._vector_db_type.value,
+                )
                 db_type = self._vector_db_type
         else:
             db_type = self._vector_db_type
@@ -592,12 +664,15 @@ class RAGBuilder:
         else:
             raise ValueError(f"不支持的向量数据库: {db_type}")
 
-    async def query_milvus(self, kb_id: str, query: str, top_k: int = 5, threshold: float = 0.5) -> list[dict]:
+    async def query_milvus(
+        self, kb_id: str, query: str, top_k: int = 5, threshold: float = 0.5
+    ) -> list[dict]:
         """从 Milvus 查询"""
         if self._vector_store:
             return await self._query_with_interface(kb_id, query, top_k, threshold)
 
         from pymilvus import Collection
+
         self._ensure_milvus()
         collection_name = f"kb_{kb_id.replace('-', '_')}"
         try:
@@ -613,15 +688,23 @@ class RAGBuilder:
 
         results = await asyncio.to_thread(
             collection.search,
-            data=[embedding], anns_field="embedding",
+            data=[embedding],
+            anns_field="embedding",
             param={"metric_type": "COSINE", "params": {"nprobe": 10}},
-            limit=top_k, output_fields=["doc_id", "chunk_index", "content"],
+            limit=top_k,
+            output_fields=["doc_id", "chunk_index", "content"],
         )
         return [
-            {"id": hit.id, "content": hit.entity.get("content", ""),
-             "doc_id": hit.entity.get("doc_id", ""), "chunk_index": hit.entity.get("chunk_index", 0),
-             "score": hit.score}
-            for hits in results for hit in hits if hit.score >= threshold
+            {
+                "id": hit.id,
+                "content": hit.entity.get("content", ""),
+                "doc_id": hit.entity.get("doc_id", ""),
+                "chunk_index": hit.entity.get("chunk_index", 0),
+                "score": hit.score,
+            }
+            for hits in results
+            for hit in hits
+            if hit.score >= threshold
         ]
 
     async def _query_with_interface(self, kb_id, query, top_k, threshold) -> list[dict]:
@@ -650,7 +733,9 @@ class RAGBuilder:
             for r in results
         ]
 
-    async def query_pgvector(self, kb_id: str, query: str, top_k: int = 5, threshold: float = 0.5) -> list[dict]:
+    async def query_pgvector(
+        self, kb_id: str, query: str, top_k: int = 5, threshold: float = 0.5
+    ) -> list[dict]:
         """从 PostgreSQL (pgvector) 查询（余弦相似度，与 Milvus 语义对齐）"""
         query_vector = await self._embed_text(query)
         if not query_vector:
@@ -696,9 +781,12 @@ class RAGBuilder:
             for row in rows
         ]
 
-    async def query_qdrant(self, kb_id: str, query: str, top_k: int = 5, threshold: float = 0.5) -> list[dict]:
+    async def query_qdrant(
+        self, kb_id: str, query: str, top_k: int = 5, threshold: float = 0.5
+    ) -> list[dict]:
         """从 Qdrant 查询（兼容旧代码）"""
         from qdrant_client import QdrantClient
+
         client = QdrantClient(host="localhost", port=6333)
         collection_name = f"kb_{kb_id.replace('-', '_')}"
         embedding = await self._embed_text(query)
@@ -706,9 +794,18 @@ class RAGBuilder:
             return []
         results = await asyncio.to_thread(
             client.search,
-            collection_name=collection_name, query_vector=embedding,
-            limit=top_k, score_threshold=threshold,
+            collection_name=collection_name,
+            query_vector=embedding,
+            limit=top_k,
+            score_threshold=threshold,
         )
-        return [{"id": hit.id, "content": hit.payload.get("content", ""),
-                 "doc_id": hit.payload.get("doc_id", ""), "chunk_index": hit.payload.get("chunk_index", 0),
-                 "score": hit.score} for hit in results]
+        return [
+            {
+                "id": hit.id,
+                "content": hit.payload.get("content", ""),
+                "doc_id": hit.payload.get("doc_id", ""),
+                "chunk_index": hit.payload.get("chunk_index", 0),
+                "score": hit.score,
+            }
+            for hit in results
+        ]

@@ -1,9 +1,10 @@
 """
 DI 容器 — FastAPI Depends + 全局容器（非 HTTP 场景）
 """
+
 from __future__ import annotations
 
-from typing import Any, Callable, TypeVar, Optional
+from typing import Any, Callable, Optional, TypeVar
 
 T = TypeVar("T")
 
@@ -11,17 +12,17 @@ T = TypeVar("T")
 class GlobalContainer:
     """
     全局容器 — 用于非 HTTP 场景（队列消费者、后台任务等）
-    
+
     使用示例：
         container = GlobalContainer()
         container.register(LLMProvider, lambda c: GatewayLLMProvider(...))
         llm = container.resolve(LLMProvider)
     """
-    
+
     def __init__(self):
         self._factories: dict[type, tuple[Callable, bool]] = {}
         self._singletons: dict[type, Any] = {}
-    
+
     def register(
         self,
         interface: type[T],
@@ -30,21 +31,21 @@ class GlobalContainer:
     ) -> None:
         """注册工厂函数"""
         self._factories[interface] = (factory, singleton)
-    
+
     def resolve(self, interface: type[T]) -> T:
         """解析依赖"""
         if interface not in self._factories:
             raise KeyError(f"No factory registered for {interface.__name__}")
-        
+
         factory, singleton = self._factories[interface]
-        
+
         if singleton:
             if interface not in self._singletons:
                 self._singletons[interface] = factory(self)
             return self._singletons[interface]
-        
+
         return factory(self)
-    
+
     def reset(self) -> None:
         """重置容器（用于测试）"""
         self._factories.clear()

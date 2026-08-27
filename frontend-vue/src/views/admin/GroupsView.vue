@@ -146,8 +146,15 @@ onMounted(() => {
 <template>
   <div class="groups-view">
     <div class="page-header">
-      <h2 class="page-title">群组管理</h2>
-      <a-button type="primary" @click="openCreate">新建群组</a-button>
+      <h2 class="page-title">
+        群组管理
+      </h2>
+      <a-button
+        type="primary"
+        @click="openCreate"
+      >
+        新建群组
+      </a-button>
     </div>
 
     <a-table
@@ -160,13 +167,34 @@ onMounted(() => {
       size="small"
     >
       <template #emptyText>
-        <div class="empty-block"><span class="empty-icon">📭</span><span class="empty-text">暂无数据</span></div>
+        <div class="empty-block">
+          <span class="empty-icon">📭</span><span class="empty-text">暂无数据</span>
+        </div>
       </template>
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'action'">
-          <a-button type="link" size="small" @click="openRoleBinding(record as EntGroup)">绑定角色</a-button>
-          <a-button type="link" size="small" @click="openEdit(record as EntGroup)">编辑</a-button>
-          <a-button type="link" size="small" danger @click="confirmDelete(record as EntGroup)">删除</a-button>
+          <a-button
+            type="link"
+            size="small"
+            @click="openRoleBinding(record as EntGroup)"
+          >
+            绑定角色
+          </a-button>
+          <a-button
+            type="link"
+            size="small"
+            @click="openEdit(record as EntGroup)"
+          >
+            编辑
+          </a-button>
+          <a-button
+            type="link"
+            size="small"
+            danger
+            @click="confirmDelete(record as EntGroup)"
+          >
+            删除
+          </a-button>
         </template>
       </template>
     </a-table>
@@ -179,10 +207,18 @@ onMounted(() => {
     >
       <a-form layout="vertical">
         <a-form-item label="群组名（唯一，max 128）">
-          <a-input v-model:value="form.name" :disabled="modalMode === 'edit'" placeholder="如 content-team" />
+          <a-input
+            v-model:value="form.name"
+            :disabled="modalMode === 'edit'"
+            placeholder="如 content-team"
+          />
         </a-form-item>
         <a-form-item label="描述">
-          <a-textarea v-model:value="form.description" :rows="3" placeholder="群组用途说明" />
+          <a-textarea
+            v-model:value="form.description"
+            :rows="3"
+            placeholder="群组用途说明"
+          />
         </a-form-item>
       </a-form>
     </a-modal>
@@ -193,10 +229,19 @@ onMounted(() => {
       width="480"
       placement="right"
     >
-      <p class="drawer-hint">勾选要授予该群组的角色；群组成员将聚合这些角色的权限点。</p>
-      <a-checkbox-group v-model:value="selectedRoleIDs" style="width: 100%">
+      <p class="drawer-hint">
+        勾选要授予该群组的角色；群组成员将聚合这些角色的权限点。
+      </p>
+      <a-checkbox-group
+        v-model:value="selectedRoleIDs"
+        style="width: 100%"
+      >
         <div class="role-list">
-          <div v-for="r in allRoles" :key="r.id" class="role-item">
+          <div
+            v-for="r in allRoles"
+            :key="r.id"
+            class="role-item"
+          >
             <a-checkbox :value="r.id">
               <span class="role-name">{{ r.name }}</span>
               <span class="role-desc">{{ r.display_name || r.permissions.join(', ') }}</span>
@@ -206,8 +251,19 @@ onMounted(() => {
       </a-checkbox-group>
       <template #footer>
         <div style="text-align: right">
-          <a-button style="margin-right: 8px" @click="rolesDrawerVisible = false">取消</a-button>
-          <a-button type="primary" :loading="rolesSaving" @click="saveGroupRoles">保存</a-button>
+          <a-button
+            style="margin-right: 8px"
+            @click="rolesDrawerVisible = false"
+          >
+            取消
+          </a-button>
+          <a-button
+            type="primary"
+            :loading="rolesSaving"
+            @click="saveGroupRoles"
+          >
+            保存
+          </a-button>
         </div>
       </template>
     </a-drawer>

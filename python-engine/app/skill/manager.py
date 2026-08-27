@@ -6,6 +6,7 @@
 3. 每租户独立限流 (QPS=50, Burst=100)
 4. Trace 集成: 每次技能执行记录 span
 """
+
 from __future__ import annotations
 
 import json
@@ -13,9 +14,9 @@ import logging
 import os
 import shlex
 import time
-from typing import Any, Optional
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any, Optional
 
 from app.trace import record_span
 
@@ -24,15 +25,17 @@ logger = logging.getLogger(__name__)
 
 class SkillType(str, Enum):
     """技能类型"""
-    PROMPT = "prompt"              # 提示词模板
-    PYTHON_SCRIPT = "python"       # Python 脚本
-    SHELL_COMMAND = "shell"        # Shell 命令
-    HTTP_REQUEST = "http"          # HTTP 请求
-    MCP_TOOL = "mcp"              # MCP 协议工具
+
+    PROMPT = "prompt"  # 提示词模板
+    PYTHON_SCRIPT = "python"  # Python 脚本
+    SHELL_COMMAND = "shell"  # Shell 命令
+    HTTP_REQUEST = "http"  # HTTP 请求
+    MCP_TOOL = "mcp"  # MCP 协议工具
 
 
 class SkillStatus(str, Enum):
     """技能状态"""
+
     ACTIVE = "active"
     INACTIVE = "inactive"
     ERROR = "error"
@@ -41,6 +44,7 @@ class SkillStatus(str, Enum):
 @dataclass
 class SkillMetadata:
     """技能元数据"""
+
     skill_id: str
     name: str
     description: str
@@ -60,6 +64,7 @@ class SkillMetadata:
 @dataclass
 class SkillExecutionResult:
     """技能执行结果"""
+
     skill_id: str
     skill_name: str
     success: bool
@@ -73,21 +78,21 @@ class SkillExecutionResult:
 
 class MCPClient:
     """MCP (Model Context Protocol) 客户端
-    
+
     MCP 协议规范:
     - 传输层: STDIO / HTTP / WebSocket
     - 消息格式: JSON-RPC 2.0
     - 核心方法: tools/list, tools/call, resources/read
-    
+
     参考: https://github.com/modelcontextprotocol/specification
     """
-    
+
     def __init__(self, server_url: str, transport: str = "http"):
         self.server_url = server_url
         self.transport = transport  # "stdio" / "http" / "websocket"
         self._tools_cache: list[dict] = []
         self._cache_time = 0
-    
+
     async def discover_tools(self) -> list[dict]:
         """发现 MCP Server 提供的工具"""
         # 检查缓存 (5 分钟 TTL)
@@ -100,14 +105,17 @@ class MCPClient:
             tools = response.get("result", {}).get("tools", [])
             self._tools_cache = tools
             self._cache_time = time.time()
-            logger.info(f"Discovered {len(tools)} MCP tools via STDIO from {self.server_url}")
+            logger.info(
+                f"Discovered {len(tools)} MCP tools via STDIO from {self.server_url}"
+            )
             return tools
 
         if self.transport != "http":
             raise ValueError(f"Unsupported transport: {self.transport}")
-        
+
         try:
             import httpx
+
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     f"{self.server_url}/rpc",
@@ -121,19 +129,19 @@ class MCPClient:
                 )
                 response.raise_for_status()
                 result = response.json()
-            
+
             # 解析工具列表
             tools = result.get("result", {}).get("tools", [])
             self._tools_cache = tools
             self._cache_time = time.time()
-            
+
             logger.info(f"Discovered {len(tools)} MCP tools from {self.server_url}")
             return tools
-            
+
         except Exception as e:
             logger.error(f"MCP tool discovery failed: {e}")
             return []
-    
+
     async def call_tool(
         self,
         tool_name: str,
@@ -143,7 +151,7 @@ class MCPClient:
     ) -> SkillExecutionResult:
         """调用 MCP 工具"""
         start_time = time.time()
-        
+
         # Fail loud: 不支持的传输方式显式抛错。
         if self.transport == "stdio":
             response = await self._stdio_rpc(
@@ -174,7 +182,11 @@ class MCPClient:
                 skill_name=tool_name,
                 success=not is_error,
                 output=json.dumps(output, ensure_ascii=False) if not is_error else "",
-                error=json.dumps(response.get("error", {}), ensure_ascii=False) if is_error else "",
+                error=(
+                    json.dumps(response.get("error", {}), ensure_ascii=False)
+                    if is_error
+                    else ""
+                ),
                 duration_ms=duration_ms,
                 trace_id=trace_id,
                 tenant_id=tenant_id,
@@ -182,9 +194,10 @@ class MCPClient:
 
         if self.transport != "http":
             raise ValueError(f"Unsupported transport: {self.transport}")
-        
+
         try:
             import httpx
+
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     f"{self.server_url}/rpc",
@@ -201,12 +214,12 @@ class MCPClient:
                 )
                 response.raise_for_status()
                 result = response.json()
-            
+
             output = result.get("result", {}).get("content", "")
             is_error = result.get("error") is not None
-            
+
             duration_ms = int((time.time() - start_time) * 1000)
-            
+
             # 记录 span
             if trace_id:
                 await record_span(
@@ -220,21 +233,25 @@ class MCPClient:
                     },
                     tenant_id=tenant_id,
                 )
-            
+
             return SkillExecutionResult(
                 skill_id=f"mcp:{tool_name}",
                 skill_name=tool_name,
                 success=not is_error,
                 output=json.dumps(output, ensure_ascii=False) if not is_error else "",
-                error=json.dumps(result.get("error", {}), ensure_ascii=False) if is_error else "",
+                error=(
+                    json.dumps(result.get("error", {}), ensure_ascii=False)
+                    if is_error
+                    else ""
+                ),
                 duration_ms=duration_ms,
                 trace_id=trace_id,
                 tenant_id=tenant_id,
             )
-            
+
         except Exception as e:
             duration_ms = int((time.time() - start_time) * 1000)
-            
+
             logger.error(f"MCP tool call failed: {e}")
             return SkillExecutionResult(
                 skill_id=f"mcp:{tool_name}",
@@ -278,6 +295,7 @@ class MCPClient:
         # S 安全修复：MCP STDIO 命令必须过白名单(PLUGIN_COMMAND_ALLOWLIST)，
         # 防 server_url 可被配置/注入控制时任意命令执行。未配置则 fail-close 拒绝。
         from app.tools.ssrf import command_allowed
+
         if not command_allowed(cmd[0]):
             raise ValueError(
                 f"STDIO transport: command not allowed: {cmd[0]} "
@@ -301,9 +319,7 @@ class MCPClient:
             "method": method,
             "params": params,
         }
-        payload = (
-            json.dumps(init_req) + "\n" + json.dumps(actual_req) + "\n"
-        ).encode()
+        payload = (json.dumps(init_req) + "\n" + json.dumps(actual_req) + "\n").encode()
 
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -313,13 +329,9 @@ class MCPClient:
                 stderr=asyncio.subprocess.PIPE,
             )
         except FileNotFoundError:
-            raise RuntimeError(
-                f"STDIO transport: command not found: {cmd[0]}"
-            )
+            raise RuntimeError(f"STDIO transport: command not found: {cmd[0]}")
         except Exception as e:
-            raise RuntimeError(
-                f"STDIO transport: failed to spawn process: {e}"
-            )
+            raise RuntimeError(f"STDIO transport: failed to spawn process: {e}")
 
         try:
             stdout, stderr = await asyncio.wait_for(
@@ -329,9 +341,7 @@ class MCPClient:
         except asyncio.TimeoutError:
             proc.kill()
             await proc.wait()
-            raise TimeoutError(
-                f"MCP STDIO '{method}' timed out after {timeout}s"
-            )
+            raise TimeoutError(f"MCP STDIO '{method}' timed out after {timeout}s")
 
         # 从 stdout 解析 JSON-RPC 响应（取 id=1 的那条）
         lines = stdout.decode(errors="replace").strip().splitlines()
@@ -360,18 +370,18 @@ class MCPClient:
 
 class SkillManager:
     """技能管理器 (租户隔离)
-    
+
     功能:
     1. 技能注册/卸载/更新
     2. 技能发现 (按类型/标签/状态)
     3. 技能执行 (统一接口)
     4. MCP 工具集成
     """
-    
+
     def __init__(self):
         self._skills: dict[str, SkillMetadata] = {}  # skill_id -> metadata
         self._mcp_clients: dict[str, MCPClient] = {}  # server_url -> client
-    
+
     async def register_skill(
         self,
         tenant_id: str,
@@ -384,14 +394,14 @@ class SkillManager:
         output_schema: dict = {},
     ) -> SkillMetadata:
         """注册新技能 (带租户隔离)
-        
+
         SaaS 安全:
         - skill_id 格式: "{tenant_id}:{name}" 防止冲突
         - metadata 携带 tenant_id 标记
         """
         # 构造完整 skill_id (带租户前缀)
         full_skill_id = f"{tenant_id}:{skill_id}"
-        
+
         skill = SkillMetadata(
             skill_id=full_skill_id,
             name=name,
@@ -403,20 +413,22 @@ class SkillManager:
             output_schema=output_schema,
             updated_at=time.time(),
         )
-        
+
         self._skills[full_skill_id] = skill
-        
+
         # 如果是 MCP 类型,初始化客户端
         if type == SkillType.MCP_TOOL:
             server_url = config.get("server_url", "")
             transport = config.get("transport", "http")
             if server_url:
                 self._mcp_clients[full_skill_id] = MCPClient(server_url, transport)
-        
-        logger.info(f"Skill registered (id={full_skill_id}, name={name}, tenant={tenant_id})")
-        
+
+        logger.info(
+            f"Skill registered (id={full_skill_id}, name={name}, tenant={tenant_id})"
+        )
+
         return skill
-    
+
     async def unregister_skill(self, tenant_id: str, skill_id: str) -> bool:
         """卸载技能"""
         full_skill_id = f"{tenant_id}:{skill_id}"
@@ -425,7 +437,7 @@ class SkillManager:
             logger.info(f"Skill unregistered (id={full_skill_id})")
             return True
         return False
-    
+
     async def list_skills(
         self,
         tenant_id: str,
@@ -442,9 +454,9 @@ class SkillManager:
             if status and skill.status != status:
                 continue
             results.append(skill)
-        
+
         return results
-    
+
     async def execute_skill(
         self,
         tenant_id: str,
@@ -454,11 +466,11 @@ class SkillManager:
     ) -> SkillExecutionResult:
         """执行技能 (统一接口 + 租户隔离 + trace)"""
         start_time = time.time()
-        
+
         # 查找技能元数据
         full_skill_id = f"{tenant_id}:{skill_id}"
         skill_meta = self._skills.get(full_skill_id)
-        
+
         if not skill_meta:
             return SkillExecutionResult(
                 skill_id=full_skill_id,
@@ -467,31 +479,31 @@ class SkillManager:
                 error=f"Skill not found: {full_skill_id}",
                 tenant_id=tenant_id,
             )
-        
+
         try:
             if skill_meta.type == SkillType.MCP_TOOL:
                 # MCP 工具调用
                 mcp_client = self._mcp_clients.get(full_skill_id)
                 if not mcp_client:
                     raise ValueError(f"MCP client not initialized for {full_skill_id}")
-                
+
                 result = await mcp_client.call_tool(
                     tool_name=skill_meta.name,
                     arguments=params,
                     trace_id=trace_id,
                     tenant_id=tenant_id,
                 )
-                
+
                 return result
-                
+
             elif skill_meta.type == SkillType.PROMPT:
                 # 提示词模板渲染 (config 已在 register_skill 时存入元数据)
                 prompt = skill_meta.config.get("template", "")
                 # 填充变量
                 rendered = prompt.format(**params)
-                
+
                 duration_ms = int((time.time() - start_time) * 1000)
-                
+
                 return SkillExecutionResult(
                     skill_id=full_skill_id,
                     skill_name=skill_meta.name,
@@ -500,28 +512,43 @@ class SkillManager:
                     duration_ms=duration_ms,
                     tenant_id=tenant_id,
                 )
-                
+
             elif skill_meta.type == SkillType.PYTHON_SCRIPT:
                 return await self._execute_python_script(
-                    skill_meta, params, full_skill_id, tenant_id, trace_id, start_time,
+                    skill_meta,
+                    params,
+                    full_skill_id,
+                    tenant_id,
+                    trace_id,
+                    start_time,
                 )
 
             elif skill_meta.type == SkillType.SHELL_COMMAND:
                 return await self._execute_shell_command(
-                    skill_meta, params, full_skill_id, tenant_id, trace_id, start_time,
+                    skill_meta,
+                    params,
+                    full_skill_id,
+                    tenant_id,
+                    trace_id,
+                    start_time,
                 )
 
             elif skill_meta.type == SkillType.HTTP_REQUEST:
                 return await self._execute_http_request(
-                    skill_meta, params, full_skill_id, tenant_id, trace_id, start_time,
+                    skill_meta,
+                    params,
+                    full_skill_id,
+                    tenant_id,
+                    trace_id,
+                    start_time,
                 )
-            
+
             else:
                 raise ValueError(f"Unsupported skill type: {skill_meta.type}")
-                
+
         except Exception as e:
             duration_ms = int((time.time() - start_time) * 1000)
-            
+
             logger.error(f"Skill execution failed (skill={full_skill_id}): {e}")
             return SkillExecutionResult(
                 skill_id=full_skill_id,
@@ -531,7 +558,6 @@ class SkillManager:
                 duration_ms=duration_ms,
                 tenant_id=tenant_id,
             )
-
 
     # ── Python 脚本执行 (沙箱) ──────────────────────────────────────
 
@@ -553,7 +579,8 @@ class SkillManager:
             code:     Python 脚本源码（函数体，可引用 params 变量）
             timeout:  超时秒数（默认 60，上限 300）
         """
-        from app.tools.run_code import _check_static, _safe_builtins, _render_result
+        from app.tools.run_code import (_check_static, _render_result,
+                                        _safe_builtins)
 
         code = skill_meta.config.get("code", "")
         timeout = int(skill_meta.config.get("timeout", 60))
@@ -567,9 +594,9 @@ class SkillManager:
             raise ValueError(f"python script blocked by static guard: {denied}")
 
         # 将 params 注入为脚本可用的变量
-        import io
-        import contextlib
         import asyncio
+        import contextlib
+        import io
 
         ns: dict[str, Any] = {
             "params": params,
@@ -577,7 +604,9 @@ class SkillManager:
         }
 
         # 包装为 async 函数（与 run_code 语义一致）
-        body = "\n".join("    " + line if line.strip() else line for line in code.splitlines())
+        body = "\n".join(
+            "    " + line if line.strip() else line for line in code.splitlines()
+        )
         src = f"async def _skill_main():\n{body}\n"
 
         log_buf = io.StringIO()
@@ -819,9 +848,9 @@ def get_skill_manager() -> SkillManager:
 
 # ── Go 侧限流配置示例 ─────────────────────────────────────────────
 # Go gateway_router.go 中的限流中间件:
-# 
+#
 # skillRateLimiter := NewTenantRateLimiter(redis, 50, 100)
 # skillRateMW := skillRateLimiter.Middleware
-# 
+#
 # mux.Handle("POST /v1/skills", authMW(skillRateMW(...)))
 # mux.Handle("GET /v1/skills/{id}/execute", authMW(skillRateMW(...)))

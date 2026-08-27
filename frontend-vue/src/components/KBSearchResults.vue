@@ -3,14 +3,22 @@
   <div class="kb-search-results">
     <div class="results-header">
       <div class="header-title">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-          <path d="M2 2h12v12H2V2zm1 1v10h10V3H3z"/>
-          <path d="M5 5h6v1H5V5zm0 2h6v1H5V7zm0 2h4v1H5V9z"/>
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="currentColor"
+        >
+          <path d="M2 2h12v12H2V2zm1 1v10h10V3H3z" />
+          <path d="M5 5h6v1H5V5zm0 2h6v1H5V7zm0 2h4v1H5V9z" />
         </svg>
         知识库检索结果 ({{ results.length }} 条)
       </div>
       <div class="header-actions">
-        <button @click="toggleAll" class="btn-toggle">
+        <button
+          class="btn-toggle"
+          @click="toggleAll"
+        >
           {{ isExpanded ? '收起全部' : '展开全部' }}
         </button>
       </div>
@@ -26,15 +34,24 @@
         <!-- 排名 + 相似度分数 -->
         <div class="result-rank">
           <span class="rank-badge">#{{ index + 1 }}</span>
-          <span class="score-badge" :style="{ backgroundColor: getScoreColor(result.score) }">
+          <span
+            class="score-badge"
+            :style="{ backgroundColor: getScoreColor(result.score) }"
+          >
             相似度: {{ (result.score * 100).toFixed(1) }}%
           </span>
         </div>
         
         <!-- 文档标题 -->
         <div class="result-title">
-          <svg class="doc-icon" width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
-            <path d="M2 1h7l3 3v9H2V1zm5 0v3h3L7 1z"/>
+          <svg
+            class="doc-icon"
+            width="14"
+            height="14"
+            viewBox="0 0 14 14"
+            fill="currentColor"
+          >
+            <path d="M2 1h7l3 3v9H2V1zm5 0v3h3L7 1z" />
           </svg>
           <span>{{ result.documentName || `文档 ${index + 1}` }}</span>
         </div>
@@ -44,7 +61,10 @@
           <pre class="content-text">{{ getTruncatedContent(result.content) }}</pre>
           
           <!-- 高亮关键词 -->
-          <div v-if="result.highlights && result.highlights.length" class="highlights">
+          <div
+            v-if="result.highlights && result.highlights.length"
+            class="highlights"
+          >
             <span class="highlight-label">关键片段:</span>
             <span
               v-for="(highlight, hIdx) in result.highlights"
@@ -59,15 +79,26 @@
         <!-- 来源信息 -->
         <div class="result-meta">
           <span class="meta-item">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
-              <path d="M6 1a4 4 0 100 8 4 4 0 000-8zm0 6.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z"/>
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 12 12"
+              fill="currentColor"
+            >
+              <path d="M6 1a4 4 0 100 8 4 4 0 000-8zm0 6.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z" />
             </svg>
             Chunk #{{ result.chunkId }}
           </span>
-          <span class="meta-item" v-if="result.tenantId">
+          <span
+            v-if="result.tenantId"
+            class="meta-item"
+          >
             租户: {{ result.tenantId.substring(0, 8) }}
           </span>
-          <span class="meta-item" v-if="result.timestamp">
+          <span
+            v-if="result.timestamp"
+            class="meta-item"
+          >
             {{ formatTime(result.timestamp) }}
           </span>
         </div>
@@ -75,8 +106,8 @@
         <!-- 展开/折叠按钮 -->
         <button
           class="expand-btn"
-          @click.stop="toggleResult(result)"
           :class="{ collapsed: !isExpanded && !result.expanded }"
+          @click.stop="toggleResult(result)"
         >
           {{ isExpanded || result.expanded ? '收起' : '展开' }}
         </button>

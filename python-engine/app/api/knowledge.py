@@ -1,4 +1,5 @@
 """Knowledge Base API — CRUD operations with PostgreSQL."""
+
 from __future__ import annotations
 
 import json
@@ -22,6 +23,7 @@ DEFAULT_TENANT_ID = "00000000-0000-0000-0000-000000000001"
 
 
 # ── Models ──
+
 
 class KnowledgeBaseCreate(BaseModel):
     name: str
@@ -51,6 +53,7 @@ class KBQuery(BaseModel):
 
 # ── Helpers ──
 
+
 def _serialize_kb(row: dict) -> dict:
     """Serialize a knowledge_bases row to JSON response."""
     config = row.get("config")
@@ -70,8 +73,16 @@ def _serialize_kb(row: dict) -> dict:
         "total_size_bytes": row.get("total_size_bytes", 0),
         "credits_consumed": row.get("credits_consumed", 0),
         "config": config,
-        "created_at": row["created_at"].isoformat() if isinstance(row["created_at"], datetime) else str(row["created_at"]),
-        "updated_at": row["updated_at"].isoformat() if isinstance(row["updated_at"], datetime) else str(row["updated_at"]),
+        "created_at": (
+            row["created_at"].isoformat()
+            if isinstance(row["created_at"], datetime)
+            else str(row["created_at"])
+        ),
+        "updated_at": (
+            row["updated_at"].isoformat()
+            if isinstance(row["updated_at"], datetime)
+            else str(row["updated_at"])
+        ),
     }
 
 
@@ -94,11 +105,16 @@ def _serialize_doc(row: dict) -> dict:
         "status": row["status"],
         "error_message": row.get("error_message", ""),
         "metadata": metadata,
-        "created_at": row["created_at"].isoformat() if isinstance(row["created_at"], datetime) else str(row["created_at"]),
+        "created_at": (
+            row["created_at"].isoformat()
+            if isinstance(row["created_at"], datetime)
+            else str(row["created_at"])
+        ),
     }
 
 
 # ── Core Functions (testable without FastAPI) ──
+
 
 async def list_knowledge_bases(user_id: str) -> dict:
     """List knowledge bases for a user (private + public)."""
@@ -132,7 +148,10 @@ async def create_knowledge_base(
     if kb_type not in ("wiki", "rag"):
         raise HTTPException(status_code=400, detail="type must be 'wiki' or 'rag'")
     if visibility not in ("public", "private", "tenant"):
-        raise HTTPException(status_code=400, detail="visibility must be 'public', 'private', or 'tenant'")
+        raise HTTPException(
+            status_code=400,
+            detail="visibility must be 'public', 'private', or 'tenant'",
+        )
 
     pool = get_pool()
     kb_id = str(uuid.uuid4())
@@ -140,9 +159,21 @@ async def create_knowledge_base(
     await pool.execute(
         """INSERT INTO knowledge_bases (id, tenant_id, user_id, name, description, type, visibility, status, created_at, updated_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', $8, $8)""",
-        kb_id, DEFAULT_TENANT_ID, user_id, name.strip(), description, kb_type, visibility, now,
+        kb_id,
+        DEFAULT_TENANT_ID,
+        user_id,
+        name.strip(),
+        description,
+        kb_type,
+        visibility,
+        now,
     )
-    return {"id": kb_id, "name": name.strip(), "type": kb_type, "visibility": visibility}
+    return {
+        "id": kb_id,
+        "name": name.strip(),
+        "type": kb_type,
+        "visibility": visibility,
+    }
 
 
 async def get_knowledge_base(kb_id: str, user_id: str) -> dict:
@@ -153,7 +184,8 @@ async def get_knowledge_base(kb_id: str, user_id: str) -> dict:
                   document_count, total_size_bytes, credits_consumed, config, created_at, updated_at
            FROM knowledge_bases
            WHERE id = $1 AND (user_id = $2 OR visibility = 'tenant')""",
-        kb_id, user_id,
+        kb_id,
+        user_id,
     )
     if row is None:
         raise HTTPException(status_code=404, detail="knowledge base not found")
@@ -179,11 +211,15 @@ async def update_knowledge_base(
     if existing is None:
         raise HTTPException(status_code=404, detail="knowledge base not found")
     if existing["user_id"] != user_id:
-        raise HTTPException(status_code=403, detail="not authorized to update this knowledge base")
+        raise HTTPException(
+            status_code=403, detail="not authorized to update this knowledge base"
+        )
 
     # Public KBs can't change type
     if kb_type is not None and existing["visibility"] == "public":
-        raise HTTPException(status_code=400, detail="cannot change type of a public knowledge base")
+        raise HTTPException(
+            status_code=400, detail="cannot change type of a public knowledge base"
+        )
 
     if kb_type is not None and kb_type not in ("wiki", "rag"):
         raise HTTPException(status_code=400, detail="type must be 'wiki' or 'rag'")
@@ -208,7 +244,10 @@ async def update_knowledge_base(
         idx += 1
     if visibility is not None:
         if visibility not in ("public", "private", "tenant"):
-            raise HTTPException(status_code=400, detail="visibility must be 'public', 'private', or 'tenant'")
+            raise HTTPException(
+                status_code=400,
+                detail="visibility must be 'public', 'private', or 'tenant'",
+            )
         updates.append(f"visibility = ${idx}")
         params.append(visibility)
         idx += 1
@@ -227,7 +266,9 @@ async def update_knowledge_base(
     return {"id": kb_id, "updated": True}
 
 
-async def delete_knowledge_base(kb_id: str, user_id: str, is_admin: bool = False) -> dict:
+async def delete_knowledge_base(
+    kb_id: str, user_id: str, is_admin: bool = False
+) -> dict:
     """Delete a knowledge base. Admin can delete any; users can only delete their own."""
     pool = get_pool()
 
@@ -239,13 +280,16 @@ async def delete_knowledge_base(kb_id: str, user_id: str, is_admin: bool = False
         raise HTTPException(status_code=404, detail="knowledge base not found")
 
     if not is_admin and existing["user_id"] != user_id:
-        raise HTTPException(status_code=403, detail="not authorized to delete this knowledge base")
+        raise HTTPException(
+            status_code=403, detail="not authorized to delete this knowledge base"
+        )
 
     await pool.execute("DELETE FROM knowledge_bases WHERE id = $1", kb_id)
     return {"id": kb_id, "deleted": True}
 
 
 # ── Core Functions — Documents ──
+
 
 async def upload_document(
     kb_id: str,
@@ -271,11 +315,16 @@ async def upload_document(
     if kb_row is None:
         raise HTTPException(status_code=404, detail="knowledge base not found")
     if kb_row["user_id"] != user_id:
-        raise HTTPException(status_code=403, detail="not authorized to upload to this knowledge base")
+        raise HTTPException(
+            status_code=403, detail="not authorized to upload to this knowledge base"
+        )
 
     # Reject if KB is currently building
     if kb_row["status"] == "building":
-        raise HTTPException(status_code=409, detail="knowledge base is currently building, try again later")
+        raise HTTPException(
+            status_code=409,
+            detail="knowledge base is currently building, try again later",
+        )
 
     if not name or not name.strip():
         raise HTTPException(status_code=400, detail="document name must not be empty")
@@ -288,7 +337,15 @@ async def upload_document(
         """INSERT INTO knowledge_documents
                (id, tenant_id, knowledge_base_id, user_id, name, file_type, file_size_bytes, status, content, created_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9)""",
-        doc_id, DEFAULT_TENANT_ID, kb_id, user_id, name.strip(), file_type, file_size_bytes, content, now,
+        doc_id,
+        DEFAULT_TENANT_ID,
+        kb_id,
+        user_id,
+        name.strip(),
+        file_type,
+        file_size_bytes,
+        content,
+        now,
     )
 
     # Update KB aggregate stats
@@ -298,7 +355,9 @@ async def upload_document(
                total_size_bytes = total_size_bytes + $1,
                updated_at = $2
            WHERE id = $3""",
-        file_size_bytes, now, kb_id,
+        file_size_bytes,
+        now,
+        kb_id,
     )
 
     return {
@@ -324,7 +383,9 @@ async def list_documents(kb_id: str, user_id: str) -> dict:
     if kb_row is None:
         raise HTTPException(status_code=404, detail="knowledge base not found")
     if kb_row["user_id"] != user_id and kb_row["visibility"] != "public":
-        raise HTTPException(status_code=403, detail="not authorized to view this knowledge base")
+        raise HTTPException(
+            status_code=403, detail="not authorized to view this knowledge base"
+        )
 
     rows = await pool.fetch(
         """SELECT id, knowledge_base_id, name, file_url, file_type, file_size_bytes,
@@ -350,15 +411,20 @@ async def delete_doc(
         raise HTTPException(status_code=400, detail="doc_id is required")
     pool = get_pool()
 
-    kb_row = await pool.fetchrow("SELECT id, user_id FROM knowledge_bases WHERE id = $1", kb_id)
+    kb_row = await pool.fetchrow(
+        "SELECT id, user_id FROM knowledge_bases WHERE id = $1", kb_id
+    )
     if kb_row is None:
         raise HTTPException(status_code=404, detail="knowledge base not found")
     if kb_row["user_id"] != user_id:
-        raise HTTPException(status_code=403, detail="not authorized to delete documents")
+        raise HTTPException(
+            status_code=403, detail="not authorized to delete documents"
+        )
 
     await pool.execute(
         "DELETE FROM knowledge_documents WHERE id = $1 AND knowledge_base_id = $2",
-        doc_id, kb_id,
+        doc_id,
+        kb_id,
     )
     await pool.execute(
         """UPDATE knowledge_bases
@@ -372,6 +438,7 @@ async def delete_doc(
 
 
 # ── Core Functions — Build & Query ──
+
 
 async def _enqueue_rag_build(kb_id: str, user_id: str, estimated_cost: float) -> str:
     """投递 rag_index 异步任务（RAG 知识库构建）"""
@@ -394,7 +461,11 @@ async def _enqueue_rag_build(kb_id: str, user_id: str, estimated_cost: float) ->
                 "kb_id": kb_id,
                 "user_id": user_id,
                 "documents": [
-                    {"doc_id": d["id"], "file_type": d["file_type"], "filename": d["name"]}
+                    {
+                        "doc_id": d["id"],
+                        "file_type": d["file_type"],
+                        "filename": d["name"],
+                    }
                     for d in docs
                 ],
                 "estimated_cost": estimated_cost,
@@ -418,11 +489,15 @@ async def build_knowledge_base(kb_id: str, user_id: str) -> dict:
     if kb_row is None:
         raise HTTPException(status_code=404, detail="knowledge base not found")
     if kb_row["user_id"] != user_id:
-        raise HTTPException(status_code=403, detail="not authorized to build this knowledge base")
+        raise HTTPException(
+            status_code=403, detail="not authorized to build this knowledge base"
+        )
 
     doc_count = kb_row["document_count"] or 0
     if doc_count == 0:
-        raise HTTPException(status_code=400, detail="cannot build knowledge base with no documents")
+        raise HTTPException(
+            status_code=400, detail="cannot build knowledge base with no documents"
+        )
 
     # Calculate cost（credits 为 INTEGER 列，统一向上取整与 Go 侧整数口径一致）
     char_count = kb_row["total_size_bytes"] or 0
@@ -447,10 +522,13 @@ async def build_knowledge_base(kb_id: str, user_id: str) -> dict:
     now = datetime.now(timezone.utc)
     res = await pool.execute(
         "UPDATE knowledge_bases SET status = 'building', updated_at = $1 WHERE id = $2 AND status <> 'building'",
-        now, kb_id,
+        now,
+        kb_id,
     )
     if res.startswith("UPDATE 0"):
-        raise HTTPException(status_code=409, detail="knowledge base is currently building")
+        raise HTTPException(
+            status_code=409, detail="knowledge base is currently building"
+        )
 
     if kb_type == "rag":
         # 异步 RAG 构建：投递 rag_index 任务，由 queue worker 执行向量构建，
@@ -461,7 +539,8 @@ async def build_knowledge_base(kb_id: str, user_id: str) -> dict:
             # 回滚 building 状态，避免 Redis 不可用时 KB 永久卡死（上传被 409 拒绝）
             await pool.execute(
                 "UPDATE knowledge_bases SET status = 'draft', updated_at = $1 WHERE id = $2",
-                datetime.now(timezone.utc), kb_id,
+                datetime.now(timezone.utc),
+                kb_id,
             )
             raise
         return {
@@ -483,13 +562,16 @@ async def build_knowledge_base(kb_id: str, user_id: str) -> dict:
             )
             await conn.execute(
                 "UPDATE users SET credits = credits - $1 WHERE id = $2",
-                estimated_cost, user_id,
+                estimated_cost,
+                user_id,
             )
             await conn.execute(
                 """UPDATE knowledge_bases
                    SET status = 'active', credits_consumed = credits_consumed + $1, updated_at = $2
                    WHERE id = $3""",
-                estimated_cost, now, kb_id,
+                estimated_cost,
+                now,
+                kb_id,
             )
 
     return {
@@ -501,7 +583,10 @@ async def build_knowledge_base(kb_id: str, user_id: str) -> dict:
 
 
 async def query_knowledge_base(
-    kb_id: str, user_id: str, query: str, top_k: int = 5,
+    kb_id: str,
+    user_id: str,
+    query: str,
+    top_k: int = 5,
 ) -> dict:
     """Query a knowledge base using full-text search (wiki) or RAG."""
     pool = get_pool()
@@ -515,7 +600,9 @@ async def query_knowledge_base(
     if kb_row is None:
         raise HTTPException(status_code=404, detail="knowledge base not found")
     if kb_row["user_id"] != user_id and kb_row["visibility"] != "public":
-        raise HTTPException(status_code=403, detail="not authorized to query this knowledge base")
+        raise HTTPException(
+            status_code=403, detail="not authorized to query this knowledge base"
+        )
 
     kb_type = kb_row["type"]
 
@@ -535,7 +622,9 @@ async def query_knowledge_base(
                          @@ plainto_tsquery('chinese', $1)
                    ORDER BY rank DESC
                    LIMIT $3""",
-                query, kb_id, top_k,
+                query,
+                kb_id,
+                top_k,
             )
         except Exception as e:
             logger.warning("wiki full-text search failed (kb_id=%s): %s", kb_id, e)
@@ -554,14 +643,19 @@ async def query_knowledge_base(
         # RAG 向量检索
         try:
             from app.rag.retriever import RAGRetriever
+
             retriever = RAGRetriever()
             # 从 KB 获取 tenant_id
             tenant_row = await pool.fetchrow(
-                "SELECT tenant_id FROM knowledge_bases WHERE id = $1", kb_id,
+                "SELECT tenant_id FROM knowledge_bases WHERE id = $1",
+                kb_id,
             )
             tenant_id = tenant_row["tenant_id"] if tenant_row else "default"
             hits = await retriever.retrieve(
-                tenant_id=tenant_id, query=query, top_k=top_k, threshold=0.45,
+                tenant_id=tenant_id,
+                query=query,
+                top_k=top_k,
+                threshold=0.45,
             )
             results = [
                 {
@@ -598,6 +692,7 @@ async def admin_list_knowledge_bases() -> dict:
 
 
 # ── Routes ──
+
 
 @router.get("")
 async def list_kb(
@@ -697,6 +792,7 @@ async def upload_doc(
     if body.content:
         try:
             import base64
+
             # validate=True：非法 base64 字符直接抛错，避免纯文本被静默解成垃圾字节
             content = base64.b64decode(body.content, validate=True)
         except Exception:

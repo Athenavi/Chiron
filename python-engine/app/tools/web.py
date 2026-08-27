@@ -6,6 +6,7 @@
 WebProvider seam：默认 DuckDuckGoProvider，可通过 set_web_provider 替换
 （对应 deepseek 的多 provider 路由，如 Exa/Perplexity）。
 """
+
 from __future__ import annotations
 
 import logging
@@ -38,10 +39,14 @@ class WebProvider:
 class DuckDuckGoProvider(WebProvider):
     """无 key 的 DuckDuckGo HTML 搜索 + 通用抓取。"""
 
-    async def search(self, query: str, max_results: int = SEARCH_MAX_RESULTS) -> list[dict[str, Any]]:
+    async def search(
+        self, query: str, max_results: int = SEARCH_MAX_RESULTS
+    ) -> list[dict[str, Any]]:
         assert_safe_url("https://html.duckduckgo.com/html/")  # SSRF 防护（S4）
         async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-            resp = await client.post("https://html.duckduckgo.com/html/", data={"q": query})
+            resp = await client.post(
+                "https://html.duckduckgo.com/html/", data={"q": query}
+            )
             resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "html.parser")
         results: list[dict[str, Any]] = []
@@ -82,7 +87,8 @@ class DuckDuckGoProvider(WebProvider):
             "url": str(resp.url),
             "status_code": resp.status_code,
             "content_type": content_type,
-            "content": rendered[:max_chars] + ("\n[truncated]" if len(rendered) > max_chars else ""),
+            "content": rendered[:max_chars]
+            + ("\n[truncated]" if len(rendered) > max_chars else ""),
         }
 
 
@@ -116,7 +122,13 @@ def html_to_markdown(html: str) -> str:
             return
         if name in ("h1", "h2", "h3", "h4", "h5", "h6"):
             level = int(name[1])
-            out.append("\n" + "#" * level + " " + _inline(node.get_text(" ", strip=True)) + "\n")
+            out.append(
+                "\n"
+                + "#" * level
+                + " "
+                + _inline(node.get_text(" ", strip=True))
+                + "\n"
+            )
             return
         if name == "p":
             for child in node.children:
@@ -145,7 +157,9 @@ def html_to_markdown(html: str) -> str:
         if name == "table":
             out.append("\n")
             for tr in node.find_all("tr"):
-                cells = [td.get_text(" ", strip=True) for td in tr.find_all(["td", "th"])]
+                cells = [
+                    td.get_text(" ", strip=True) for td in tr.find_all(["td", "th"])
+                ]
                 out.append("| " + " | ".join(cells) + " |\n")
             out.append("\n")
             return
@@ -171,7 +185,9 @@ def _inline(text: str) -> str:
     return re.sub(r"[ \t]+", " ", text).strip()
 
 
-async def web_search(query: str, max_results: int = SEARCH_MAX_RESULTS) -> dict[str, Any]:
+async def web_search(
+    query: str, max_results: int = SEARCH_MAX_RESULTS
+) -> dict[str, Any]:
     """Search the web and return source titles/URLs/snippets."""
     if not query.strip():
         return {"error": "query is required"}
@@ -204,7 +220,11 @@ registry.register(
         "type": "object",
         "properties": {
             "query": {"type": "string", "description": "Search query"},
-            "max_results": {"type": "integer", "default": SEARCH_MAX_RESULTS, "description": "Max sources to return"},
+            "max_results": {
+                "type": "integer",
+                "default": SEARCH_MAX_RESULTS,
+                "description": "Max sources to return",
+            },
         },
         "required": ["query"],
     },

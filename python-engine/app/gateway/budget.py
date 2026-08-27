@@ -66,11 +66,16 @@ class TokenBudget:
                 if limit > 0 and new_used / limit >= self.BUDGET_WARN_RATIO:
                     await self._redis.publish(
                         "budget:alerts",
-                        json.dumps({"tenant_id": tenant_id, "used": new_used, "limit": limit}),
+                        json.dumps(
+                            {"tenant_id": tenant_id, "used": new_used, "limit": limit}
+                        ),
                     )
                     logger.warning(
                         "Budget alert: tenant=%s used=%d limit=%d (%.0f%%)",
-                        tenant_id, new_used, limit, new_used / limit * 100,
+                        tenant_id,
+                        new_used,
+                        limit,
+                        new_used / limit * 100,
                     )
         except Exception as e:
             logger.exception("Budget deduct failed for tenant=%s: %s", tenant_id, e)

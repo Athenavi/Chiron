@@ -273,19 +273,40 @@ function pct(n: number): string {
       <div class="title">
         <DatabaseOutlined />
         <span>长期记忆</span>
-        <Badge :count="total" :overflow-count="999" color="#6366f1" />
+        <Badge
+          :count="total"
+          :overflow-count="999"
+          color="#6366f1"
+        />
         <span class="subtitle">跨会话留存 · 语义检索 · 自动整理</span>
       </div>
       <Space>
-        <Button :loading="organize.running" @click="runOrganize">
-          <template #icon><ThunderboltOutlined /></template>
+        <Button
+          :loading="organize.running"
+          @click="runOrganize"
+        >
+          <template #icon>
+            <ThunderboltOutlined />
+          </template>
           智能整理
         </Button>
-        <Popconfirm title="确定清空全部长期记忆？此操作不可恢复" ok-text="清空" cancel-text="取消" @confirm="handleClearAll">
-          <Button danger>清空记忆</Button>
+        <Popconfirm
+          title="确定清空全部长期记忆？此操作不可恢复"
+          ok-text="清空"
+          cancel-text="取消"
+          @confirm="handleClearAll"
+        >
+          <Button danger>
+            清空记忆
+          </Button>
         </Popconfirm>
-        <Button type="primary" @click="openCreate()">
-          <template #icon><PlusOutlined /></template>
+        <Button
+          type="primary"
+          @click="openCreate()"
+        >
+          <template #icon>
+            <PlusOutlined />
+          </template>
           新建记忆
         </Button>
       </Space>
@@ -308,8 +329,14 @@ function pct(n: number): string {
     />
 
     <!-- 语义检索 -->
-    <Card class="search-card" :bordered="true">
-      <Space style="width: 100%" wrap>
+    <Card
+      class="search-card"
+      :bordered="true"
+    >
+      <Space
+        style="width: 100%"
+        wrap
+      >
         <Input
           v-model:value="searchInput"
           placeholder="语义检索：如「用户偏好用什么编辑器」"
@@ -318,33 +345,62 @@ function pct(n: number): string {
           @press-enter="handleSearch"
           @search="handleSearch"
         >
-          <template #prefix><SearchOutlined /></template>
+          <template #prefix>
+            <SearchOutlined />
+          </template>
         </Input>
-        <Button type="primary" :loading="searching" @click="handleSearch">智能检索</Button>
-        <Button v-if="searchResults !== null" @click="clearSearch">返回列表</Button>
-        <Tag v-if="searchResults !== null" :color="searchingMode === 'semantic' ? 'blue' : 'orange'">
+        <Button
+          type="primary"
+          :loading="searching"
+          @click="handleSearch"
+        >
+          智能检索
+        </Button>
+        <Button
+          v-if="searchResults !== null"
+          @click="clearSearch"
+        >
+          返回列表
+        </Button>
+        <Tag
+          v-if="searchResults !== null"
+          :color="searchingMode === 'semantic' ? 'blue' : 'orange'"
+        >
           {{ searchingMode === 'semantic' ? '语义模式' : '关键词模式' }}
         </Tag>
       </Space>
     </Card>
 
     <!-- 检索结果 -->
-    <div v-if="searchResults !== null" class="results">
+    <div
+      v-if="searchResults !== null"
+      class="results"
+    >
       <List
         :data-source="searchResults"
         :locale="{ emptyText: '未找到相似记忆' }"
       >
         <template #renderItem="{ item }">
           <List.Item>
-            <Card class="entry-card" size="small" style="width: 100%">
+            <Card
+              class="entry-card"
+              size="small"
+              style="width: 100%"
+            >
               <div class="entry-head">
-                <Tag color="purple">{{ slotLabel(item.slot) }}</Tag>
+                <Tag color="purple">
+                  {{ slotLabel(item.slot) }}
+                </Tag>
                 <span class="entry-key">{{ item.key }}</span>
                 <Tooltip :title="`相关度 ${pct(item.similarity)} · 重排序分 ${item.score.toFixed(2)}`">
-                  <Tag color="green">{{ pct(item.score) }}</Tag>
+                  <Tag color="green">
+                    {{ pct(item.score) }}
+                  </Tag>
                 </Tooltip>
               </div>
-              <div class="entry-value">{{ item.value }}</div>
+              <div class="entry-value">
+                {{ item.value }}
+              </div>
             </Card>
           </List.Item>
         </template>
@@ -352,13 +408,23 @@ function pct(n: number): string {
     </div>
 
     <!-- 浏览（按槽位 Tab） -->
-    <Spin v-else :spinning="loading">
-      <Tabs v-model:activeKey="activeTab">
+    <Spin
+      v-else
+      :spinning="loading"
+    >
+      <Tabs v-model:active-key="activeTab">
         <TabPane key="all">
-          <template #tab>全部 ({{ total }})</template>
+          <template #tab>
+            全部 ({{ total }})
+          </template>
         </TabPane>
-        <TabPane v-for="s in MEMORY_SLOTS" :key="s.slot">
-          <template #tab>{{ s.label }} ({{ counts[s.slot] || 0 }})</template>
+        <TabPane
+          v-for="s in MEMORY_SLOTS"
+          :key="s.slot"
+        >
+          <template #tab>
+            {{ s.label }} ({{ counts[s.slot] || 0 }})
+          </template>
         </TabPane>
       </Tabs>
 
@@ -369,7 +435,12 @@ function pct(n: number): string {
         description="加载失败"
         hint="无法获取记忆数据，请稍后重试"
       >
-        <Button type="primary" @click="loadProfile">重试</Button>
+        <Button
+          type="primary"
+          @click="loadProfile"
+        >
+          重试
+        </Button>
       </EmptyState>
 
       <EmptyState
@@ -380,30 +451,66 @@ function pct(n: number): string {
         hint="点击右上角「新建记忆」，记录用户偏好与长期上下文"
       />
 
-      <List v-else :data-source="filteredEntries">
+      <List
+        v-else
+        :data-source="filteredEntries"
+      >
         <template #renderItem="{ item }">
           <List.Item>
-            <Card class="entry-card" size="small" style="width: 100%">
+            <Card
+              class="entry-card"
+              size="small"
+              style="width: 100%"
+            >
               <div class="entry-head">
-                <Tag color="purple">{{ item.slot_label }}</Tag>
+                <Tag color="purple">
+                  {{ item.slot_label }}
+                </Tag>
                 <span class="entry-key">{{ item.key }}</span>
-                <Tag :color="item.source === 'user_confirmed' ? 'green' : 'default'">{{ item.source_label }}</Tag>
+                <Tag :color="item.source === 'user_confirmed' ? 'green' : 'default'">
+                  {{ item.source_label }}
+                </Tag>
                 <Tooltip title="置信度（整理时高置信条目优先保留）">
-                  <Tag color="blue">置信 {{ item.confidence }}</Tag>
+                  <Tag color="blue">
+                    置信 {{ item.confidence }}
+                  </Tag>
                 </Tooltip>
                 <Space class="entry-actions">
-                  <Button size="small" type="text" title="编辑" @click="openEdit(item)">
-                    <template #icon><EditOutlined /></template>
+                  <Button
+                    size="small"
+                    type="text"
+                    title="编辑"
+                    @click="openEdit(item)"
+                  >
+                    <template #icon>
+                      <EditOutlined />
+                    </template>
                   </Button>
-                  <Popconfirm title="删除这条记忆？" ok-text="删除" cancel-text="取消" @confirm="handleDelete(item.id)">
-                    <Button size="small" type="text" danger title="删除">
-                      <template #icon><DeleteOutlined /></template>
+                  <Popconfirm
+                    title="删除这条记忆？"
+                    ok-text="删除"
+                    cancel-text="取消"
+                    @confirm="handleDelete(item.id)"
+                  >
+                    <Button
+                      size="small"
+                      type="text"
+                      danger
+                      title="删除"
+                    >
+                      <template #icon>
+                        <DeleteOutlined />
+                      </template>
                     </Button>
                   </Popconfirm>
                 </Space>
               </div>
-              <div class="entry-value">{{ item.value }}</div>
-              <div class="entry-meta">访问 {{ item.access_count }} 次 · 更新于 {{ item.updated_at?.slice(0, 10) }}</div>
+              <div class="entry-value">
+                {{ item.value }}
+              </div>
+              <div class="entry-meta">
+                访问 {{ item.access_count }} 次 · 更新于 {{ item.updated_at?.slice(0, 10) }}
+              </div>
             </Card>
           </List.Item>
         </template>
@@ -414,35 +521,64 @@ function pct(n: number): string {
     <Modal
       v-model:open="formVisible"
       :title="editing ? '编辑记忆' : '新建记忆'"
-      @ok="handleSave"
       :confirm-loading="saving"
       ok-text="保存"
       cancel-text="取消"
+      @ok="handleSave"
     >
       <div class="form-row">
         <label>分类</label>
-        <Select v-model:value="form.slot" style="width: 100%">
-          <Select.Option v-for="s in MEMORY_SLOTS" :key="s.slot" :value="s.slot">{{ s.label }}</Select.Option>
+        <Select
+          v-model:value="form.slot"
+          style="width: 100%"
+        >
+          <Select.Option
+            v-for="s in MEMORY_SLOTS"
+            :key="s.slot"
+            :value="s.slot"
+          >
+            {{ s.label }}
+          </Select.Option>
         </Select>
       </div>
       <div class="form-row">
         <label>键（key）</label>
-        <Input v-model:value="form.key" placeholder="如 timezone / stack / 拒接需求" />
+        <Input
+          v-model:value="form.key"
+          placeholder="如 timezone / stack / 拒接需求"
+        />
       </div>
       <div class="form-row">
         <label>内容（value）</label>
-        <Input.TextArea v-model:value="form.value" :rows="3" placeholder="记忆的具体内容" />
+        <Input.TextArea
+          v-model:value="form.value"
+          :rows="3"
+          placeholder="记忆的具体内容"
+        />
       </div>
       <div class="form-row">
         <label>置信度 {{ form.confidence }}</label>
-        <Slider v-model:value="form.confidence" :min="0" :max="100" />
+        <Slider
+          v-model:value="form.confidence"
+          :min="0"
+          :max="100"
+        />
       </div>
       <div class="form-row">
         <label>来源</label>
-        <Select v-model:value="form.source" style="width: 100%">
-          <Select.Option value="user_confirmed">用户确认</Select.Option>
-          <Select.Option value="derived">对话提炼</Select.Option>
-          <Select.Option value="tool_written">工具写入</Select.Option>
+        <Select
+          v-model:value="form.source"
+          style="width: 100%"
+        >
+          <Select.Option value="user_confirmed">
+            用户确认
+          </Select.Option>
+          <Select.Option value="derived">
+            对话提炼
+          </Select.Option>
+          <Select.Option value="tool_written">
+            工具写入
+          </Select.Option>
         </Select>
       </div>
     </Modal>

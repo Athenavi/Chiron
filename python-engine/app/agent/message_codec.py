@@ -17,6 +17,7 @@ SaaS 架构决策：内部（runtime/session 缓存/压缩）统一使用**中�
     from_openai(messages)    → OpenAI 格式 → 中立（兼容历史缓存）
     to_chat_messages(...)    → 中立 → gateway.ChatMessage 对象列表
 """
+
 from __future__ import annotations
 
 import json
@@ -27,8 +28,13 @@ from typing import Any
 ROLES = ("system", "user", "assistant", "tool")
 
 
-def make_message(role: str, content: str = "", tool_call_id: str = "",
-                 tool_calls: list[dict] | None = None, **extra: Any) -> dict:
+def make_message(
+    role: str,
+    content: str = "",
+    tool_call_id: str = "",
+    tool_calls: list[dict] | None = None,
+    **extra: Any,
+) -> dict:
     """构造中立格式消息（固定字段顺序：role → content → tool_call_id → tool_calls）。"""
     if role not in ROLES:
         raise ValueError(f"unknown role: {role}")
@@ -42,19 +48,27 @@ def make_message(role: str, content: str = "", tool_call_id: str = "",
         # 与已有中立 {id,name,arguments} 两种输入
         normalized = []
         for tc in tool_calls:
-            if isinstance(tc, dict) and "function" in tc and isinstance(tc.get("function"), dict):
+            if (
+                isinstance(tc, dict)
+                and "function" in tc
+                and isinstance(tc.get("function"), dict)
+            ):
                 fn = tc["function"]
-                normalized.append({
-                    "id": tc.get("id", ""),
-                    "name": fn.get("name", ""),
-                    "arguments": fn.get("arguments", ""),
-                })
+                normalized.append(
+                    {
+                        "id": tc.get("id", ""),
+                        "name": fn.get("name", ""),
+                        "arguments": fn.get("arguments", ""),
+                    }
+                )
             else:
-                normalized.append({
-                    "id": tc.get("id", ""),
-                    "name": tc.get("name", ""),
-                    "arguments": tc.get("arguments", ""),
-                })
+                normalized.append(
+                    {
+                        "id": tc.get("id", ""),
+                        "name": tc.get("name", ""),
+                        "arguments": tc.get("arguments", ""),
+                    }
+                )
         msg["tool_calls"] = normalized
     if extra:
         extra.pop("reasoning_content", None)  # 思考内容不随消息持久化
@@ -66,13 +80,14 @@ def make_message(role: str, content: str = "", tool_call_id: str = "",
 def is_neutral(messages: list[dict]) -> bool:
     """检测消息列表是否已是中立格式（无 OpenAI 包装）。"""
     for m in messages:
-        for tc in (m.get("tool_calls") or []):
+        for tc in m.get("tool_calls") or []:
             if isinstance(tc, dict) and "function" in tc:
                 return False
     return True
 
 
 # ═════════════════════ OpenAI 适配 ═════════════════════
+
 
 def to_openai(messages: list[dict]) -> list[dict]:
     """中立格式 → OpenAI Chat Completions 消息（dict 列表）。"""
@@ -86,26 +101,36 @@ def to_openai(messages: list[dict]) -> list[dict]:
         if tc_id and msg["role"] == "tool":
             msg["tool_call_id"] = tc_id
         if tool_calls:
-            msg["tool_calls"] = [{
-                "id": tc.get("id", ""),
-                "type": "function",
-                "function": {"name": tc.get("name", ""), "arguments": tc.get("arguments", "")},
-            } for tc in tool_calls]
+            msg["tool_calls"] = [
+                {
+                    "id": tc.get("id", ""),
+                    "type": "function",
+                    "function": {
+                        "name": tc.get("name", ""),
+                        "arguments": tc.get("arguments", ""),
+                    },
+                }
+                for tc in tool_calls
+            ]
         out.append(msg)
     return out
 
 
 def from_openai(messages: list[dict]) -> list[dict]:
     """OpenAI 格式 → 中立格式（兼容历史 session 缓存）。"""
-    return [make_message(
-        role=m.get("role", "user"),
-        content=m.get("content") or "",
-        tool_call_id=m.get("tool_call_id", ""),
-        tool_calls=m.get("tool_calls"),
-    ) for m in messages]
+    return [
+        make_message(
+            role=m.get("role", "user"),
+            content=m.get("content") or "",
+            tool_call_id=m.get("tool_call_id", ""),
+            tool_calls=m.get("tool_calls"),
+        )
+        for m in messages
+    ]
 
 
 # ═════════════════════ 自动格式推断 ═════════════════════
+
 
 def detect_format(messages: list[dict]) -> str:
     """自动推断消息格式：openai | anthropic | gemini | neutral | unknown。
@@ -155,15 +180,19 @@ def auto_normalize(messages: list[dict]) -> list[dict]:
     if fmt == "neutral":
         return messages
     # unknown：逐条中立化（尽力处理）
-    return [make_message(
-        role=m.get("role", "user"),
-        content=m.get("content", "") if isinstance(m.get("content"), str) else "",
-        tool_call_id=m.get("tool_call_id", ""),
-        tool_calls=m.get("tool_calls"),
-    ) for m in messages]
+    return [
+        make_message(
+            role=m.get("role", "user"),
+            content=m.get("content", "") if isinstance(m.get("content"), str) else "",
+            tool_call_id=m.get("tool_call_id", ""),
+            tool_calls=m.get("tool_calls"),
+        )
+        for m in messages
+    ]
 
 
 # ═════════════════════ Anthropic 适配 ═════════════════════
+
 
 def from_anthropic(messages: list[dict]) -> list[dict]:
     """Anthropic Messages API 格式 → 中立格式。
@@ -176,7 +205,11 @@ def from_anthropic(messages: list[dict]) -> list[dict]:
         role = m.get("role", "user")
         blocks = m.get("content")
         if not isinstance(blocks, list):
-            out.append(make_message(role=role, content=blocks if isinstance(blocks, str) else ""))
+            out.append(
+                make_message(
+                    role=role, content=blocks if isinstance(blocks, str) else ""
+                )
+            )
             continue
         text_parts: list[str] = []
         tool_calls: list[dict] = []
@@ -188,34 +221,59 @@ def from_anthropic(messages: list[dict]) -> list[dict]:
             if btype == "text":
                 text_parts.append(str(b.get("text", "")))
             elif btype == "tool_use":
-                tool_calls.append({
-                    "id": b.get("id", ""),
-                    "name": b.get("name", ""),
-                    "arguments": json.dumps(b.get("input") or {}, ensure_ascii=False),
-                })
+                tool_calls.append(
+                    {
+                        "id": b.get("id", ""),
+                        "name": b.get("name", ""),
+                        "arguments": json.dumps(
+                            b.get("input") or {}, ensure_ascii=False
+                        ),
+                    }
+                )
             elif btype == "tool_result":
                 res = b.get("content")
-                tool_results.append({
-                    "tool_call_id": b.get("tool_use_id", ""),
-                    "content": res if isinstance(res, str) else json.dumps(res, ensure_ascii=False, default=str),
-                })
+                tool_results.append(
+                    {
+                        "tool_call_id": b.get("tool_use_id", ""),
+                        "content": (
+                            res
+                            if isinstance(res, str)
+                            else json.dumps(res, ensure_ascii=False, default=str)
+                        ),
+                    }
+                )
         if tool_calls:
-            out.append(make_message(role="assistant", content="\n".join(text_parts), tool_calls=tool_calls))
+            out.append(
+                make_message(
+                    role="assistant",
+                    content="\n".join(text_parts),
+                    tool_calls=tool_calls,
+                )
+            )
         elif text_parts:
             out.append(make_message(role=role, content="\n".join(text_parts)))
         for tr in tool_results:
-            out.append(make_message(role="tool", content=tr["content"], tool_call_id=tr["tool_call_id"]))
+            out.append(
+                make_message(
+                    role="tool", content=tr["content"], tool_call_id=tr["tool_call_id"]
+                )
+            )
     return out
 
 
 # ═════════════════════ Gemini 适配 ═════════════════════
+
 
 def from_gemini(messages: list[dict]) -> list[dict]:
     """Gemini 格式（role: user/model，parts 数组）→ 中立格式（基础支持）。"""
     out: list[dict] = []
     for m in messages or []:
         role = "assistant" if m.get("role") == "model" else m.get("role", "user")
-        parts = m.get("content") if isinstance(m.get("content"), list) else m.get("parts", [])
+        parts = (
+            m.get("content")
+            if isinstance(m.get("content"), list)
+            else m.get("parts", [])
+        )
         text_parts: list[str] = []
         tool_calls: list[dict] = []
         for p in parts or []:
@@ -225,20 +283,34 @@ def from_gemini(messages: list[dict]) -> list[dict]:
                 text_parts.append(str(p.get("text", "")))
             elif "functionCall" in p:
                 fc = p["functionCall"]
-                tool_calls.append({
-                    "id": fc.get("id", ""),
-                    "name": fc.get("name", ""),
-                    "arguments": json.dumps(fc.get("args") or {}, ensure_ascii=False),
-                })
+                tool_calls.append(
+                    {
+                        "id": fc.get("id", ""),
+                        "name": fc.get("name", ""),
+                        "arguments": json.dumps(
+                            fc.get("args") or {}, ensure_ascii=False
+                        ),
+                    }
+                )
             elif "functionResponse" in p:
                 fr = p["functionResponse"]
-                out.append(make_message(
-                    role="tool",
-                    content=json.dumps(fr.get("response") or {}, ensure_ascii=False, default=str),
-                    tool_call_id=fr.get("id", ""),
-                ))
+                out.append(
+                    make_message(
+                        role="tool",
+                        content=json.dumps(
+                            fr.get("response") or {}, ensure_ascii=False, default=str
+                        ),
+                        tool_call_id=fr.get("id", ""),
+                    )
+                )
         if tool_calls:
-            out.append(make_message(role="assistant", content="\n".join(text_parts), tool_calls=tool_calls))
+            out.append(
+                make_message(
+                    role="assistant",
+                    content="\n".join(text_parts),
+                    tool_calls=tool_calls,
+                )
+            )
         elif text_parts:
             out.append(make_message(role=role, content="\n".join(text_parts)))
     return out
@@ -246,14 +318,25 @@ def from_gemini(messages: list[dict]) -> list[dict]:
 
 # ═════════════════════ gateway 适配 ═════════════════════
 
+
 def to_chat_messages(messages: list[dict]):
     """中立格式 → gateway.ChatMessage 对象列表（provider 边界）。"""
     from app.gateway.provider import ChatMessage, ToolCall
-    return [ChatMessage(
-        role=m.get("role", "user"),
-        content=m.get("content") or "",
-        tool_call_id=m.get("tool_call_id", ""),
-        tool_calls=[ToolCall(id=tc.get("id", ""), name=tc.get("name", ""),
-                             arguments=tc.get("arguments", ""))
-                    for tc in (m.get("tool_calls") or [])] or None,
-    ) for m in messages]
+
+    return [
+        ChatMessage(
+            role=m.get("role", "user"),
+            content=m.get("content") or "",
+            tool_call_id=m.get("tool_call_id", ""),
+            tool_calls=[
+                ToolCall(
+                    id=tc.get("id", ""),
+                    name=tc.get("name", ""),
+                    arguments=tc.get("arguments", ""),
+                )
+                for tc in (m.get("tool_calls") or [])
+            ]
+            or None,
+        )
+        for m in messages
+    ]

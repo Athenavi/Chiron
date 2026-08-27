@@ -1,5 +1,8 @@
 <template>
-  <div class="conflict-card" v-if="conflict">
+  <div
+    v-if="conflict"
+    class="conflict-card"
+  >
     <div class="conflict-header">
       <span class="conflict-icon">⚠️</span>
       <span class="conflict-title">记忆冲突：{{ formatSlot(conflict.slot) }} · {{ conflict.item_key }}</span>
@@ -9,13 +12,23 @@
     <div class="conflict-body">
       <div class="conflict-values">
         <div class="value-item old">
-          <div class="value-label">当前值</div>
-          <div class="value-content">{{ conflict.old_value }}</div>
+          <div class="value-label">
+            当前值
+          </div>
+          <div class="value-content">
+            {{ conflict.old_value }}
+          </div>
         </div>
-        <div class="value-arrow">→</div>
+        <div class="value-arrow">
+          →
+        </div>
         <div class="value-item new">
-          <div class="value-label">新发现</div>
-          <div class="value-content">{{ conflict.new_value }}</div>
+          <div class="value-label">
+            新发现
+          </div>
+          <div class="value-content">
+            {{ conflict.new_value }}
+          </div>
         </div>
       </div>
       <div class="conflict-desc">
@@ -24,31 +37,60 @@
     </div>
 
     <div class="conflict-actions">
-      <button class="btn-keep" @click="resolve('keep_old')" :disabled="resolving">
+      <button
+        class="btn-keep"
+        :disabled="resolving"
+        @click="resolve('keep_old')"
+      >
         保留当前值
       </button>
-      <button class="btn-use" @click="resolve('use_new')" :disabled="resolving">
+      <button
+        class="btn-use"
+        :disabled="resolving"
+        @click="resolve('use_new')"
+      >
         采用新值
       </button>
-      <button class="btn-manual" @click="showManual = true" :disabled="resolving">
+      <button
+        class="btn-manual"
+        :disabled="resolving"
+        @click="showManual = true"
+      >
         手动修改
       </button>
-      <button class="btn-dismiss" @click="dismiss" :disabled="resolving">
+      <button
+        class="btn-dismiss"
+        :disabled="resolving"
+        @click="dismiss"
+      >
         忽略
       </button>
     </div>
 
     <!-- 手动修改对话框 -->
-    <div v-if="showManual" class="manual-dialog">
+    <div
+      v-if="showManual"
+      class="manual-dialog"
+    >
       <input
         v-model="manualValue"
         type="text"
         placeholder="输入新值"
         class="manual-input"
-      />
+      >
       <div class="manual-actions">
-        <button @click="showManual = false" :disabled="resolving">取消</button>
-        <button @click="resolve('manual', manualValue)" :disabled="resolving">确认</button>
+        <button
+          :disabled="resolving"
+          @click="showManual = false"
+        >
+          取消
+        </button>
+        <button
+          :disabled="resolving"
+          @click="resolve('manual', manualValue)"
+        >
+          确认
+        </button>
       </div>
     </div>
   </div>

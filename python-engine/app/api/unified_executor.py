@@ -7,6 +7,7 @@ API 路由:
 - GET  /v1/chat/sessions     获取会话列表
 - GET  /v1/chat/sessions/{id}/messages 获取消息历史
 """
+
 from __future__ import annotations
 
 import json
@@ -26,6 +27,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ChatSession:
     """对话会话"""
+
     session_id: str
     tenant_id: str
     title: str = ""
@@ -33,7 +35,7 @@ class ChatSession:
     messages: list[dict] = field(default_factory=list)
     created_at: float = field(default_factory=time.time)
     updated_at: float = 0
-    
+
     # 共享上下文 (跨工作台状态)
     shared_context: dict[str, Any] = field(default_factory=dict)
 
@@ -49,16 +51,18 @@ def _dt_to_ts(value: Any) -> float:
 
 class UnifiedChatHandler:
     """统一聊天处理器 (整合所有工作台能力)
-    
+
     功能:
     1. 接收用户自然语言输入
     2. 调用 TaskRouter 自动编排执行
     3. 发布结果到 ContextBus
     4. 维护会话历史和共享上下文
     """
-    
+
     def __init__(self):
-        self.sessions: dict[str, ChatSession] = {}  # session_id -> Session (L1 缓存,有界)
+        self.sessions: dict[str, ChatSession] = (
+            {}
+        )  # session_id -> Session (L1 缓存,有界)
         self.router = TaskRouter()
         self._db_warned = False  # DB 降级仅告警一次
 
@@ -82,7 +86,8 @@ class UnifiedChatHandler:
         if not self._db_warned:
             self._db_warned = True
             logger.warning(
-                "Unified session DB unavailable, falling back to in-memory mode: %s", exc
+                "Unified session DB unavailable, falling back to in-memory mode: %s",
+                exc,
             )
 
     async def _db_get_session(self, session_id: str) -> dict | None:
@@ -118,7 +123,12 @@ class UnifiedChatHandler:
             await pool.execute(
                 "INSERT INTO unified_sessions (id, tenant_id, user_id, title, mode, shared_context) "
                 "VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO NOTHING",
-                session_id, tenant_id, user_id, title, mode, dict(shared_context),
+                session_id,
+                tenant_id,
+                user_id,
+                title,
+                mode,
+                dict(shared_context),
             )
             return True
         except Exception as e:  # noqa: BLE001
@@ -139,7 +149,11 @@ class UnifiedChatHandler:
             await pool.execute(
                 "INSERT INTO unified_messages (session_id, role, content, metadata, error) "
                 "VALUES ($1, $2, $3, $4, $5)",
-                session_id, role, content, dict(metadata), error,
+                session_id,
+                role,
+                content,
+                dict(metadata),
+                error,
             )
         except Exception as e:  # noqa: BLE001
             self._warn_db(e)
@@ -157,11 +171,13 @@ class UnifiedChatHandler:
                 "UPDATE unified_sessions "
                 "SET mode = $2, shared_context = shared_context || $3::jsonb, "
                 "updated_at = NOW() WHERE id = $1",
-                session_id, mode, dict(shared_context),
+                session_id,
+                mode,
+                dict(shared_context),
             )
         except Exception as e:  # noqa: BLE001
             self._warn_db(e)
-    
+
     async def submit_task(
         self,
         user_input: str,
@@ -173,14 +189,14 @@ class UnifiedChatHandler:
         user_id: str = "",
     ) -> dict[str, Any]:
         """提交任务 (自动编排)
-        
+
         流程:
         1. 创建/获取会话
         2. 调用 TaskRouter 编排执行
         3. 将结果写入共享上下文
         4. 发布结果到 ContextBus
         5. 返回给用户
-        
+
         Args:
             context: 可选会话上下文 (跨工作台注入):
                 - kb_id (str): 知识库 ID,执行前做 RAG 检索,片段拼接到 user_input 前
@@ -196,15 +212,17 @@ class UnifiedChatHandler:
         DB 不可用时降级为内存模式 (见 get_session_messages 同款策略)。
         """
         import uuid
-        
+
         if not trace_id:
             trace_id = uuid.uuid4().hex[:12]
-        
+
         context = context or {}
-        ctx_agent = context.get("agent") if isinstance(context.get("agent"), dict) else None
+        ctx_agent = (
+            context.get("agent") if isinstance(context.get("agent"), dict) else None
+        )
         ctx_kb_id = str(context.get("kb_id") or "")
         ctx_workflow_id = str(context.get("workflow_id") or "")
-        
+
         # ── 创建/获取会话 (内存 L1 缓存 + PostgreSQL 写穿透持久化) ──
         if not session_id:
             session_id = f"session_{int(time.time())}_{tenant_id[:8]}"
@@ -249,44 +267,60 @@ class UnifiedChatHandler:
         )
 
         # 添加用户消息到历史 (先写库,再更新内存缓存)
-        session.messages.append({
-            "role": "user",
-            "content": user_input,
-            "timestamp": time.time(),
-        })
+        session.messages.append(
+            {
+                "role": "user",
+                "content": user_input,
+                "timestamp": time.time(),
+            }
+        )
         if db_ok:
             await self._db_append_message(session_id, "user", user_input, {})
-        
+
         logger.info(
             "User submitted task (session=%s, tenant=%s, mode=%s, trace_id=%s)",
-            session_id, tenant_id, mode, trace_id,
+            session_id,
+            tenant_id,
+            mode,
+            trace_id,
         )
-        
+
         try:
             # 会话上下文注入: context.kb_id → 执行前 RAG 检索,片段拼接到 user_input 前
             kb_hits = 0
             effective_input = user_input
             if ctx_kb_id:
                 kb_block, kb_hits = await self._retrieve_kb_context(
-                    kb_id=ctx_kb_id, query=user_input, tenant_id=tenant_id, trace_id=trace_id,
+                    kb_id=ctx_kb_id,
+                    query=user_input,
+                    tenant_id=tenant_id,
+                    trace_id=trace_id,
                 )
                 if kb_block:
                     effective_input = f"{kb_block}\n{user_input}"
                 logger.info(
                     "KB context injected (kb_id=%s, hits=%d, session=%s)",
-                    ctx_kb_id, kb_hits, session_id,
+                    ctx_kb_id,
+                    kb_hits,
+                    session_id,
                 )
 
             # 调用 TaskRouter (带模式选择)
             if mode == "agent":
                 # 强制使用 Agent 工作台 (context.agent 覆盖 SubAgent 配置)
                 result = await self._execute_via_agent(
-                    effective_input, tenant_id, trace_id, agent_config=ctx_agent,
+                    effective_input,
+                    tenant_id,
+                    trace_id,
+                    agent_config=ctx_agent,
                 )
             elif mode == "workflow":
                 # 强制使用工作流工作台 (context.workflow_id 仅透传记录)
                 result = await self._execute_via_workflow(
-                    effective_input, tenant_id, trace_id, workflow_id=ctx_workflow_id,
+                    effective_input,
+                    tenant_id,
+                    trace_id,
+                    workflow_id=ctx_workflow_id,
                 )
             else:
                 # 自动模式 (默认)
@@ -306,7 +340,7 @@ class UnifiedChatHandler:
                         priority=TaskPriority.NORMAL,
                         trace_id=trace_id,
                     )
-            
+
             # 提取最终输出
             # Fail loud: 执行器返回 status=error (如 gateway 未初始化) 时,
             # 不得包装成 success=True 响应,必须转入异常路径返回明确错误。
@@ -314,12 +348,13 @@ class UnifiedChatHandler:
                 output_data = result.get("output")
                 error_msg = (
                     output_data.get("error", "execution failed")
-                    if isinstance(output_data, dict) else "execution failed"
+                    if isinstance(output_data, dict)
+                    else "execution failed"
                 )
                 raise RuntimeError(str(error_msg))
 
             final_output = self._extract_output(result)
-            
+
             # 结果元数据: 基础字段 + 上下文注入的可选字段 (kb_hits/kb_id/workflow_id/agent_name)
             meta: dict[str, Any] = {
                 "task_id": result.get("task_id"),
@@ -332,25 +367,31 @@ class UnifiedChatHandler:
             if ctx_workflow_id or result.get("workflow_id"):
                 meta["workflow_id"] = result.get("workflow_id") or ctx_workflow_id
             if mode == "agent":
-                meta["agent_name"] = (ctx_agent or {}).get("name") or "unified_chat_agent"
-            
+                meta["agent_name"] = (ctx_agent or {}).get(
+                    "name"
+                ) or "unified_chat_agent"
+
             # 添加到会话历史 (assistant 消息 metadata 同带引用/来源字段,供前端展示)
-            session.messages.append({
-                "role": "assistant",
-                "content": final_output,
-                "timestamp": time.time(),
-                "metadata": dict(meta),
-            })
-            
+            session.messages.append(
+                {
+                    "role": "assistant",
+                    "content": final_output,
+                    "timestamp": time.time(),
+                    "metadata": dict(meta),
+                }
+            )
+
             # 更新共享上下文 (供后续任务使用)
             session.shared_context["last_output"] = final_output
             session.shared_context["last_trace_id"] = trace_id
-            
+
             # 写穿透: 落库 assistant 消息 + 更新会话共享上下文
             if db_ok:
-                await self._db_append_message(session_id, "assistant", final_output, dict(meta))
+                await self._db_append_message(
+                    session_id, "assistant", final_output, dict(meta)
+                )
                 await self._db_touch_session(session_id, mode, session.shared_context)
-            
+
             # 发布结果到 ContextBus (publish_result 默认即 RESULT_PUBLISH)
             await publish_result(
                 topic=f"chat.sessions.{session_id}",
@@ -361,12 +402,14 @@ class UnifiedChatHandler:
                 },
                 tenant_id=tenant_id,
             )
-            
+
             logger.info(
                 "Task completed (session=%s, task_id=%s, duration=%dms)",
-                session_id, result.get("task_id"), result.get("total_duration_ms", 0),
+                session_id,
+                result.get("task_id"),
+                result.get("total_duration_ms", 0),
             )
-            
+
             return {
                 "success": True,
                 "session_id": session_id,
@@ -374,33 +417,41 @@ class UnifiedChatHandler:
                 "output": final_output,
                 "metadata": {
                     **meta,
-                    "subtasks_completed": result.get("output", {}).get("subtasks_completed", 0),
-                }
+                    "subtasks_completed": result.get("output", {}).get(
+                        "subtasks_completed", 0
+                    ),
+                },
             }
-            
+
         except Exception as e:
             logger.error(f"Task execution failed: {e}", exc_info=True)
-            
+
             # 记录错误到会话历史 (失败同样落库,便于跨实例恢复)
-            session.messages.append({
-                "role": "assistant",
-                "content": f"抱歉,执行失败: {str(e)}",
-                "timestamp": time.time(),
-                "error": str(e),
-            })
+            session.messages.append(
+                {
+                    "role": "assistant",
+                    "content": f"抱歉,执行失败: {str(e)}",
+                    "timestamp": time.time(),
+                    "error": str(e),
+                }
+            )
             if db_ok:
                 await self._db_append_message(
-                    session_id, "assistant", f"抱歉,执行失败: {str(e)}", {}, error=str(e)
+                    session_id,
+                    "assistant",
+                    f"抱歉,执行失败: {str(e)}",
+                    {},
+                    error=str(e),
                 )
                 await self._db_touch_session(session_id, mode, session.shared_context)
-            
+
             return {
                 "success": False,
                 "error": str(e),
                 "session_id": session_id,
                 "trace_id": trace_id,
             }
-    
+
     async def _execute_via_agent(
         self,
         user_input: str,
@@ -415,17 +466,20 @@ class UnifiedChatHandler:
         """
         from app.agent.multi_agent import SubAgent
         from app.main import get_gateway
-        
+
         try:
             gateway = await get_gateway()
         except RuntimeError:
-            return {"status": "error", "output": {"error": "LLM gateway not initialized"}}
-        
+            return {
+                "status": "error",
+                "output": {"error": "LLM gateway not initialized"},
+            }
+
         agent_config = agent_config or {}
-        
+
         # name 覆盖
         agent_name = str(agent_config.get("name") or "unified_chat_agent")
-        
+
         # system_prompt 覆盖 (缺省保持现有默认)
         default_prompt = """你是一个多功能 AI 助手。请帮助用户完成各种任务,包括:
 1. 数据分析和问题解答
@@ -435,10 +489,10 @@ class UnifiedChatHandler:
 
 如果用户需要执行具体操作(如运行 Python 代码),请使用相应的工具。"""
         system_prompt = str(agent_config.get("system_prompt") or default_prompt)
-        
+
         # model 覆盖 (缺省保持现有默认 gpt-4o-mini)
         model = str(agent_config.get("model") or "gpt-4o-mini")
-        
+
         # max_turns 覆盖 (缺省保持现有默认 10)
         try:
             max_turns = int(agent_config.get("max_turns", 10) or 10)
@@ -446,7 +500,7 @@ class UnifiedChatHandler:
             max_turns = 10
         if max_turns <= 0:
             max_turns = 10
-        
+
         agent = SubAgent(
             name=agent_name,
             description="通用助手 Agent",
@@ -455,13 +509,15 @@ class UnifiedChatHandler:
             model=model,
             max_turns=max_turns,
         )
-        
+
         # SubAgent.run 已实现: 真实调用并透传结果 (绝不返回伪造输出)
         agent_result = await agent.run(task=user_input, tenant_id=tenant_id)
         if not agent_result.success:
             # Fail loud: Agent 执行失败必须向上抛出,由 submit_task 返回 success=False
-            raise RuntimeError(f"Agent execution failed: {agent_result.error or 'unknown error'}")
-        
+            raise RuntimeError(
+                f"Agent execution failed: {agent_result.error or 'unknown error'}"
+            )
+
         return {
             "status": "completed",
             "output": {
@@ -470,7 +526,7 @@ class UnifiedChatHandler:
             },
             "total_duration_ms": int(agent_result.duration * 1000),
         }
-    
+
     async def _execute_via_workflow(
         self,
         user_input: str,
@@ -490,7 +546,10 @@ class UnifiedChatHandler:
         try:
             gateway = await get_gateway()
         except RuntimeError:
-            return {"status": "error", "output": {"error": "LLM gateway not initialized"}}
+            return {
+                "status": "error",
+                "output": {"error": "LLM gateway not initialized"},
+            }
 
         # 构建简单工作流图: input → llm → output
         graph_json = {
@@ -525,7 +584,9 @@ class UnifiedChatHandler:
             raise RuntimeError(f"Workflow execution failed: {instance.error}")
 
         # 提取最终输出（output 节点的结果）
-        final_output = instance.state.get("__out_output_1__", "") or instance.state.get("__out_llm_1__", "")
+        final_output = instance.state.get("__out_output_1__", "") or instance.state.get(
+            "__out_llm_1__", ""
+        )
 
         return {
             "status": "completed",
@@ -534,9 +595,13 @@ class UnifiedChatHandler:
                 "workflow_instance_id": instance.instance_id,
             },
             "workflow_id": workflow_id,
-            "total_duration_ms": int((instance.finished_at - instance.started_at) * 1000) if instance.finished_at else 0,
+            "total_duration_ms": (
+                int((instance.finished_at - instance.started_at) * 1000)
+                if instance.finished_at
+                else 0
+            ),
         }
-    
+
     async def _retrieve_kb_context(
         self,
         kb_id: str,
@@ -564,7 +629,9 @@ class UnifiedChatHandler:
             result = await kb_search(kb_id=kb_id, query=query, top_k=top_k)
             if not isinstance(result, dict) or "error" in result:
                 error = result.get("error") if isinstance(result, dict) else result
-                logger.warning("KB context retrieval skipped (kb_id=%s): %s", kb_id, error)
+                logger.warning(
+                    "KB context retrieval skipped (kb_id=%s): %s", kb_id, error
+                )
                 return "", 0
 
             hits = result.get("results", []) or []
@@ -585,27 +652,29 @@ class UnifiedChatHandler:
         except Exception as e:  # noqa: BLE001 — 检索失败不阻断主任务
             logger.warning("KB context retrieval failed (kb_id=%s): %s", kb_id, e)
             return "", 0
-    
+
     def _extract_output(self, result: dict) -> str:
         """从执行结果中提取最终输出"""
         output_data = result.get("output", {})
-        
+
         if isinstance(output_data, dict):
             # 查找最后一个成功的子任务输出
             outputs = output_data.get("outputs", [])
             for output_item in reversed(outputs):
                 if output_item.get("output"):
-                    return json.dumps(output_item["output"], ensure_ascii=False, indent=2)[:4000]
-            
+                    return json.dumps(
+                        output_item["output"], ensure_ascii=False, indent=2
+                    )[:4000]
+
             # 降级: 返回摘要
             return json.dumps(output_data, ensure_ascii=False, indent=2)[:2000]
-        
+
         elif isinstance(output_data, str):
             return output_data[:4000]
-        
+
         else:
             return str(output_data)
-    
+
     async def get_session_messages(
         self,
         session_id: str,
@@ -634,7 +703,8 @@ class UnifiedChatHandler:
                 row = await pool.fetchrow(
                     "SELECT tenant_id, title, mode, shared_context "
                     "FROM unified_sessions WHERE id = $1 AND tenant_id = $2",
-                    session_id, tenant_id,
+                    session_id,
+                    tenant_id,
                 )
                 if row is None:
                     return {"success": False, "error": "Session not found"}
@@ -642,7 +712,8 @@ class UnifiedChatHandler:
                     "SELECT role, content, metadata, error, created_at "
                     "FROM unified_messages WHERE session_id = $1 "
                     "ORDER BY created_at, id LIMIT $2",
-                    session_id, limit,
+                    session_id,
+                    limit,
                 )
                 messages: list[dict] = []
                 for m in rows:
@@ -756,7 +827,10 @@ async def get_messages(request: Request, session_id: str, limit: int = 50):
     S 安全修复:强制租户校验。tenant_id 优先取 Go 网关可信注入的
     ?tenant_id= 查询参数,缺省尝试 request.state.tenant_id(中间件设置时)。
     """
-    tenant_id = str(request.query_params.get("tenant_id") or "") or \
-        str(getattr(request.state, "tenant_id", "") or "")
+    tenant_id = str(request.query_params.get("tenant_id") or "") or str(
+        getattr(request.state, "tenant_id", "") or ""
+    )
     handler = get_chat_handler()
-    return await handler.get_session_messages(session_id, tenant_id=tenant_id, limit=limit)
+    return await handler.get_session_messages(
+        session_id, tenant_id=tenant_id, limit=limit
+    )

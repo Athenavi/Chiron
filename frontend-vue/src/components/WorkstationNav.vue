@@ -1,5 +1,5 @@
 <template>
-  <div class="workstation-nav"></div>
+  <div class="workstation-nav" />
 </template>
 
 <!-- 普通 script 块：导出 executeQuickCommand 供全局停靠坞（AppLayout）复用同一套

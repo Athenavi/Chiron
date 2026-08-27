@@ -1,6 +1,7 @@
 # RAG 检索实现
 import asyncio
 import logging
+
 from app.config import settings
 from app.llm.client import llm_client
 
@@ -20,23 +21,34 @@ class RAGRetriever:
             return self._collection
 
         try:
-            from pymilvus import connections, Collection, FieldSchema, CollectionSchema, DataType
+            from pymilvus import (Collection, CollectionSchema, DataType,
+                                  FieldSchema, connections)
 
             # 连接 Milvus
             connections.connect(
                 alias="default",
                 host=settings.milvus_address.split(":")[0],
-                port=int(settings.milvus_address.split(":")[1]) if ":" in settings.milvus_address else 19530,
+                port=(
+                    int(settings.milvus_address.split(":")[1])
+                    if ":" in settings.milvus_address
+                    else 19530
+                ),
             )
 
             # 定义 collection schema
             fields = [
-                FieldSchema(name="id", dtype=DataType.VARCHAR, is_primary=True, max_length=64),
+                FieldSchema(
+                    name="id", dtype=DataType.VARCHAR, is_primary=True, max_length=64
+                ),
                 FieldSchema(name="tenant_id", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="document_id", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="chunk_id", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="content", dtype=DataType.VARCHAR, max_length=65535),
-                FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=settings.embedding_dim),
+                FieldSchema(
+                    name="embedding",
+                    dtype=DataType.FLOAT_VECTOR,
+                    dim=settings.embedding_dim,
+                ),
             ]
             schema = CollectionSchema(fields, description="Knowledge base for RAG")
 
@@ -74,7 +86,9 @@ class RAGRetriever:
         """索引文档：分块 + 嵌入 + 存入 Milvus"""
         try:
             # 1. 分块
-            chunks = self._split_text(content, settings.chunk_size, settings.chunk_overlap)
+            chunks = self._split_text(
+                content, settings.chunk_size, settings.chunk_overlap
+            )
 
             # 2. 检查 Milvus 可用性（不可用则跳过嵌入，避免无谓的 API 调用）
             collection = await self._get_collection()
@@ -154,13 +168,15 @@ class RAGRetriever:
             for hits in results:
                 for hit in hits:
                     if hit.score >= threshold:
-                        filtered.append({
-                            "document_id": hit.entity.get("document_id", ""),
-                            "chunk_id": hit.entity.get("chunk_id", ""),
-                            "content": hit.entity.get("content", ""),
-                            "score": hit.score,
-                            "metadata": {},
-                        })
+                        filtered.append(
+                            {
+                                "document_id": hit.entity.get("document_id", ""),
+                                "chunk_id": hit.entity.get("chunk_id", ""),
+                                "content": hit.entity.get("content", ""),
+                                "score": hit.score,
+                                "metadata": {},
+                            }
+                        )
 
             return filtered
 

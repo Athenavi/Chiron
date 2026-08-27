@@ -129,30 +129,69 @@ onMounted(() => {
     <Spin :spinning="loading">
       <div class="metric-grid">
         <Card title="队列状态">
-            <Descriptions bordered :column="1">
-              <DescriptionsItem label="任务队列长度">{{ queueStats.taskQueueLength }}</DescriptionsItem>
-              <DescriptionsItem label="VIP 队列长度">{{ queueStats.vipQueueLength }}</DescriptionsItem>
-              <DescriptionsItem label="消费者数量">{{ queueStats.consumers }}</DescriptionsItem>
-              <DescriptionsItem label="吞吐量 (QPS)">{{ queueStats.throughput }}</DescriptionsItem>
-              <DescriptionsItem label="平均等待时间">{{ queueStats.avgWaitTime }}ms</DescriptionsItem>
-              <DescriptionsItem label="最大等待时间">{{ queueStats.maxWaitTime }}ms</DescriptionsItem>
-            </Descriptions>
-          </Card>
+          <Descriptions
+            bordered
+            :column="1"
+          >
+            <DescriptionsItem label="任务队列长度">
+              {{ queueStats.taskQueueLength }}
+            </DescriptionsItem>
+            <DescriptionsItem label="VIP 队列长度">
+              {{ queueStats.vipQueueLength }}
+            </DescriptionsItem>
+            <DescriptionsItem label="消费者数量">
+              {{ queueStats.consumers }}
+            </DescriptionsItem>
+            <DescriptionsItem label="吞吐量 (QPS)">
+              {{ queueStats.throughput }}
+            </DescriptionsItem>
+            <DescriptionsItem label="平均等待时间">
+              {{ queueStats.avgWaitTime }}ms
+            </DescriptionsItem>
+            <DescriptionsItem label="最大等待时间">
+              {{ queueStats.maxWaitTime }}ms
+            </DescriptionsItem>
+          </Descriptions>
+        </Card>
         <Card title="队列长度趋势">
-          <VChart :option="queueChartOption" style="height: var(--chart-h, 300px)" autoresize />
+          <VChart
+            :option="queueChartOption"
+            style="height: var(--chart-h, 300px)"
+            autoresize
+          />
         </Card>
       </div>
 
-      <Card title="等待队列" style="margin-top: 16px">
+      <Card
+        title="等待队列"
+        style="margin-top: 16px"
+      >
         <template #extra>
-          <Button type="primary" ghost @click="handleFlushQueue" :loading="flushLoading">清空队列</Button>
-          <Button @click="handlePauseQueue" style="margin-left: 8px">
+          <Button
+            type="primary"
+            ghost
+            :loading="flushLoading"
+            @click="handleFlushQueue"
+          >
+            清空队列
+          </Button>
+          <Button
+            style="margin-left: 8px"
+            @click="handlePauseQueue"
+          >
             {{ isPaused ? '恢复消费' : '暂停消费' }}
           </Button>
         </template>
-        <Table :columns="columns" :dataSource="waitingTasks" :pagination="false" :scroll="{ x: 720 }">
+        <Table
+          :columns="columns"
+          :data-source="waitingTasks"
+          :pagination="false"
+          :scroll="{ x: 720 }"
+        >
           <template #emptyText>
-            <div class="empty-block"><span class="empty-icon">📭</span><span class="empty-text">暂无数据</span></div>
+            <div class="empty-block">
+              <span class="empty-icon">📭</span><span class="empty-text">暂无数据</span>
+            </div>
           </template>
         </Table>
       </Card>

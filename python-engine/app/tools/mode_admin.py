@@ -8,26 +8,31 @@
 写入是显式的、可逆的：mode_edit 返回修改后完整 diff；mode_overrides.json
 可被删除以回退默认。与 deepseek cordis 的 preset 创作同语义（轻量实现）。
 """
+
 from __future__ import annotations
 
 import json
 import logging
 from typing import Any
 
-from app.agent.modes import (
-    _overrides_path,
-    AgentMode,
-)
+from app.agent.modes import AgentMode, _overrides_path
 from app.tools.registry import registry
 
 logger = logging.getLogger(__name__)
 
-EDITABLE_FIELDS = {"persona", "include_context", "include_tools", "extra_tools", "enable_compaction"}
+EDITABLE_FIELDS = {
+    "persona",
+    "include_context",
+    "include_tools",
+    "extra_tools",
+    "enable_compaction",
+}
 VALID_MODES = {m.value for m in AgentMode}
 
 
 def _mode_config_dict(mode_value: str) -> dict[str, Any]:
     from app.agent.modes import get_mode_config
+
     cfg = get_mode_config(mode_value)
     return {
         "mode": cfg.mode.value,
@@ -57,19 +62,27 @@ async def mode_edit(mode: str, patch: dict[str, Any]) -> dict[str, Any]:
 
     unknown = set(patch) - EDITABLE_FIELDS
     if unknown:
-        return {"error": f"unsupported fields: {sorted(unknown)}; allowed: {sorted(EDITABLE_FIELDS)}"}
+        return {
+            "error": f"unsupported fields: {sorted(unknown)}; allowed: {sorted(EDITABLE_FIELDS)}"
+        }
 
     path = _overrides_path()
     overrides: dict[str, Any] = {}
     try:
-        overrides = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+        overrides = (
+            json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+        )
     except json.JSONDecodeError:
-        return {"error": "mode_overrides.json is corrupt; fix or remove it before editing"}
+        return {
+            "error": "mode_overrides.json is corrupt; fix or remove it before editing"
+        }
 
     current = overrides.get(mode, {})
     for field, value in patch.items():
         if field in ("include_tools", "extra_tools"):
-            if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+            if not isinstance(value, list) or not all(
+                isinstance(v, str) for v in value
+            ):
                 return {"error": f"{field} must be a list of tool name strings"}
             current[field] = value
         elif field == "persona":
@@ -84,7 +97,9 @@ async def mode_edit(mode: str, patch: dict[str, Any]) -> dict[str, Any]:
             return {"error": f"unsupported field: {field}"}
 
     overrides[mode] = current
-    path.write_text(json.dumps(overrides, ensure_ascii=False, indent=2), encoding="utf-8")
+    path.write_text(
+        json.dumps(overrides, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     logger.info("mode_edit: mode=%s patch=%s", mode, patch)
 
     return {

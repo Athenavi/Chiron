@@ -1216,47 +1216,67 @@ function continueGeneration() {
 <template>
   <div class="chat-layout">
     <div class="chat-main">
-      <div v-if="connectionLost" class="connection-banner">
+      <div
+        v-if="connectionLost"
+        class="connection-banner"
+      >
         {{ isOnline ? '与服务器的连接已断开，正在尝试重连...' : '网络已断开，请检查网络连接' }}
       </div>
       <div class="chat-body">
         <!-- 内容区工具条 -->
         <div class="chat-toolbar">
-          <div class="toolbar-side" aria-hidden="true" />
+          <div
+            class="toolbar-side"
+            aria-hidden="true"
+          />
           <div class="toolbar-center">
             <span class="toolbar-title">{{ unifiedMode ? '统一任务' : (activeSession?.title || 'Chiron') }}</span>
             <span class="toolbar-mode">{{ unifiedMode ? (unifiedSubmitMode || 'auto') : (modeOptions.find(o => o.value === mode)?.label || '常规') }}</span>
           </div>
           <div class="toolbar-side toolbar-actions">
             <Button
-              type="text" size="small" class="toolbar-btn"
+              type="text"
+              size="small"
+              class="toolbar-btn"
               :class="{ active: panelOpen && panelView === 'sessions' }"
               :title="panelOpen && panelView === 'sessions' ? '收起会话列表' : '会话历史'"
               @click="openPanel('sessions')"
             >
-              <template #icon><MenuOutlined /></template>
+              <template #icon>
+                <MenuOutlined />
+              </template>
               <span class="toolbar-label">会话</span>
             </Button>
             <Button
-              type="text" size="small" class="toolbar-btn"
+              type="text"
+              size="small"
+              class="toolbar-btn"
               :class="{ active: panelOpen && panelView === 'trajectory' }"
               :title="panelOpen && panelView === 'trajectory' ? '收起轨迹' : '查看历史提问'"
               @click="openPanel('trajectory')"
             >
-              <template #icon><HistoryOutlined /></template>
+              <template #icon>
+                <HistoryOutlined />
+              </template>
               <span class="toolbar-label">轨迹</span>
             </Button>
             <Button
-              type="text" size="small" class="toolbar-btn"
+              type="text"
+              size="small"
+              class="toolbar-btn"
               title="导出为 Markdown"
               :disabled="!items.length"
               @click="exportMarkdown"
             >
-              <template #icon><ExportOutlined /></template>
+              <template #icon>
+                <ExportOutlined />
+              </template>
               <span class="toolbar-label">导出</span>
             </Button>
             <Button
-              type="text" size="small" class="toolbar-btn"
+              type="text"
+              size="small"
+              class="toolbar-btn"
               :title="themeStore.isDark ? '切换到亮色模式' : '切换到暗色模式'"
               @click="themeStore.toggleTheme()"
             >
@@ -1269,28 +1289,65 @@ function continueGeneration() {
         </div>
 
         <!-- 互联互通：错误提示条（query.error） -->
-        <div v-if="errorBanner" class="unified-error-banner">
+        <div
+          v-if="errorBanner"
+          class="unified-error-banner"
+        >
           <span class="ueb-text">{{ errorBanner }}</span>
-          <CloseOutlined class="ueb-close" title="关闭" @click="errorBanner = ''" />
+          <CloseOutlined
+            class="ueb-close"
+            title="关闭"
+            @click="errorBanner = ''"
+          />
         </div>
 
         <!-- 互联互通：统一任务模式 -->
         <template v-if="unifiedMode">
           <div class="unified-bar">
-            <span class="ub-badge" :class="{ running: loading, done: unifiedJustFinished }">
+            <span
+              class="ub-badge"
+              :class="{ running: loading, done: unifiedJustFinished }"
+            >
               {{ loading ? '编排中' : unifiedJustFinished ? '完成' : '统一任务' }}
             </span>
             <span class="ub-mode">{{ unifiedSubmitMode || 'auto' }}</span>
             <span class="ub-spacer" />
-            <button type="button" class="ub-btn" :disabled="!items.length" @click="clearUnifiedMessages">清空</button>
-            <button type="button" class="ub-btn exit" title="退出统一任务模式" @click="exitUnifiedMode">退出</button>
+            <button
+              type="button"
+              class="ub-btn"
+              :disabled="!items.length"
+              @click="clearUnifiedMessages"
+            >
+              清空
+            </button>
+            <button
+              type="button"
+              class="ub-btn exit"
+              title="退出统一任务模式"
+              @click="exitUnifiedMode"
+            >
+              退出
+            </button>
           </div>
-          <div v-if="loading" class="unified-exec-hint">
-            <span class="ueh-dot" />正在编排/执行子任务...<template v-if="turnElapsed >= 2">&nbsp;·&nbsp;{{ turnElapsed }}s</template>
+          <div
+            v-if="loading"
+            class="unified-exec-hint"
+          >
+            <span class="ueh-dot" />正在编排/执行子任务...<template v-if="turnElapsed >= 2">
+              &nbsp;·&nbsp;{{ turnElapsed }}s
+            </template>
           </div>
-          <div v-if="!items.length && !loading" class="unified-empty">统一任务会话已就绪，直接发送消息即可继续追问</div>
+          <div
+            v-if="!items.length && !loading"
+            class="unified-empty"
+          >
+            统一任务会话已就绪，直接发送消息即可继续追问
+          </div>
           <div class="unified-list">
-            <template v-for="(it, i) in items" :key="it.id ?? i">
+            <template
+              v-for="(it, i) in items"
+              :key="it.id ?? i"
+            >
               <MessageItem
                 v-if="it.kind === 'text' || it.kind === 'reasoning'"
                 :item="it"
@@ -1299,7 +1356,10 @@ function continueGeneration() {
                 @continue="continueGeneration"
                 @retry-failed="retryFailedMessage"
               />
-              <div v-else-if="(it as any).kind === 'kb_hits'" class="kb-hits-tag">
+              <div
+                v-else-if="(it as any).kind === 'kb_hits'"
+                class="kb-hits-tag"
+              >
                 <span class="kb-hits-text">引用了知识库（×{{ (it as any).count || 1 }}）</span>
                 <a
                   v-if="(it as any).kb_id"
@@ -1319,9 +1379,19 @@ function continueGeneration() {
         </template>
 
         <!-- 原有 SSE 流式模式 -->
-        <ChatEmptyHero v-else-if="items.length === 0 && !loading" @suggest="sendMessage" />
+        <ChatEmptyHero
+          v-else-if="items.length === 0 && !loading"
+          @suggest="sendMessage"
+        />
         <template v-else>
-          <div v-if="loading" class="turn-status">思考中<template v-if="turnElapsed >= 2">&nbsp;·&nbsp;{{ turnElapsed }}s</template></div>
+          <div
+            v-if="loading"
+            class="turn-status"
+          >
+            思考中<template v-if="turnElapsed >= 2">
+              &nbsp;·&nbsp;{{ turnElapsed }}s
+            </template>
+          </div>
           <MessageList
             :items="items"
             :loading="loading"
@@ -1344,16 +1414,37 @@ function continueGeneration() {
         </template>
       </div>
 
-      <div v-if="pendingApprovals.length" class="approval-zone">
-        <div v-for="a in pendingApprovals" :key="a.id" class="approval-card">
+      <div
+        v-if="pendingApprovals.length"
+        class="approval-zone"
+      >
+        <div
+          v-for="a in pendingApprovals"
+          :key="a.id"
+          class="approval-card"
+        >
           <div class="approval-info">
             <span class="approval-tag">工具确认</span>
             <span class="approval-name">{{ a.toolName }}</span>
           </div>
-          <div class="approval-args">{{ a.arguments }}</div>
+          <div class="approval-args">
+            {{ a.arguments }}
+          </div>
           <div class="approval-actions">
-            <button class="approval-btn danger" type="button" @click="resolveApproval(a, false)">拒绝</button>
-            <button class="approval-btn allow" type="button" @click="resolveApproval(a, true)">允许执行</button>
+            <button
+              class="approval-btn danger"
+              type="button"
+              @click="resolveApproval(a, false)"
+            >
+              拒绝
+            </button>
+            <button
+              class="approval-btn allow"
+              type="button"
+              @click="resolveApproval(a, true)"
+            >
+              允许执行
+            </button>
           </div>
         </div>
       </div>
@@ -1375,7 +1466,11 @@ function continueGeneration() {
 
     <!-- 侧面板 -->
     <Transition name="overlay-fade">
-      <div v-if="panelOpen" class="panel-overlay" @click="panelOpen = false"></div>
+      <div
+        v-if="panelOpen"
+        class="panel-overlay"
+        @click="panelOpen = false"
+      />
     </Transition>
     <ChatSidePanel
       :open="panelOpen"
@@ -1435,27 +1530,48 @@ function continueGeneration() {
       />
 
       <template v-if="isGuest">
-        <div class="share-guest-tip">登录后即可生成分享链接。</div>
+        <div class="share-guest-tip">
+          登录后即可生成分享链接。
+        </div>
       </template>
 
       <template v-else-if="shareInfo">
         <div class="share-link-row">
-          <Input :model-value="shareUrl()" readonly class="share-link-input">
-            <template #prefix><LinkOutlined /></template>
+          <Input
+            :model-value="shareUrl()"
+            readonly
+            class="share-link-input"
+          >
+            <template #prefix>
+              <LinkOutlined />
+            </template>
           </Input>
-          <Button type="primary" @click="copyShareLink">
-            <template #icon><CopyOutlined /></template>
+          <Button
+            type="primary"
+            @click="copyShareLink"
+          >
+            <template #icon>
+              <CopyOutlined />
+            </template>
             复制链接
           </Button>
         </div>
         <div class="share-manage">
           <span class="share-manage-hint">链接已公开，任何获得链接的人均可查看。</span>
-          <Button danger :loading="shareRevoking" @click="revokeCurrentShare">取消分享</Button>
+          <Button
+            danger
+            :loading="shareRevoking"
+            @click="revokeCurrentShare"
+          >
+            取消分享
+          </Button>
         </div>
       </template>
 
       <template v-else>
-        <div class="share-select-title">选择要分享的消息（{{ shareMessageIds.length }}/{{ shareCandidates.length }}）</div>
+        <div class="share-select-title">
+          选择要分享的消息（{{ shareMessageIds.length }}/{{ shareCandidates.length }}）
+        </div>
         <div class="share-select-list">
           <label
             v-for="c in shareCandidates"
@@ -1463,14 +1579,31 @@ function continueGeneration() {
             class="share-select-item"
             @click.prevent="toggleShareMessage(c.id)"
           >
-            <Checkbox :checked="shareMessageIds.includes(c.id)" @click.stop />
-            <span class="share-select-role" :class="c.role">{{ c.role === 'user' ? '用户' : 'AI' }}</span>
+            <Checkbox
+              :checked="shareMessageIds.includes(c.id)"
+              @click.stop
+            />
+            <span
+              class="share-select-role"
+              :class="c.role"
+            >{{ c.role === 'user' ? '用户' : 'AI' }}</span>
             <span class="share-select-preview">{{ c.preview || '（空消息）' }}</span>
           </label>
         </div>
-        <div v-if="shareError" class="share-error">{{ shareError }}</div>
+        <div
+          v-if="shareError"
+          class="share-error"
+        >
+          {{ shareError }}
+        </div>
         <div class="share-actions">
-          <Button type="primary" :loading="shareLoading" @click="generateShare">生成分享链接</Button>
+          <Button
+            type="primary"
+            :loading="shareLoading"
+            @click="generateShare"
+          >
+            生成分享链接
+          </Button>
         </div>
       </template>
     </Modal>

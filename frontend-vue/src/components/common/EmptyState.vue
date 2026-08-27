@@ -27,17 +27,60 @@ const wrapClass = computed(() => [
 </script>
 
 <template>
-  <div :class="wrapClass" role="status" aria-live="polite">
+  <div
+    :class="wrapClass"
+    role="status"
+    aria-live="polite"
+  >
     <div class="empty-state-icon">
-      <component :is="icon" v-if="icon" />
-      <svg v-else viewBox="0 0 64 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-        <rect x="6" y="8" width="52" height="36" rx="6" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3 3" opacity="0.5" />
-        <path d="M22 26 L28 20 L34 26 M30 20 V34" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.6" />
+      <component
+        :is="icon"
+        v-if="icon"
+      />
+      <svg
+        v-else
+        viewBox="0 0 64 48"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        aria-hidden
+      >
+        <rect
+          x="6"
+          y="8"
+          width="52"
+          height="36"
+          rx="6"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-dasharray="3 3"
+          opacity="0.5"
+        />
+        <path
+          d="M22 26 L28 20 L34 26 M30 20 V34"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          opacity="0.6"
+        />
       </svg>
     </div>
-    <div v-if="description" class="empty-state-desc">{{ description }}</div>
-    <div v-if="hint" class="empty-state-hint">{{ hint }}</div>
-    <div v-if="$slots.default" class="empty-state-actions">
+    <div
+      v-if="description"
+      class="empty-state-desc"
+    >
+      {{ description }}
+    </div>
+    <div
+      v-if="hint"
+      class="empty-state-hint"
+    >
+      {{ hint }}
+    </div>
+    <div
+      v-if="$slots.default"
+      class="empty-state-actions"
+    >
       <slot />
     </div>
   </div>

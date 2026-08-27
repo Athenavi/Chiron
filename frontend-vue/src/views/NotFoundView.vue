@@ -6,12 +6,25 @@ const router = useRouter()
 
 <template>
   <div class="nf-page">
-    <div class="nf-code">404</div>
-    <h1 class="nf-title">页面不存在</h1>
-    <p class="nf-desc">你访问的地址不存在或已被移动。</p>
+    <div class="nf-code">
+      404
+    </div>
+    <h1 class="nf-title">
+      页面不存在
+    </h1>
+    <p class="nf-desc">
+      你访问的地址不存在或已被移动。
+    </p>
     <div class="nf-actions">
-      <a-button type="primary" @click="router.push('/')">返回首页</a-button>
-      <a-button @click="router.back()">返回上一页</a-button>
+      <a-button
+        type="primary"
+        @click="router.push('/')"
+      >
+        返回首页
+      </a-button>
+      <a-button @click="router.back()">
+        返回上一页
+      </a-button>
     </div>
   </div>
 </template>

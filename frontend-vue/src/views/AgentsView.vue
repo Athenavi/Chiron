@@ -348,19 +348,40 @@ function toolCount(a: Agent): number {
   <div class="agents-page">
     <div class="page-head">
       <div class="page-head-text">
-        <h1 class="page-title">Agents</h1>
-        <p class="page-sub">创建专属 Agent，定义提示词与工具，一键派发真实执行</p>
+        <h1 class="page-title">
+          Agents
+        </h1>
+        <p class="page-sub">
+          创建专属 Agent，定义提示词与工具，一键派发真实执行
+        </p>
       </div>
-      <Button type="primary" @click="openCreate">
-        <template #icon><PlusOutlined /></template>
+      <Button
+        type="primary"
+        @click="openCreate"
+      >
+        <template #icon>
+          <PlusOutlined />
+        </template>
         新建 Agent
       </Button>
     </div>
 
-    <Tabs v-model:activeKey="activeTab" class="agents-tabs">
+    <Tabs
+      v-model:active-key="activeTab"
+      class="agents-tabs"
+    >
       <!-- ── Tab 1：我的 Agent ── -->
-      <TabPane key="agents" tab="我的 Agent">
-        <PageSkeleton v-if="loadingAgents" variant="cards" :columns="3" :rows="6" :header="false" />
+      <TabPane
+        key="agents"
+        tab="我的 Agent"
+      >
+        <PageSkeleton
+          v-if="loadingAgents"
+          variant="cards"
+          :columns="3"
+          :rows="6"
+          :header="false"
+        />
         <EmptyState
           v-else-if="errorAgents"
           size="page"
@@ -368,7 +389,12 @@ function toolCount(a: Agent): number {
           description="加载失败"
           hint="无法获取 Agent 列表，请稍后重试"
         >
-          <Button type="primary" @click="loadAgents">重试</Button>
+          <Button
+            type="primary"
+            @click="loadAgents"
+          >
+            重试
+          </Button>
         </EmptyState>
         <EmptyState
           v-else-if="agents.length === 0"
@@ -377,52 +403,121 @@ function toolCount(a: Agent): number {
           description="还没有 Agent"
           hint="点击右上角「新建 Agent」，定义提示词与工具，开始派发任务"
         >
-          <Button type="primary" @click="openCreate">
-            <template #icon><PlusOutlined /></template>
+          <Button
+            type="primary"
+            @click="openCreate"
+          >
+            <template #icon>
+              <PlusOutlined />
+            </template>
             新建 Agent
           </Button>
         </EmptyState>
-        <div v-else class="agent-grid">
-          <div v-for="a in agents" :key="a.id" class="agent-card" :class="{ disabled: !a.enabled }">
+        <div
+          v-else
+          class="agent-grid"
+        >
+          <div
+            v-for="a in agents"
+            :key="a.id"
+            class="agent-card"
+            :class="{ disabled: !a.enabled }"
+          >
             <div class="card-top">
               <span class="card-avatar"><RobotOutlined /></span>
               <div class="card-titles">
                 <span class="card-name">{{ a.name }}</span>
                 <span class="card-desc">{{ a.description || '暂无描述' }}</span>
               </div>
-              <Dropdown trigger="click" placement="bottomRight">
-                <Button type="text" size="small" class="card-more" title="更多操作" @click.stop>
-                  <template #icon><EditOutlined /></template>
+              <Dropdown
+                trigger="click"
+                placement="bottomRight"
+              >
+                <Button
+                  type="text"
+                  size="small"
+                  class="card-more"
+                  title="更多操作"
+                  @click.stop
+                >
+                  <template #icon>
+                    <EditOutlined />
+                  </template>
                 </Button>
                 <template #overlay>
                   <Menu class="card-menu">
-                    <MenuItem key="edit" @click="openEdit(a)"><EditOutlined class="menu-icon" />编辑</MenuItem>
-                    <MenuItem key="toggle" @click="toggleEnabled(a)">
-                      <template v-if="a.enabled"><StopOutlined class="menu-icon" />停用</template>
-                      <template v-else><PlayCircleOutlined class="menu-icon" />启用</template>
+                    <MenuItem
+                      key="edit"
+                      @click="openEdit(a)"
+                    >
+                      <EditOutlined class="menu-icon" />编辑
                     </MenuItem>
-                    <MenuItem key="visibility" @click="toggleVisibility(a)">
-                      <template v-if="a.visibility === 'tenant'"><LockOutlined class="menu-icon" />设为私有</template>
-                      <template v-else><TeamOutlined class="menu-icon" />共享给团队</template>
+                    <MenuItem
+                      key="toggle"
+                      @click="toggleEnabled(a)"
+                    >
+                      <template v-if="a.enabled">
+                        <StopOutlined class="menu-icon" />停用
+                      </template>
+                      <template v-else>
+                        <PlayCircleOutlined class="menu-icon" />启用
+                      </template>
                     </MenuItem>
-                    <MenuItem key="delete" danger @click="requestDelete(a)"><DeleteOutlined class="menu-icon" />删除</MenuItem>
+                    <MenuItem
+                      key="visibility"
+                      @click="toggleVisibility(a)"
+                    >
+                      <template v-if="a.visibility === 'tenant'">
+                        <LockOutlined class="menu-icon" />设为私有
+                      </template>
+                      <template v-else>
+                        <TeamOutlined class="menu-icon" />共享给团队
+                      </template>
+                    </MenuItem>
+                    <MenuItem
+                      key="delete"
+                      danger
+                      @click="requestDelete(a)"
+                    >
+                      <DeleteOutlined class="menu-icon" />删除
+                    </MenuItem>
                   </Menu>
                 </template>
               </Dropdown>
             </div>
             <div class="card-meta">
-              <Tag v-if="a.visibility === 'tenant'" color="green">团队共享</Tag>
-              <Tag :color="a.enabled ? 'green' : 'default'">{{ a.enabled ? '启用' : '已停用' }}</Tag>
+              <Tag
+                v-if="a.visibility === 'tenant'"
+                color="green"
+              >
+                团队共享
+              </Tag>
+              <Tag :color="a.enabled ? 'green' : 'default'">
+                {{ a.enabled ? '启用' : '已停用' }}
+              </Tag>
               <Tag>{{ toolCount(a) }} 工具</Tag>
               <Tag>最多 {{ a.max_turns }} 轮</Tag>
             </div>
             <div class="card-actions">
-              <Button type="primary" size="small" :disabled="!a.enabled" @click="openRun(a)">
-                <template #icon><PlayCircleOutlined /></template>
+              <Button
+                type="primary"
+                size="small"
+                :disabled="!a.enabled"
+                @click="openRun(a)"
+              >
+                <template #icon>
+                  <PlayCircleOutlined />
+                </template>
                 运行
               </Button>
-              <Button size="small" title="在对话中发起会话" @click="chatWithAgent(a)">
-                <template #icon><MessageOutlined /></template>
+              <Button
+                size="small"
+                title="在对话中发起会话"
+                @click="chatWithAgent(a)"
+              >
+                <template #icon>
+                  <MessageOutlined />
+                </template>
                 发起对话
               </Button>
             </div>
@@ -431,8 +526,17 @@ function toolCount(a: Agent): number {
       </TabPane>
 
       <!-- ── Agent 市场 ── -->
-      <TabPane key="market" tab="市场">
-        <PageSkeleton v-if="marketLoading" variant="cards" :columns="3" :rows="6" :header="false" />
+      <TabPane
+        key="market"
+        tab="市场"
+      >
+        <PageSkeleton
+          v-if="marketLoading"
+          variant="cards"
+          :columns="3"
+          :rows="6"
+          :header="false"
+        />
         <EmptyState
           v-else-if="marketError"
           size="page"
@@ -440,7 +544,12 @@ function toolCount(a: Agent): number {
           description="市场加载失败"
           hint="无法获取市场内容，请稍后重试"
         >
-          <Button type="primary" @click="loadMarket">重试</Button>
+          <Button
+            type="primary"
+            @click="loadMarket"
+          >
+            重试
+          </Button>
         </EmptyState>
         <SkillMarketCard
           v-else
@@ -452,8 +561,16 @@ function toolCount(a: Agent): number {
       </TabPane>
 
       <!-- ── Tab 2：运行记录 ── -->
-      <TabPane key="sessions" tab="运行记录">
-        <PageSkeleton v-if="loadingSessions" variant="list" :rows="6" :header="false" />
+      <TabPane
+        key="sessions"
+        tab="运行记录"
+      >
+        <PageSkeleton
+          v-if="loadingSessions"
+          variant="list"
+          :rows="6"
+          :header="false"
+        />
         <EmptyState
           v-else-if="errorSessions"
           size="page"
@@ -461,7 +578,12 @@ function toolCount(a: Agent): number {
           description="加载失败"
           hint="无法获取运行记录，请稍后重试"
         >
-          <Button type="primary" @click="loadSessions">重试</Button>
+          <Button
+            type="primary"
+            @click="loadSessions"
+          >
+            重试
+          </Button>
         </EmptyState>
         <EmptyState
           v-else-if="sessions.length === 0"
@@ -470,20 +592,46 @@ function toolCount(a: Agent): number {
           description="暂无运行记录"
           hint="从「我的 Agent」派发任务后，运行结果将在此显示"
         />
-        <div v-else class="session-list">
-          <div v-for="s in sessions" :key="s.id" class="session-row">
-            <span class="session-status-icon" :class="s.status">
-              <component :is="statusMeta[s.status]?.icon" v-if="statusMeta[s.status]" />
+        <div
+          v-else
+          class="session-list"
+        >
+          <div
+            v-for="s in sessions"
+            :key="s.id"
+            class="session-row"
+          >
+            <span
+              class="session-status-icon"
+              :class="s.status"
+            >
+              <component
+                :is="statusMeta[s.status]?.icon"
+                v-if="statusMeta[s.status]"
+              />
             </span>
             <div class="session-main">
-              <div class="session-task">{{ s.task }}</div>
+              <div class="session-task">
+                {{ s.task }}
+              </div>
               <div class="session-meta">
-                <Tag :color="statusMeta[s.status]?.color">{{ statusMeta[s.status]?.label || s.status }}</Tag>
-                <span v-if="s.agent_name" class="session-agent">{{ s.agent_name }}</span>
+                <Tag :color="statusMeta[s.status]?.color">
+                  {{ statusMeta[s.status]?.label || s.status }}
+                </Tag>
+                <span
+                  v-if="s.agent_name"
+                  class="session-agent"
+                >{{ s.agent_name }}</span>
                 <span class="session-time">{{ formatTime(s.created_at) }}</span>
               </div>
             </div>
-            <Button size="small" type="text" @click="openDetail(s)">查看结果</Button>
+            <Button
+              size="small"
+              type="text"
+              @click="openDetail(s)"
+            >
+              查看结果
+            </Button>
           </div>
         </div>
       </TabPane>
@@ -503,11 +651,19 @@ function toolCount(a: Agent): number {
       <div class="editor-form">
         <div class="form-row">
           <label class="form-label">名称 *</label>
-          <Input v-model:value="form.name" placeholder="如：数据分析师" :maxlength="60" />
+          <Input
+            v-model:value="form.name"
+            placeholder="如：数据分析师"
+            :maxlength="60"
+          />
         </div>
         <div class="form-row">
           <label class="form-label">描述</label>
-          <Input v-model:value="form.description" placeholder="一句话说明 Agent 的职责" :maxlength="200" />
+          <Input
+            v-model:value="form.description"
+            placeholder="一句话说明 Agent 的职责"
+            :maxlength="200"
+          />
         </div>
         <div class="form-row">
           <label class="form-label">系统提示词</label>
@@ -520,23 +676,48 @@ function toolCount(a: Agent): number {
         <div class="form-row form-grid">
           <div class="form-field">
             <label class="form-label">模型</label>
-            <Input v-model:value="form.model" placeholder="deepseek-chat" />
+            <Input
+              v-model:value="form.model"
+              placeholder="deepseek-chat"
+            />
           </div>
           <div class="form-field">
             <label class="form-label">最大轮次</label>
-            <InputNumber v-model:value="form.max_turns" :min="1" :max="30" class="w-full" />
+            <InputNumber
+              v-model:value="form.max_turns"
+              :min="1"
+              :max="30"
+              class="w-full"
+            />
           </div>
           <div class="form-field">
             <label class="form-label">超时（秒）</label>
-            <InputNumber v-model:value="form.timeout_seconds" :min="10" :max="3600" class="w-full" />
+            <InputNumber
+              v-model:value="form.timeout_seconds"
+              :min="10"
+              :max="3600"
+              class="w-full"
+            />
           </div>
           <div class="form-field">
             <label class="form-label">Temperature</label>
-            <InputNumber v-model:value="form.temperature" :min="0" :max="2" :step="0.1" class="w-full" />
+            <InputNumber
+              v-model:value="form.temperature"
+              :min="0"
+              :max="2"
+              :step="0.1"
+              class="w-full"
+            />
           </div>
           <div class="form-field">
             <label class="form-label">Max Tokens</label>
-            <InputNumber v-model:value="form.max_tokens" :min="256" :max="32768" :step="512" class="w-full" />
+            <InputNumber
+              v-model:value="form.max_tokens"
+              :min="256"
+              :max="32768"
+              :step="512"
+              class="w-full"
+            />
           </div>
           <div class="form-field">
             <label class="form-label">启用</label>
@@ -548,7 +729,7 @@ function toolCount(a: Agent): number {
           <Input.TextArea
             v-model:value="form.tools_text"
             :rows="4"
-            placeholder='[{"name":"shell_exec","description":"执行命令","parameters":{"type":"object","properties":{}}}]'
+            placeholder="[{&quot;name&quot;:&quot;shell_exec&quot;,&quot;description&quot;:&quot;执行命令&quot;,&quot;parameters&quot;:{&quot;type&quot;:&quot;object&quot;,&quot;properties&quot;:{}}}]"
             class="tools-input"
           />
         </div>
@@ -577,12 +758,17 @@ function toolCount(a: Agent): number {
           :disabled="!!runSession && (runSession.status === 'running' || runSession.status === 'pending')"
           @click="submitRun"
         >
-          <template #icon><PlayCircleOutlined /></template>
+          <template #icon>
+            <PlayCircleOutlined />
+          </template>
           派发任务
         </Button>
       </div>
 
-      <div v-if="runSession" class="run-result">
+      <div
+        v-if="runSession"
+        class="run-result"
+      >
         <Alert
           v-if="runSession.status === 'running' || runSession.status === 'pending'"
           type="info"
@@ -597,15 +783,30 @@ function toolCount(a: Agent): number {
           :description="parseResult(runSession).error || parseResult(runSession).output || '未知错误'"
         />
         <template v-else-if="runSession.status === 'completed'">
-          <Alert type="success" show-icon message="执行完成" />
+          <Alert
+            type="success"
+            show-icon
+            message="执行完成"
+          />
           <div class="result-block">
-            <div class="result-label">输出</div>
+            <div class="result-label">
+              输出
+            </div>
             <pre class="result-output">{{ parseResult(runSession).output || '（无输出）' }}</pre>
           </div>
-          <div v-if="parseResult(runSession).token_usage || parseResult(runSession).duration || parseResult(runSession).tool_calls?.length" class="result-meta">
-            <Tag v-if="parseResult(runSession).token_usage">tokens: {{ JSON.stringify(parseResult(runSession).token_usage) }}</Tag>
-            <Tag v-if="parseResult(runSession).duration">耗时 {{ parseResult(runSession).duration.toFixed(1) }}s</Tag>
-            <Tag v-if="parseResult(runSession).tool_calls?.length">工具调用 {{ parseResult(runSession).tool_calls.length }} 次</Tag>
+          <div
+            v-if="parseResult(runSession).token_usage || parseResult(runSession).duration || parseResult(runSession).tool_calls?.length"
+            class="result-meta"
+          >
+            <Tag v-if="parseResult(runSession).token_usage">
+              tokens: {{ JSON.stringify(parseResult(runSession).token_usage) }}
+            </Tag>
+            <Tag v-if="parseResult(runSession).duration">
+              耗时 {{ parseResult(runSession).duration.toFixed(1) }}s
+            </Tag>
+            <Tag v-if="parseResult(runSession).tool_calls?.length">
+              工具调用 {{ parseResult(runSession).tool_calls.length }} 次
+            </Tag>
           </div>
         </template>
       </div>
@@ -619,28 +820,51 @@ function toolCount(a: Agent): number {
       width="640px"
       @cancel="detailOpen = false"
     >
-      <div v-if="detailSession" class="run-result">
+      <div
+        v-if="detailSession"
+        class="run-result"
+      >
         <div class="session-meta">
-          <Tag :color="statusMeta[detailSession.status]?.color">{{ statusMeta[detailSession.status]?.label || detailSession.status }}</Tag>
+          <Tag :color="statusMeta[detailSession.status]?.color">
+            {{ statusMeta[detailSession.status]?.label || detailSession.status }}
+          </Tag>
           <span class="session-time">{{ formatTime(detailSession.created_at) }}</span>
         </div>
         <Alert
           v-if="detailSession.status === 'failed'"
-          type="error" show-icon message="执行失败"
+          type="error"
+          show-icon
+          message="执行失败"
           :description="parseResult(detailSession).error || parseResult(detailSession).output || '未知错误'"
         />
         <div class="result-block">
-          <div class="result-label">任务</div>
+          <div class="result-label">
+            任务
+          </div>
           <pre class="result-output">{{ detailSession.task }}</pre>
         </div>
-        <div v-if="parseResult(detailSession).output" class="result-block">
-          <div class="result-label">输出</div>
+        <div
+          v-if="parseResult(detailSession).output"
+          class="result-block"
+        >
+          <div class="result-label">
+            输出
+          </div>
           <pre class="result-output">{{ parseResult(detailSession).output }}</pre>
         </div>
-        <div v-if="parseResult(detailSession).token_usage || parseResult(detailSession).duration || parseResult(detailSession).tool_calls?.length" class="result-meta">
-          <Tag v-if="parseResult(detailSession).token_usage">tokens: {{ JSON.stringify(parseResult(detailSession).token_usage) }}</Tag>
-          <Tag v-if="parseResult(detailSession).duration">耗时 {{ parseResult(detailSession).duration.toFixed(1) }}s</Tag>
-          <Tag v-if="parseResult(detailSession).tool_calls?.length">工具调用 {{ parseResult(detailSession).tool_calls.length }} 次</Tag>
+        <div
+          v-if="parseResult(detailSession).token_usage || parseResult(detailSession).duration || parseResult(detailSession).tool_calls?.length"
+          class="result-meta"
+        >
+          <Tag v-if="parseResult(detailSession).token_usage">
+            tokens: {{ JSON.stringify(parseResult(detailSession).token_usage) }}
+          </Tag>
+          <Tag v-if="parseResult(detailSession).duration">
+            耗时 {{ parseResult(detailSession).duration.toFixed(1) }}s
+          </Tag>
+          <Tag v-if="parseResult(detailSession).tool_calls?.length">
+            工具调用 {{ parseResult(detailSession).tool_calls.length }} 次
+          </Tag>
         </div>
       </div>
     </Modal>

@@ -107,32 +107,60 @@ const badgeText = computed(() => (unseenCount.value > 99 ? '99+' : String(unseen
 </script>
 
 <template>
-  <div ref="scrollRef" class="message-list" @scroll.passive="onScroll">
+  <div
+    ref="scrollRef"
+    class="message-list"
+    @scroll.passive="onScroll"
+  >
     <!-- P2-E: 首次加载骨架屏 -->
-    <div v-if="initialLoading" class="skeleton-list">
-      <div v-for="n in 4" :key="n" class="skeleton-msg" :class="n % 2 === 0 ? 'user' : 'assistant'">
-        <div class="skeleton-avatar"></div>
+    <div
+      v-if="initialLoading"
+      class="skeleton-list"
+    >
+      <div
+        v-for="n in 4"
+        :key="n"
+        class="skeleton-msg"
+        :class="n % 2 === 0 ? 'user' : 'assistant'"
+      >
+        <div class="skeleton-avatar" />
         <div class="skeleton-lines">
-          <div class="skeleton-line" :style="{ width: 60 + (n * 7) % 30 + '%' }"></div>
-          <div class="skeleton-line" :style="{ width: 80 + (n * 11) % 15 + '%' }"></div>
+          <div
+            class="skeleton-line"
+            :style="{ width: 60 + (n * 7) % 30 + '%' }"
+          />
+          <div
+            class="skeleton-line"
+            :style="{ width: 80 + (n * 11) % 15 + '%' }"
+          />
         </div>
       </div>
     </div>
-    <div v-else-if="items.length === 0" class="list-empty-placeholder" />
+    <div
+      v-else-if="items.length === 0"
+      class="list-empty-placeholder"
+    />
 
     <!-- P 性能：触顶加载更早（infinite scroll） -->
-    <div v-if="props.hasMore || props.loadingEarlier" class="earlier-loader">
+    <div
+      v-if="props.hasMore || props.loadingEarlier"
+      class="earlier-loader"
+    >
       <template v-if="props.loadingEarlier">
-        <span class="loading-dot"></span><span class="loading-dot"></span><span class="loading-dot"></span>
+        <span class="loading-dot" /><span class="loading-dot" /><span class="loading-dot" />
       </template>
       <span v-else>加载更早的消息</span>
     </div>
 
     <!-- 虚拟滚动窗口 -->
-    <div class="virtual-window" :style="{ height: virtualizer.getTotalSize() + 'px', position: 'relative' }">
+    <div
+      class="virtual-window"
+      :style="{ height: virtualizer.getTotalSize() + 'px', position: 'relative' }"
+    >
       <MessageItem
         v-for="vi in virtualizer.getVirtualItems()"
         :key="String(vi.key)"
+        :ref="(el: any) => el && virtualizer.measureElement(el.$el ?? el)"
         :item="items[vi.index]"
         :anchor-key="isUserAnchor(items[vi.index]) ? vi.index : undefined"
         :highlighted="highlightIndex === vi.index"
@@ -144,7 +172,6 @@ const badgeText = computed(() => (unseenCount.value > 99 ? '99+' : String(unseen
           right: '0',
           transform: `translateY(${vi.start}px)`,
         }"
-        :ref="(el: any) => el && virtualizer.measureElement(el.$el ?? el)"
         @retry-from="(id: string, text: string) => emit('retry-from', id, text)"
         @regenerate="(id: string) => emit('regenerate', id)"
         @continue="(id: string) => emit('continue', id)"
@@ -152,8 +179,11 @@ const badgeText = computed(() => (unseenCount.value > 99 ? '99+' : String(unseen
       />
     </div>
 
-    <div v-if="loading" class="loading-indicator">
-      <span class="loading-dot"></span><span class="loading-dot"></span><span class="loading-dot"></span>
+    <div
+      v-if="loading"
+      class="loading-indicator"
+    >
+      <span class="loading-dot" /><span class="loading-dot" /><span class="loading-dot" />
     </div>
 
     <!-- 回到底部按钮：离开底部时显示 + 新消息未读徽标（deepseek bottom-follow 语义补充） -->
@@ -166,7 +196,10 @@ const badgeText = computed(() => (unseenCount.value > 99 ? '99+' : String(unseen
         @click="scrollToBottom"
       >
         <ArrowDownOutlined />
-        <span v-if="unseenCount" class="back-badge">{{ badgeText }}</span>
+        <span
+          v-if="unseenCount"
+          class="back-badge"
+        >{{ badgeText }}</span>
       </button>
     </Transition>
   </div>

@@ -3,6 +3,7 @@
 实现对标 Go `internal/pm/tools.go`，通过 GatewayRouter.chat 调用 LLM：
 - LLM 不可用时返回 fallback 模板，保持工具可用性。
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -26,7 +27,10 @@ async def _call_llm(system: str, user: str) -> str:
     if _gateway is None:
         return f"[LLM unavailable]\n\n{user}"
     resp = await _gateway.chat(
-        messages=[ChatMessage(role="system", content=system), ChatMessage(role="user", content=user)],
+        messages=[
+            ChatMessage(role="system", content=system),
+            ChatMessage(role="user", content=user),
+        ],
         model=_default_model,
         max_tokens=2048,
     )
@@ -59,7 +63,9 @@ async def tech_design(prd: str) -> dict[str, Any]:
         "4. **Data Model**\n5. **Module Breakdown**\n6. **Security Considerations**\n7. **Deployment Strategy**\n\n"
         "Output only the technical design in Markdown."
     )
-    out = await _call_llm(system, f"Based on this PRD, generate a technical design:\n\n{prd}")
+    out = await _call_llm(
+        system, f"Based on this PRD, generate a technical design:\n\n{prd}"
+    )
     return {"output": out}
 
 
@@ -71,7 +77,9 @@ async def task_decompose(prd: str) -> dict[str, Any]:
         "For each task include:\n- Task ID and Title\n- Description\n- Priority\n- Dependencies\n"
         "- Estimated Effort\n- Acceptance Criteria\n\nGroup tasks by phase or milestone. Output in Markdown."
     )
-    out = await _call_llm(system, f"Decompose this PRD into development tasks:\n\n{prd}")
+    out = await _call_llm(
+        system, f"Decompose this PRD into development tasks:\n\n{prd}"
+    )
     return {"output": out}
 
 

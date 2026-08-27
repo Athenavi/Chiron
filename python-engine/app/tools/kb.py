@@ -6,6 +6,7 @@
 归属校验：仅允许检索「自己的」或 visibility=public 的知识库（与 API 层一致）。
 当前用户取自工具上下文（agent/对话/工作流运行时已设置）。
 """
+
 from __future__ import annotations
 
 import logging
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 async def _pool():
     from app.db import get_pool
+
     try:
         return get_pool()
     except RuntimeError as e:
@@ -53,14 +55,17 @@ async def kb_list(query: str = "", limit: int = 20) -> dict[str, Any]:
             LIMIT ${len(params)}""",
         *params,
     )
-    kbs = [{
-        "id": r["id"],
-        "name": r["name"],
-        "description": r["description"],
-        "type": r["type"],
-        "visibility": r["visibility"],
-        "document_count": r["document_count"],
-    } for r in rows]
+    kbs = [
+        {
+            "id": r["id"],
+            "name": r["name"],
+            "description": r["description"],
+            "type": r["type"],
+            "visibility": r["visibility"],
+            "document_count": r["document_count"],
+        }
+        for r in rows
+    ]
     return {"count": len(kbs), "knowledge_bases": kbs}
 
 
@@ -79,7 +84,8 @@ async def kb_search(kb_id: str, query: str, top_k: int = 5) -> dict[str, Any]:
         return {"error": str(e)}
 
     kb_row = await pool.fetchrow(
-        """SELECT id, type, user_id, visibility FROM knowledge_bases WHERE id = $1""", kb_id,
+        """SELECT id, type, user_id, visibility FROM knowledge_bases WHERE id = $1""",
+        kb_id,
     )
     if kb_row is None:
         return {"error": f"knowledge base not found: {kb_id}"}
@@ -100,34 +106,46 @@ async def kb_search(kb_id: str, query: str, top_k: int = 5) -> dict[str, Any]:
                      @@ plainto_tsquery('chinese', $1)
                ORDER BY rank DESC
                LIMIT $3""",
-                query, kb_id, top_k,
+                query,
+                kb_id,
+                top_k,
             )
         except Exception as e:  # noqa: BLE001 — 全文检索失败降级返回空结果
             logger.warning("kb_search full-text failed (kb_id=%s): %s", kb_id, e)
             rows = []
-        results = [{
-            "id": r["id"],
-            "name": r["name"],
-            "file_type": r["file_type"],
-            "rank": float(r["rank"]),
-        } for r in rows]
+        results = [
+            {
+                "id": r["id"],
+                "name": r["name"],
+                "file_type": r["file_type"],
+                "rank": float(r["rank"]),
+            }
+            for r in rows
+        ]
         return {"type": kb_type, "results": results}
     else:
         # RAG 向量检索
         try:
             from app.rag.retriever import RAGRetriever
             from app.tools.context import get_tenant_id
+
             retriever = RAGRetriever()
             tenant_id = get_tenant_id() or "default"
             hits = await retriever.retrieve(
-                tenant_id=tenant_id, query=query, top_k=top_k, threshold=0.45,
+                tenant_id=tenant_id,
+                query=query,
+                top_k=top_k,
+                threshold=0.45,
             )
-            results = [{
-                "document_id": h.get("document_id", ""),
-                "chunk_id": h.get("chunk_id", ""),
-                "content": h.get("content", "")[:500],
-                "score": round(h.get("score", 0.0), 4),
-            } for h in hits]
+            results = [
+                {
+                    "document_id": h.get("document_id", ""),
+                    "chunk_id": h.get("chunk_id", ""),
+                    "content": h.get("content", "")[:500],
+                    "score": round(h.get("score", 0.0), 4),
+                }
+                for h in hits
+            ]
             return {"type": kb_type, "results": results}
         except Exception as e:
             logger.warning("kb_search RAG failed (kb_id=%s): %s", kb_id, e)
@@ -140,7 +158,11 @@ registry.register(
     parameters={
         "type": "object",
         "properties": {
-            "query": {"type": "string", "default": "", "description": "Optional name filter"},
+            "query": {
+                "type": "string",
+                "default": "",
+                "description": "Optional name filter",
+            },
             "limit": {"type": "integer", "default": 20},
         },
     },
@@ -153,7 +175,10 @@ registry.register(
     parameters={
         "type": "object",
         "properties": {
-            "kb_id": {"type": "string", "description": "Knowledge base id (from kb_list)"},
+            "kb_id": {
+                "type": "string",
+                "description": "Knowledge base id (from kb_list)",
+            },
             "query": {"type": "string", "description": "Search query"},
             "top_k": {"type": "integer", "default": 5},
         },

@@ -1,8 +1,8 @@
 # 租户级限流 — Redis 滑动窗口计数器
 from __future__ import annotations
 
-import time
 import logging
+import time
 import uuid
 
 import redis.asyncio as aioredis
@@ -38,17 +38,19 @@ class TenantRateLimiter:
         now = time.time()
 
         # 检查每秒限流
-        if not await self._check_window(
-            f"ratelimit:{tenant_id}:s", now, 1.0, self.rps
-        ):
-            logger.warning("Rate limit exceeded: tenant=%s (rps=%d)", tenant_id, self.rps)
+        if not await self._check_window(f"ratelimit:{tenant_id}:s", now, 1.0, self.rps):
+            logger.warning(
+                "Rate limit exceeded: tenant=%s (rps=%d)", tenant_id, self.rps
+            )
             return False
 
         # 检查每分钟限流
         if not await self._check_window(
             f"ratelimit:{tenant_id}:m", now, 60.0, self.rpm
         ):
-            logger.warning("Rate limit exceeded: tenant=%s (rpm=%d)", tenant_id, self.rpm)
+            logger.warning(
+                "Rate limit exceeded: tenant=%s (rpm=%d)", tenant_id, self.rpm
+            )
             return False
 
         return True

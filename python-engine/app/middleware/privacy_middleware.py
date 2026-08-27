@@ -16,7 +16,9 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 NO_RETENTION = "no_retention"
 
 # 请求作用域隐私模式（middleware 层注入，session_store / trace 读取）
-privacy_mode_var: contextvars.ContextVar[str] = contextvars.ContextVar("privacy_mode", default="")
+privacy_mode_var: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "privacy_mode", default=""
+)
 
 
 def is_no_retention() -> bool:

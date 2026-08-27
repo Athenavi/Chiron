@@ -1,14 +1,15 @@
 """
 LLM Provider Protocol — 对标 Go 的 llm.Provider 接口
 """
+
 from __future__ import annotations
 
-from typing import Protocol, AsyncIterator
+from typing import AsyncIterator, Protocol
 
 
 class LLMResponse:
     """LLM 响应对象"""
-    
+
     def __init__(
         self,
         content: str = "",
@@ -24,12 +25,12 @@ class LLMResponse:
 
 class LLMProvider(Protocol):
     """LLM 提供者接口"""
-    
+
     @property
     def name(self) -> str:
         """Provider 名称"""
         ...
-    
+
     async def chat(
         self,
         messages: list[dict],
@@ -41,7 +42,7 @@ class LLMProvider(Protocol):
     ) -> AsyncIterator[dict] | LLMResponse:
         """发送聊天请求，返回流式响应或完整响应"""
         ...
-    
+
     async def embed(
         self,
         text: str,
@@ -49,7 +50,7 @@ class LLMProvider(Protocol):
     ) -> list[float]:
         """生成文本嵌入向量"""
         ...
-    
+
     async def close(self) -> None:
         """关闭连接"""
         ...

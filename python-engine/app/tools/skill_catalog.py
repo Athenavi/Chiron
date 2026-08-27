@@ -4,6 +4,7 @@
 （仅 name+description，不注入正文），让模型跨轮次感知可用技能而不必
 主动调用 skill_list；会话内已存在目录时跳过（保持前缀稳定）。
 """
+
 from __future__ import annotations
 
 import logging
@@ -30,7 +31,10 @@ async def build_skill_catalog() -> str:
     skills = [s for s in skills if s.get("enabled", True)]
     if not skills:
         return ""
-    lines = ["<available_skills>", "You have these skills installed. Load one only when needed; do not re-load already-inlined content."]
+    lines = [
+        "<available_skills>",
+        "You have these skills installed. Load one only when needed; do not re-load already-inlined content.",
+    ]
     for s in skills:
         name = s.get("name", "")
         desc = s.get("description", "")

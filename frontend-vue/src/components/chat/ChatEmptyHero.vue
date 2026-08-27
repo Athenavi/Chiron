@@ -11,10 +11,17 @@ const suggestions = [
 
 <template>
   <div class="hero">
-    <div class="hero-glow" aria-hidden />
+    <div
+      class="hero-glow"
+      aria-hidden
+    />
     <div class="hero-content">
-      <div class="hero-logo">MC</div>
-      <h1 class="hero-title">你好，有什么可以帮助你的？</h1>
+      <div class="hero-logo">
+        MC
+      </div>
+      <h1 class="hero-title">
+        你好，有什么可以帮助你的？
+      </h1>
       <div class="suggestion-grid">
         <div
           v-for="s in suggestions"
@@ -27,9 +34,15 @@ const suggestions = [
           @keydown.enter.prevent="emit('suggest', s.prompt)"
           @keydown.space.prevent="emit('suggest', s.prompt)"
         >
-          <div class="card-icon">{{ s.icon }}</div>
-          <div class="card-title">{{ s.title }}</div>
-          <div class="card-desc">{{ s.desc }}</div>
+          <div class="card-icon">
+            {{ s.icon }}
+          </div>
+          <div class="card-title">
+            {{ s.title }}
+          </div>
+          <div class="card-desc">
+            {{ s.desc }}
+          </div>
         </div>
       </div>
     </div>

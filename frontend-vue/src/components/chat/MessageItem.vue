@@ -284,12 +284,19 @@ function handleMsgClick(e: MouseEvent) {
     class="msg-row"
     :class="[item.role, { streaming: item.streaming, highlighted: highlighted, 'msg-error': (item as TextItem).error }]"
     :data-chat-anchor-key="anchorKey"
-    @click="handleMsgClick"
     data-time-hover-root
+    @click="handleMsgClick"
   >
-    <div class="msg-content" :aria-live="item.streaming ? 'polite' : 'off'" :aria-busy="item.streaming">
+    <div
+      class="msg-content"
+      :aria-live="item.streaming ? 'polite' : 'off'"
+      :aria-busy="item.streaming"
+    >
       <!-- 编辑模式（用户消息）：textarea + 保存/取消 -->
-      <div v-if="editing" class="msg-edit">
+      <div
+        v-if="editing"
+        class="msg-edit"
+      >
         <Input.TextArea
           ref="editInputRef"
           v-model:value="editDraft"
@@ -299,25 +306,53 @@ function handleMsgClick(e: MouseEvent) {
           @keydown.esc.prevent="cancelEdit"
         />
         <div class="edit-actions">
-          <button class="edit-btn cancel" type="button" @click="cancelEdit">取消</button>
-          <button class="edit-btn save" type="button" @click="confirmEdit">保存并发送</button>
+          <button
+            class="edit-btn cancel"
+            type="button"
+            @click="cancelEdit"
+          >
+            取消
+          </button>
+          <button
+            class="edit-btn save"
+            type="button"
+            @click="confirmEdit"
+          >
+            保存并发送
+          </button>
         </div>
       </div>
       <template v-else>
         <!-- P 性能：流式期间纯文本渲染（零 markdown 开销），完成后一次性 markdown + 缓存 -->
-        <div v-if="item.streaming" class="msg-text streaming-text">{{ item.content }}</div>
-        <div v-else class="msg-text" v-html="renderMarkdown(displayContent)"></div>
+        <div
+          v-if="item.streaming"
+          class="msg-text streaming-text"
+        >
+          {{ item.content }}
+        </div>
+        <div
+          v-else
+          class="msg-text"
+          v-html="renderMarkdown(displayContent)"
+        />
         <!-- P3-B: 长消息展开/折叠按钮 -->
         <button
           v-if="isLongMessage"
-          class="collapse-toggle" type="button"
+          class="collapse-toggle"
+          type="button"
           @click.stop="collapsed = !collapsed"
         >
           {{ collapsed ? '展开全部' : '收起' }}
         </button>
         <!-- 附件展示：图片内联，文件显示卡片 -->
-        <div v-if="(item as TextItem).attachments?.length" class="msg-attachments">
-          <template v-for="att in (item as TextItem).attachments" :key="att.id">
+        <div
+          v-if="(item as TextItem).attachments?.length"
+          class="msg-attachments"
+        >
+          <template
+            v-for="att in (item as TextItem).attachments"
+            :key="att.id"
+          >
             <img
               v-if="att.isImage"
               :src="attachmentUrl(att)"
@@ -325,8 +360,13 @@ function handleMsgClick(e: MouseEvent) {
               class="msg-attachment-img"
               loading="lazy"
               @error="onAttachmentImgError(att)"
-            />
-            <a v-else :href="attachmentUrl(att)" :download="att.name" class="msg-attachment-file">
+            >
+            <a
+              v-else
+              :href="attachmentUrl(att)"
+              :download="att.name"
+              class="msg-attachment-file"
+            >
               <FileOutlined />
               <span class="att-name">{{ att.name }}</span>
               <span class="att-size">{{ formatSize(att.size) }}</span>
@@ -334,7 +374,10 @@ function handleMsgClick(e: MouseEvent) {
           </template>
         </div>
         <!-- 反向定位：来源工作台 chips（kb_id / workflow_id / agent_id，metadata 驱动） -->
-        <div v-if="item.role === 'assistant' && sourceChips.length" class="source-chips">
+        <div
+          v-if="item.role === 'assistant' && sourceChips.length"
+          class="source-chips"
+        >
           <a
             v-for="chip in sourceChips"
             :key="chip.key"
@@ -348,21 +391,38 @@ function handleMsgClick(e: MouseEvent) {
           </a>
         </div>
         <!-- 失败消息错误提示 -->
-        <div v-if="(item as TextItem).error" class="msg-error-banner">
+        <div
+          v-if="(item as TextItem).error"
+          class="msg-error-banner"
+        >
           <span class="error-text">发送失败：{{ (item as TextItem).errorMsg || '网络错误' }}</span>
-          <button class="retry-btn" type="button" @click.stop="retryFailed">
+          <button
+            class="retry-btn"
+            type="button"
+            @click.stop="retryFailed"
+          >
             <ReloadOutlined /> 重试
           </button>
         </div>
-        <div class="msg-actions" :class="item.role">
+        <div
+          class="msg-actions"
+          :class="item.role"
+        >
           <span class="msg-time">{{ timeLabel }}</span>
-          <button class="msg-action" type="button" title="复制" @click.stop="copyMessage">
+          <button
+            class="msg-action"
+            type="button"
+            title="复制"
+            @click.stop="copyMessage"
+          >
             <CopyOutlined />
           </button>
           <!-- 用户消息：编辑重发（非流式、非错误态） -->
           <button
             v-if="item.role === 'user' && !item.streaming && !(item as TextItem).error"
-            class="msg-action" type="button" title="编辑并重发"
+            class="msg-action"
+            type="button"
+            title="编辑并重发"
             @click.stop="startEdit"
           >
             <EditOutlined />
@@ -370,7 +430,9 @@ function handleMsgClick(e: MouseEvent) {
           <!-- 助手消息：重新生成（非流式、非错误态） -->
           <button
             v-if="item.role === 'assistant' && !item.streaming && !(item as TextItem).error && !(item as TextItem).stopped"
-            class="msg-action" type="button" title="重新生成"
+            class="msg-action"
+            type="button"
+            title="重新生成"
             @click.stop="regenerate"
           >
             <ReloadOutlined />
@@ -378,7 +440,9 @@ function handleMsgClick(e: MouseEvent) {
           <!-- P2-F: 停止后显示"继续生成"按钮 -->
           <button
             v-if="item.role === 'assistant' && (item as TextItem).stopped"
-            class="msg-action continue-btn" type="button" title="继续生成"
+            class="msg-action continue-btn"
+            type="button"
+            title="继续生成"
             @click.stop="emit('continue', item.id!)"
           >
             <ReloadOutlined /> 继续
@@ -386,7 +450,9 @@ function handleMsgClick(e: MouseEvent) {
           <!-- P2-D: 助手消息反馈 👍/👎 -->
           <template v-if="item.role === 'assistant' && !item.streaming && !(item as TextItem).error">
             <button
-              class="msg-action" type="button" :class="{ active: feedback === 'up' }"
+              class="msg-action"
+              type="button"
+              :class="{ active: feedback === 'up' }"
               :title="feedback === 'up' ? '取消好评' : '好评'"
               @click.stop="setFeedback('up')"
             >
@@ -394,7 +460,9 @@ function handleMsgClick(e: MouseEvent) {
               <LikeOutlined v-else />
             </button>
             <button
-              class="msg-action" type="button" :class="{ active: feedback === 'down' }"
+              class="msg-action"
+              type="button"
+              :class="{ active: feedback === 'down' }"
               :title="feedback === 'down' ? '取消差评' : '差评'"
               @click.stop="setFeedback('down')"
             >
@@ -407,15 +475,33 @@ function handleMsgClick(e: MouseEvent) {
     </div>
   </div>
 
-  <ReasoningBlock v-else-if="item.kind === 'reasoning'" :content="item.content" :streaming="item.streaming" />
-  <ToolCallCard v-else-if="item.kind === 'tool_call'" :item="item as ToolCallItem" />
-  <ToolResultBlock v-else-if="item.kind === 'tool_result'" :item="item as ToolResultItem" />
+  <ReasoningBlock
+    v-else-if="item.kind === 'reasoning'"
+    :content="item.content"
+    :streaming="item.streaming"
+  />
+  <ToolCallCard
+    v-else-if="item.kind === 'tool_call'"
+    :item="item as ToolCallItem"
+  />
+  <ToolResultBlock
+    v-else-if="item.kind === 'tool_result'"
+    :item="item as ToolResultItem"
+  />
   <!-- UI/UX：日期分隔线（deepseek DateDivider） -->
-  <div v-else-if="item.kind === 'date_divider'" v-bind="$attrs" class="date-divider">
+  <div
+    v-else-if="item.kind === 'date_divider'"
+    v-bind="$attrs"
+    class="date-divider"
+  >
     <span class="date-divider-line" /><span class="date-divider-text">{{ item.content }}</span><span class="date-divider-line" />
   </div>
 
-  <div v-else-if="item.kind === 'turn_stats'" v-bind="$attrs" class="turn-stats">
+  <div
+    v-else-if="item.kind === 'turn_stats'"
+    v-bind="$attrs"
+    class="turn-stats"
+  >
     <span v-if="item.inputTokens || item.outputTokens || item.durationSec">
       <template v-if="item.durationSec">耗时 {{ item.durationSec }}s · </template>
       tokens: {{ item.inputTokens }} in / {{ item.outputTokens }} out

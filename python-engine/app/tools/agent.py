@@ -5,6 +5,7 @@
 
 为保持轻量，当前版本使用内存 registry 与 session 管理；后续可接入 AgentRuntime + DB。
 """
+
 from __future__ import annotations
 
 import time
@@ -23,9 +24,29 @@ class AgentInfo:
 
 
 _AGENTS: dict[str, AgentInfo] = {
-    "knowledge": AgentInfo(name="knowledge", description="知识检索与问答代理", tools=["search_files", "grep_files", "web_fetch", "read_file"]),
+    "knowledge": AgentInfo(
+        name="knowledge",
+        description="知识检索与问答代理",
+        tools=["search_files", "grep_files", "web_fetch", "read_file"],
+    ),
     "tool": AgentInfo(name="tool", description="通用工具代理", tools=[]),
-    "browser": AgentInfo(name="browser", description="浏览器自动化代理", tools=["browser_navigate", "browser_click", "browser_type", "browser_read", "browser_screenshot", "browser_scroll", "browser_get_state", "browser_tab_list", "browser_tab_create", "browser_tab_switch", "browser_tab_close"]),
+    "browser": AgentInfo(
+        name="browser",
+        description="浏览器自动化代理",
+        tools=[
+            "browser_navigate",
+            "browser_click",
+            "browser_type",
+            "browser_read",
+            "browser_screenshot",
+            "browser_scroll",
+            "browser_get_state",
+            "browser_tab_list",
+            "browser_tab_create",
+            "browser_tab_switch",
+            "browser_tab_close",
+        ],
+    ),
 }
 
 
@@ -75,10 +96,15 @@ async def agent_dispatch(task: str, agent_type: str = "") -> dict[str, Any]:
 
 async def agent_list() -> dict[str, Any]:
     lines = [f"  - {a.name}: {a.description}" for a in _AGENTS.values()]
-    return {"output": "\n".join(lines), "agents": [a.__dict__ for a in _AGENTS.values()]}
+    return {
+        "output": "\n".join(lines),
+        "agents": [a.__dict__ for a in _AGENTS.values()],
+    }
 
 
-async def code_agent(task: str, code: str = "", file_path: str = "", language: str = "python") -> dict[str, Any]:
+async def code_agent(
+    task: str, code: str = "", file_path: str = "", language: str = "python"
+) -> dict[str, Any]:
     if not task:
         return {"error": "task is required"}
 
@@ -86,6 +112,7 @@ async def code_agent(task: str, code: str = "", file_path: str = "", language: s
 
     if code:
         from app.tools.registry import registry as tool_reg
+
         path = file_path or f"/tmp/code_{int(time.time())}.{language}"
         await tool_reg.execute("write_file", {"path": path, "content": code})
         command = f"python {path}" if language == "python" else f"bash {path}"
@@ -101,14 +128,23 @@ async def agent_session_create(name: str, task: str) -> dict[str, Any]:
         return {"error": "name and task are required"}
     sid = _new_session_id()
     _sessions[sid] = Session(id=sid, name=name, task=task)
-    return {"output": f"Session '{name}' created", "session_id": sid, "status": "pending"}
+    return {
+        "output": f"Session '{name}' created",
+        "session_id": sid,
+        "status": "pending",
+    }
 
 
 async def agent_session_list() -> dict[str, Any]:
     if not _sessions:
         return {"output": "No agent sessions.", "sessions": []}
-    lines = [f"  - {s.id} [{s.status}] {s.name}: {s.task[:60]}" for s in _sessions.values()]
-    return {"output": "\n".join(lines), "sessions": [s.__dict__ for s in _sessions.values()]}
+    lines = [
+        f"  - {s.id} [{s.status}] {s.name}: {s.task[:60]}" for s in _sessions.values()
+    ]
+    return {
+        "output": "\n".join(lines),
+        "sessions": [s.__dict__ for s in _sessions.values()],
+    }
 
 
 # ── 注册 ───────────────────────────────────────────────────────

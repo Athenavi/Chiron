@@ -9,7 +9,11 @@ const barStyle = computed(() => ({
 </script>
 
 <template>
-  <div class="route-progress" :style="barStyle" aria-hidden="true" />
+  <div
+    class="route-progress"
+    :style="barStyle"
+    aria-hidden="true"
+  />
 </template>
 
 <style scoped>

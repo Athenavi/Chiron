@@ -114,33 +114,73 @@ async function handleRegister() {
   <div class="register-container">
     <div class="register-card">
       <div class="register-header">
-        <div class="register-logo">MC</div>
-        <div class="register-title">创建账号</div>
-        <div class="register-subtitle">加入 Chiron AI Agent 平台</div>
+        <div class="register-logo">
+          MC
+        </div>
+        <div class="register-title">
+          创建账号
+        </div>
+        <div class="register-subtitle">
+          加入 Chiron AI Agent 平台
+        </div>
       </div>
-      <Card :bordered="false" class="register-form-card">
-        <Alert v-if="error" type="error" :message="error" show-icon style="margin-bottom: 16px" />
+      <Card
+        :bordered="false"
+        class="register-form-card"
+      >
+        <Alert
+          v-if="error"
+          type="error"
+          :message="error"
+          show-icon
+          style="margin-bottom: 16px"
+        />
 
         <Form
           ref="formRef"
           :model="form"
           :rules="rules"
-          @finish="handleRegister"
           layout="vertical"
+          @finish="handleRegister"
         >
-          <FormItem label="姓名" name="name">
-            <Input v-model:value="form.name" placeholder="请输入姓名" size="large" aria-label="姓名" autocomplete="name">
-              <template #prefix><UserOutlined /></template>
+          <FormItem
+            label="姓名"
+            name="name"
+          >
+            <Input
+              v-model:value="form.name"
+              placeholder="请输入姓名"
+              size="large"
+              aria-label="姓名"
+              autocomplete="name"
+            >
+              <template #prefix>
+                <UserOutlined />
+              </template>
             </Input>
           </FormItem>
 
-          <FormItem label="邮箱" name="email">
-            <Input v-model:value="form.email" placeholder="请输入邮箱" size="large" aria-label="邮箱" autocomplete="email">
-              <template #prefix><MailOutlined /></template>
+          <FormItem
+            label="邮箱"
+            name="email"
+          >
+            <Input
+              v-model:value="form.email"
+              placeholder="请输入邮箱"
+              size="large"
+              aria-label="邮箱"
+              autocomplete="email"
+            >
+              <template #prefix>
+                <MailOutlined />
+              </template>
             </Input>
           </FormItem>
 
-          <FormItem label="密码" name="password">
+          <FormItem
+            label="密码"
+            name="password"
+          >
             <Input
               v-model:value="form.password"
               placeholder="请输入密码（至少8位）"
@@ -149,11 +189,16 @@ async function handleRegister() {
               aria-label="密码"
               autocomplete="new-password"
             >
-              <template #prefix><LockOutlined /></template>
+              <template #prefix>
+                <LockOutlined />
+              </template>
             </Input>
           </FormItem>
 
-          <FormItem label="确认密码" name="confirmPassword">
+          <FormItem
+            label="确认密码"
+            name="confirmPassword"
+          >
             <Input
               v-model:value="form.confirmPassword"
               placeholder="请再次输入密码"
@@ -162,11 +207,16 @@ async function handleRegister() {
               aria-label="确认密码"
               autocomplete="new-password"
             >
-              <template #prefix><LockOutlined /></template>
+              <template #prefix>
+                <LockOutlined />
+              </template>
             </Input>
           </FormItem>
 
-          <FormItem v-if="captchaRequired" label="人机验证">
+          <FormItem
+            v-if="captchaRequired"
+            label="人机验证"
+          >
             <CaptchaWidget
               ref="captchaRef"
               :provider="captchaConfig.provider"
@@ -178,11 +228,24 @@ async function handleRegister() {
           </FormItem>
 
           <FormItem>
-            <Space direction="vertical" style="width: 100%">
-              <Button type="primary" html-type="submit" block :loading="authStore.loading" size="large">
+            <Space
+              direction="vertical"
+              style="width: 100%"
+            >
+              <Button
+                type="primary"
+                html-type="submit"
+                block
+                :loading="authStore.loading"
+                size="large"
+              >
                 注册
               </Button>
-              <Button type="link" block @click="router.push('/login')">
+              <Button
+                type="link"
+                block
+                @click="router.push('/login')"
+              >
                 已有账号？登录
               </Button>
             </Space>

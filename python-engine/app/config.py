@@ -80,16 +80,18 @@ class Settings(BaseSettings):
     short_term_ttl: int = 604800  # 7 天（秒）
     long_term_ttl: int = 0  # 0 = 永不过期
     # L2 档案卡（用户长期记忆）容量与整理参数
-    memory_profile_max_items: int = 200      # 每用户条目软上限（超出按 置信度×新近度 淘汰 derived）
-    memory_archive_days: int = 180           # 超期未引用且低置信 → 归档
-    memory_dedup_threshold: float = 0.95     # cosine 超过该阈值判定近重复 → 整理时合并
-    memory_search_min_cosine: float = 0.30   # 语义检索召回下限
+    memory_profile_max_items: int = (
+        200  # 每用户条目软上限（超出按 置信度×新近度 淘汰 derived）
+    )
+    memory_archive_days: int = 180  # 超期未引用且低置信 → 归档
+    memory_dedup_threshold: float = 0.95  # cosine 超过该阈值判定近重复 → 整理时合并
+    memory_search_min_cosine: float = 0.30  # 语义检索召回下限
     # L3 近期对话摘要（语义检索层）
-    memory_summary_top_k: int = 5            # 每回合召回的摘要条数
+    memory_summary_top_k: int = 5  # 每回合召回的摘要条数
     memory_summary_retention_days: int = 90  # 超期未命中 → archived
     memory_summary_min_cosine: float = 0.45  # 摘要语义检索召回下限
-    memory_recall_token_budget: int = 8000   # L2+L3 总注入预算（tokens）
-    memory_consolidate_batch: int = 32       # 巩固攒批大小
+    memory_recall_token_budget: int = 8000  # L2+L3 总注入预算（tokens）
+    memory_consolidate_batch: int = 32  # 巩固攒批大小
 
     # ── LLM Gateway 缓存 ──
     cache_l1_capacity: int = 2048
@@ -134,7 +136,9 @@ class Settings(BaseSettings):
 
     # extra="ignore"：项目根 .env 混有 Go 网关变量（PORT/CORS_ORIGINS 等），
     # Python 引擎只取自己声明的字段，其余忽略
-    model_config = ConfigDict(env_prefix="", case_sensitive=False, extra="ignore", env_file=_find_env_file())
+    model_config = ConfigDict(
+        env_prefix="", case_sensitive=False, extra="ignore", env_file=_find_env_file()
+    )
 
     @model_validator(mode="after")
     def _validate_security_defaults(self):
@@ -151,16 +155,25 @@ class Settings(BaseSettings):
         import hashlib
         import hmac
         import os
-        is_prod = os.getenv("APP_ENV", "").lower() == "production" or \
-                  os.getenv("PYTHON_ENV", "").lower() == "production"
+
+        is_prod = (
+            os.getenv("APP_ENV", "").lower() == "production"
+            or os.getenv("PYTHON_ENV", "").lower() == "production"
+        )
 
         # JWT_SECRET 未显式配置时，由 APP_SECRET 派生（与 Go 网关 deriveSubsecret 完全一致：
         # HMAC-SHA256(APP_SECRET, "chiron-jwt") → base64url 无 padding）。
         # 这样「仅配置 APP_SECRET」的部署模型下引擎也能启动，且与网关共享签名密钥。
         if not self.jwt_secret and self.app_secret:
-            self.jwt_secret = base64.urlsafe_b64encode(
-                hmac.new(self.app_secret.encode("utf-8"), b"chiron-jwt", hashlib.sha256).digest()
-            ).decode("ascii").rstrip("=")
+            self.jwt_secret = (
+                base64.urlsafe_b64encode(
+                    hmac.new(
+                        self.app_secret.encode("utf-8"), b"chiron-jwt", hashlib.sha256
+                    ).digest()
+                )
+                .decode("ascii")
+                .rstrip("=")
+            )
 
         WEAK_SECRETS = {
             "",
@@ -226,13 +239,17 @@ def _load_gateway_config() -> dict:
         return {}
     url = f"{settings.gateway_internal_url.rstrip('/')}/v1/internal/engine-config"
     try:
-        req = urllib.request.Request(url, headers={"X-Internal-Token": settings.internal_token})
+        req = urllib.request.Request(
+            url, headers={"X-Internal-Token": settings.internal_token}
+        )
         with urllib.request.urlopen(req, timeout=1) as resp:
             payload = json.loads(resp.read().decode())
         data = payload.get("data", payload) if isinstance(payload, dict) else {}
         return {k: v for k, v in data.items() if v is not None}
     except Exception as exc:  # noqa: BLE001 - 配置下发失败不阻断引擎启动
-        logging.getLogger(__name__).warning("load engine config from gateway failed: %s", exc)
+        logging.getLogger(__name__).warning(
+            "load engine config from gateway failed: %s", exc
+        )
         return {}
 
 
@@ -244,25 +261,32 @@ _merged = {k: v for k, v in _db_overrides.items() if k in _allowed}
 # 如果网关配置失败且 postgres_dsn 仍为空，尝试从 install.lock 解密获取
 if not settings.postgres_dsn and settings.app_secret:
     try:
-        import json
         import base64
+        import json
         from pathlib import Path
-        
-        lock_path = Path(__file__).resolve().parent.parent.parent / "data" / "install.lock"
+
+        lock_path = (
+            Path(__file__).resolve().parent.parent.parent / "data" / "install.lock"
+        )
         if lock_path.exists():
-            with open(lock_path, 'r') as f:
+            with open(lock_path, "r") as f:
                 lock_data = json.load(f)
-            
+
             if lock_data.get("completed") and lock_data.get("dsn"):
                 # 使用与 Go 相同的解密逻辑
-                import hmac
                 import hashlib
+                import hmac
+
                 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-                
+
                 def derive_lock_key(app_secret: str) -> bytes:
-                    h = hmac.new(app_secret.encode('utf-8'), b"chiron-install-lock-key", hashlib.sha256)
+                    h = hmac.new(
+                        app_secret.encode("utf-8"),
+                        b"chiron-install-lock-key",
+                        hashlib.sha256,
+                    )
                     return h.digest()
-                
+
                 def decrypt_dsn(app_secret: str, enc_dsn: str) -> str:
                     if not enc_dsn:
                         return ""
@@ -271,25 +295,32 @@ if not settings.postgres_dsn and settings.app_secret:
                     # 添加 padding 以符合标准 base64 解码要求
                     missing_padding = len(enc_dsn) % 4
                     if missing_padding:
-                        enc_dsn += '=' * (4 - missing_padding)
+                        enc_dsn += "=" * (4 - missing_padding)
                     sealed = base64.urlsafe_b64decode(enc_dsn)
                     nonce_size = 12  # AES-GCM nonce size
                     nonce = sealed[:nonce_size]
                     ciphertext = sealed[nonce_size:]
                     aesgcm = AESGCM(key)
                     plaintext = aesgcm.decrypt(nonce, ciphertext, None)
-                    return plaintext.decode('utf-8')
-                
+                    return plaintext.decode("utf-8")
+
                 dsn = decrypt_dsn(settings.app_secret, lock_data["dsn"])
                 if dsn:
                     _merged["postgres_dsn"] = dsn
                     import logging as _log
-                    _log.getLogger(__name__).info("loaded postgres_dsn from install.lock")
+
+                    _log.getLogger(__name__).info(
+                        "loaded postgres_dsn from install.lock"
+                    )
     except Exception as e:
         import logging as _log
+
         _log.getLogger(__name__).warning("failed to load DSN from install.lock: %s", e)
 
 if _merged:
     settings = settings.model_copy(update=_merged)
     import logging as _log
-    _log.getLogger(__name__).info("applied %d engine settings from gateway/install.lock", len(_merged))
+
+    _log.getLogger(__name__).info(
+        "applied %d engine settings from gateway/install.lock", len(_merged)
+    )

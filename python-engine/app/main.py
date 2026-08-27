@@ -3,15 +3,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import time
-import socket
-import uuid
 import re
+import socket
+import time
+import uuid
 from contextlib import asynccontextmanager
 
 import redis.asyncio as aioredis
 import uvicorn
-from fastapi import FastAPI, Depends, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.config import settings
@@ -35,6 +35,7 @@ _key_pool = None  # SmartAPIKeyPool
 
 
 # ── FastAPI 依赖注入 ──
+
 
 async def get_redis() -> aioredis.Redis:
     """获取 Redis 连接（FastAPI Depends）"""
@@ -82,11 +83,13 @@ async def lifespan(app: FastAPI):
 
     # ── 1. 可观测性 ──
     from app.observability.logging import configure_logging
-    from app.observability.tracing import configure_tracing
     from app.observability.metrics import ENGINE_INFO
+    from app.observability.tracing import configure_tracing
 
     configure_logging(settings.log_level)
-    configure_tracing(service_name="python-engine", otlp_endpoint=settings.otel_endpoint)
+    configure_tracing(
+        service_name="python-engine", otlp_endpoint=settings.otel_endpoint
+    )
     ENGINE_INFO.info({"version": "3.0.0", "instance_id": _get_instance_id()})
 
     logger.info("=" * 60)
@@ -96,7 +99,8 @@ async def lifespan(app: FastAPI):
     # ── 2. Redis 连接池 ──
     if not settings.redis_url:
         logger.warning(
-            "Redis URL not configured — degraded mode (session cache in-process, distributed features disabled)")
+            "Redis URL not configured — degraded mode (session cache in-process, distributed features disabled)"
+        )
         _redis = None
     else:
         _redis = aioredis.from_url(
@@ -106,7 +110,11 @@ async def lifespan(app: FastAPI):
         )
         try:
             await _redis.ping()
-            logger.info("Redis connected: %s (pool=%d)", settings.redis_url, settings.redis_max_connections)
+            logger.info(
+                "Redis connected: %s (pool=%d)",
+                settings.redis_url,
+                settings.redis_max_connections,
+            )
             # 将 SessionStore 接入 Redis，实现多实例共享
             _session_cache._redis = _redis
             logger.info("SessionStore switched to Redis backend")
@@ -115,53 +123,65 @@ async def lifespan(app: FastAPI):
             # Redis 不可用时降级启动——SessionStore 回退进程内内存模式，
             # 依赖 Redis 的功能（分布式限流/会话多实例共享/队列）返回 503，不阻断引擎启动。
             logger.warning(
-                "Redis unavailable — degraded mode (session cache in-process, distributed features disabled): %s", e)
+                "Redis unavailable — degraded mode (session cache in-process, distributed features disabled): %s",
+                e,
+            )
             _redis = None
     # ── 2.5. PostgreSQL ──
     if settings.postgres_dsn:
-        from app.db import init_pool, ensure_tables
+        from app.db import ensure_tables, init_pool
+
         try:
             await init_pool(settings.postgres_dsn)
             await ensure_tables()
             logger.info("PostgreSQL connected and tables ensured")
         except Exception as e:
             logger.warning("PostgreSQL not available: %s", e)
-    
+
     # Initialize unified DB client (optional, controlled by env var)
     from app.config import settings
+
     use_unified_db = os.getenv("USE_UNIFIED_DB_CLIENT", "false").lower() == "true"
     if use_unified_db:
         from app.db_client import get_db_client
+
         db_client = get_db_client()
         logger.info("Unified DB client initialized (through Go gateway)")
 
     # ── 3. LLM Gateway ──
-    from app.gateway.provider import LLMProvider
-    from app.gateway.router import GatewayRouter
-    from app.gateway.cache import SemanticCache
     from app.gateway.budget import TokenBudget
+    from app.gateway.cache import SemanticCache
+    from app.gateway.provider import LLMProvider
     from app.gateway.ratelimit import TenantRateLimiter
+    from app.gateway.router import GatewayRouter
 
     providers: dict[str, LLMProvider] = {}
     if settings.anthropic_api_key:
         from app.providers.anthropic import AnthropicProvider
+
         providers["anthropic"] = AnthropicProvider(
-            api_key=settings.anthropic_api_key, base_url=settings.anthropic_base_url,
+            api_key=settings.anthropic_api_key,
+            base_url=settings.anthropic_base_url,
         )
     if settings.openai_api_key or settings.llm_api_key:
         from app.providers.openai import OpenAIProvider
+
         providers["openai"] = OpenAIProvider(
             api_key=settings.openai_api_key or settings.llm_api_key,
             base_url=settings.openai_base_url or settings.llm_base_url,
         )
     if settings.deepseek_api_key:
         from app.providers.deepseek import DeepSeekProvider
+
         providers["deepseek"] = DeepSeekProvider(
-            api_key=settings.deepseek_api_key, base_url=settings.deepseek_base_url,
+            api_key=settings.deepseek_api_key,
+            base_url=settings.deepseek_base_url,
         )
 
     if not providers:
-        logger.warning("No LLM providers configured! Set ANTHROPIC_API_KEY / OPENAI_API_KEY / DEEPSEEK_API_KEY or LLM_API_KEY")
+        logger.warning(
+            "No LLM providers configured! Set ANTHROPIC_API_KEY / OPENAI_API_KEY / DEEPSEEK_API_KEY or LLM_API_KEY"
+        )
 
     # 创建 embedding 函数（用于语义缓存）
     async def _embed_for_cache(text: str) -> list[float]:
@@ -195,24 +215,28 @@ async def lifespan(app: FastAPI):
     from app.tools.graph import bind_gateway as bind_graph_gateway
     from app.tools.pm import bind_gateway as bind_pm_gateway
     from app.workflow.tools import bind_gateway as bind_workflow_gateway
+
     bind_graph_gateway(_gateway)
     bind_pm_gateway(_gateway)
     bind_workflow_gateway(_gateway)
     # LLM client（RAG 检索嵌入）同样接入 gateway
     from app.llm.client import llm_client
+
     llm_client.bind_gateway(_gateway)
     logger.info("Tool/Workflow gateways bound")
 
     # ── 3.45 记忆服务（L2 档案卡：跨会话长期记忆 + 语义检索）──
     # 依赖 PostgreSQL 连接池与嵌入链路；任一不可用则记忆服务不启用（API 返回 503 fail-loud）
     try:
+        from app.agent.prompt_engine import \
+            bind_memory_service as bind_prompt_memory
         from app.db import get_pool
-        from app.memory.profile import ProfileStore
-        from app.memory.summaries import SummaryStore
         from app.memory.consolidator import Consolidator
-        from app.memory.service import MemoryService, set_memory_service
+        from app.memory.profile import ProfileStore
         from app.memory.profile_card import ProfileCard
-        from app.agent.prompt_engine import bind_memory_service as bind_prompt_memory
+        from app.memory.service import MemoryService, set_memory_service
+        from app.memory.summaries import SummaryStore
+
         pool = get_pool()
         summary_store = SummaryStore(pool)
         consolidator = Consolidator(
@@ -232,10 +256,12 @@ async def lifespan(app: FastAPI):
 
     # ── 3.6. 六大工作台能力注册（互通基础：TaskRouter 依赖能力注册中心） ──
     from app.core.capabilities import preload_default_capabilities
+
     await preload_default_capabilities()
 
     # ── 3.5. SmartAPIKeyPool ──
     from app.gateway.smart_key_pool import SmartAPIKeyPool
+
     _key_pool = SmartAPIKeyPool()
     # 从 settings 注册已有 key
     if settings.openai_api_key:
@@ -261,6 +287,7 @@ async def lifespan(app: FastAPI):
     global _plugin_pool
     from app.plugins.pool import MCPClientPool
     from app.plugins.store import ActiveTracker, PluginStore
+
     _plugin_pool = MCPClientPool(store=PluginStore(), tracker=ActiveTracker())
     await _plugin_pool.start()
     logger.info("MCP plugin pool started (poll=%ds)", 25)
@@ -268,18 +295,23 @@ async def lifespan(app: FastAPI):
     # ── 6. 启动 Queue Worker ──
     if _redis is not None:
         _queue_worker = asyncio.create_task(_run_queue_worker(_redis, _gateway))
-        logger.info("Queue worker started (concurrency=%d)", settings.queue_worker_concurrency)
+        logger.info(
+            "Queue worker started (concurrency=%d)", settings.queue_worker_concurrency
+        )
     else:
         logger.info("Queue worker skipped (Redis not available)")
 
     # ── 8. 实例注册 ──
     instance_id = _get_instance_id()
     if _redis is not None:
-        await _redis.hset(f"instance:{instance_id}", mapping={
-            "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "pod_name": settings.pod_name or socket.gethostname(),
-            "version": "3.0.0",
-        })
+        await _redis.hset(
+            f"instance:{instance_id}",
+            mapping={
+                "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "pod_name": settings.pod_name or socket.gethostname(),
+                "version": "3.0.0",
+            },
+        )
         await _redis.expire(f"instance:{instance_id}", 60)
         logger.info("Instance registered: %s", instance_id)
 
@@ -306,10 +338,12 @@ async def lifespan(app: FastAPI):
 
     # 等待后台任务完成（上下文巩固等）
     from app.context.manager import wait_background_tasks
+
     await wait_background_tasks(timeout=10.0)
 
     # 关闭 PostgreSQL
     from app.db import close_pool
+
     await close_pool()
 
     # 关闭 MCP 插件池
@@ -341,7 +375,7 @@ def _get_instance_id() -> str:
 
 # ── 附件内容注入：自动下载文件并注入到 LLM 上下文中 ──
 
-_MEDIA_URL_RE = re.compile(r'(!?)\[([^\]]+)\]\(([^)]+)\)')
+_MEDIA_URL_RE = re.compile(r"(!?)\[([^\]]+)\]\(([^)]+)\)")
 
 
 async def _resolve_attachments(content: str) -> str:
@@ -363,6 +397,7 @@ async def _resolve_attachments(content: str) -> str:
         return content
 
     import httpx
+
     from app.tools.ssrf import fetch_url_safe
 
     # S 安全修复：禁用自动重定向，改用 ssrf.fetch_url_safe 逐跳校验
@@ -378,11 +413,35 @@ async def _resolve_attachments(content: str) -> str:
                 file_ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
 
                 # ── 文本类文件：直接注入内容 ──
-                if (content_type.startswith("text/")
-                        or file_ext in ("txt", "md", "csv", "json", "xml", "yaml", "yml",
-                                        "py", "js", "ts", "go", "java", "c", "cpp", "h",
-                                        "rs", "sh", "bat", "ps1", "sql", "html", "css",
-                                        "toml", "ini", "cfg", "conf", "log")):
+                if content_type.startswith("text/") or file_ext in (
+                    "txt",
+                    "md",
+                    "csv",
+                    "json",
+                    "xml",
+                    "yaml",
+                    "yml",
+                    "py",
+                    "js",
+                    "ts",
+                    "go",
+                    "java",
+                    "c",
+                    "cpp",
+                    "h",
+                    "rs",
+                    "sh",
+                    "bat",
+                    "ps1",
+                    "sql",
+                    "html",
+                    "css",
+                    "toml",
+                    "ini",
+                    "cfg",
+                    "conf",
+                    "log",
+                ):
                     text = resp.text
                     MAX_CHARS = 8000
                     snippet = text[:MAX_CHARS]
@@ -393,12 +452,15 @@ async def _resolve_attachments(content: str) -> str:
                     if len(text) > MAX_CHARS:
                         file_block += f"\n... (已截断，仅显示前 {MAX_CHARS} 字符)"
                     file_block += "\n===== 附件结束 ====="
-                    content = content.replace(f"{'!' if is_image else ''}[{name}]({url})", file_block)
+                    content = content.replace(
+                        f"{'!' if is_image else ''}[{name}]({url})", file_block
+                    )
 
                 # ── PDF：尝试提取文本 ──
-                elif (content_type == "application/pdf" or file_ext == "pdf"):
+                elif content_type == "application/pdf" or file_ext == "pdf":
                     try:
                         import pymupdf
+
                         doc = pymupdf.open(stream=resp.content, filetype="pdf")
                         pdf_text = "\n".join(page.get_text() for page in doc)
                         doc.close()
@@ -409,9 +471,13 @@ async def _resolve_attachments(content: str) -> str:
                             f"{snippet}"
                         )
                         if len(pdf_text) > MAX_PDF_CHARS:
-                            file_block += f"\n... (PDF 较长，已截断前 {MAX_PDF_CHARS} 字符)"
+                            file_block += (
+                                f"\n... (PDF 较长，已截断前 {MAX_PDF_CHARS} 字符)"
+                            )
                         file_block += "\n===== 附件结束 ====="
-                        content = content.replace(f"{'!' if is_image else ''}[{name}]({url})", file_block)
+                        content = content.replace(
+                            f"{'!' if is_image else ''}[{name}]({url})", file_block
+                        )
                     except Exception:
                         # PDF 解析失败，保留原始链接
                         pass
@@ -431,8 +497,7 @@ async def _resolve_attachments(content: str) -> str:
                             MAX_CHARS = 4000
                             snippet = text[:MAX_CHARS]
                             file_block = (
-                                f"\n\n===== 附件「{name}」内容 ====\n"
-                                f"{snippet}"
+                                f"\n\n===== 附件「{name}」内容 ====\n" f"{snippet}"
                             )
                             if len(text) > MAX_CHARS:
                                 file_block += f"\n... (已截断)"
@@ -450,10 +515,10 @@ async def _resolve_attachments(content: str) -> str:
 
 def _setup_middleware(app: FastAPI, redis: aioredis.Redis, limiter) -> None:
     """注册中间件链（注意：FastAPI 后注册的先执行）"""
+    from app.middleware.auth import AuthMiddleware
     from app.middleware.error_handler import ErrorHandlerMiddleware
     from app.middleware.metrics import MetricsMiddleware
     from app.middleware.rate_limit import RateLimitMiddleware
-    from app.middleware.auth import AuthMiddleware
     from app.middleware.request_context import RequestContextMiddleware
 
     # 执行顺序: RequestContext → Auth → RateLimit → Metrics → ErrorHandler → handler
@@ -473,7 +538,6 @@ def _setup_routes(app: FastAPI) -> None:
     """注册所有 HTTP 路由"""
     import time as _time
 
-
     # ── 健康检查 ──
 
     @app.get("/healthz")
@@ -484,12 +548,17 @@ def _setup_routes(app: FastAPI) -> None:
     async def readyz():
         """K8s readiness: Redis + 至少一个 Provider 可用"""
         if _redis is None:
-            return JSONResponse({"status": "not_ready", "reason": "redis not available"}, status_code=503)
+            return JSONResponse(
+                {"status": "not_ready", "reason": "redis not available"},
+                status_code=503,
+            )
         try:
             await _redis.ping()
             return {"status": "ready"}
         except Exception:
-            return JSONResponse({"status": "not_ready", "reason": "redis ping failed"}, status_code=503)
+            return JSONResponse(
+                {"status": "not_ready", "reason": "redis ping failed"}, status_code=503
+            )
 
     @app.get("/info")
     async def info():
@@ -511,6 +580,7 @@ def _setup_routes(app: FastAPI) -> None:
 
     # ── Tools API（Phase 1） ──
     from app.api import api_router
+
     app.include_router(api_router)
 
     # ── Admin API Keys（模块级路由函数） ──
@@ -529,6 +599,7 @@ async def agent_run(
 ):
     """流式 Agent 推理 — SSE 输出"""
     import json
+
     from app.agent.loop import run_agent
 
     body = await request.json()
@@ -544,7 +615,11 @@ async def agent_run(
                 content=body.get("content", ""),
                 tools=body.get("tools") or None,
                 llm_config=llm_config,
-                max_turns=(body.get("max_turns") or 0) if body.get("max_turns", 0) > 0 else None,
+                max_turns=(
+                    (body.get("max_turns") or 0)
+                    if body.get("max_turns", 0) > 0
+                    else None
+                ),
                 tenant_id=body.get("tenant_id", ""),
                 provider_hint=provider_hint,
             ):
@@ -566,23 +641,25 @@ async def agent_submit(
 ):
     """Go 网关代理端点 — 完整 ReAct 循环，SSE 输出"""
     import json
+
     body = await request.json()
-    from app.agent.runtime import AgentRuntime, AgentTask
+    import app.tools.agent  # noqa: F401 — AGENTS 工作台 (agent_dispatch 等)
+    import app.tools.browser  # noqa: F401 — 浏览器自动化 (PLUGINS/MCP 扩展)
     import app.tools.core  # noqa: F401 — 确保核心工具已注册
-    import app.tools.subagent  # noqa: F401 — 多 agent 委派工具
-    import app.tools.terminal  # noqa: F401 — 持久终端
+    import app.tools.edit_file  # noqa: F401 — 文件编辑 (创造模式常用)
     import app.tools.jobs  # noqa: F401 — 后台任务
-    import app.tools.web  # noqa: F401 — 网页搜索/抓取
-    import app.tools.run_code  # noqa: F401 — PTC 模式
+    import app.tools.kb  # noqa: F401 — KNOWLEDGE 工作台 (kb_list/kb_search)
+    import app.tools.memory  # noqa: F401 — 长期记忆 (跨工作台共享上下文)
     import app.tools.mode_admin  # noqa: F401 — 创造模式
+    import app.tools.run_code  # noqa: F401 — PTC 模式
     # ── 六大工作台互联互通：注册各工作台工具,使 CHAT 的 LLM 可通过 function-calling 调用 ──
     import app.tools.skill  # noqa: F401 — SKILLS 工作台 (skill_list/skill_run/skill_install)
-    import app.tools.kb  # noqa: F401 — KNOWLEDGE 工作台 (kb_list/kb_search)
-    import app.tools.agent  # noqa: F401 — AGENTS 工作台 (agent_dispatch 等)
+    import app.tools.subagent  # noqa: F401 — 多 agent 委派工具
+    import app.tools.terminal  # noqa: F401 — 持久终端
+    import app.tools.web  # noqa: F401 — 网页搜索/抓取
     import app.workflow.tools  # noqa: F401 — WORKFLOW 工作台 (workflow_run/workflow_list)
-    import app.tools.memory  # noqa: F401 — 长期记忆 (跨工作台共享上下文)
-    import app.tools.edit_file  # noqa: F401 — 文件编辑 (创造模式常用)
-    import app.tools.browser  # noqa: F401 — 浏览器自动化 (PLUGINS/MCP 扩展)
+    from app.agent.runtime import AgentRuntime, AgentTask
+
     # PLUGINS 工作台: MCP 工具由 app.plugins.pool / app.mcp.registry 动态注册,启动时已加载
 
     # ── 解析附件文件内容并注入到用户消息中 ──
@@ -601,7 +678,9 @@ async def agent_submit(
         session_id=body.get("session_id", ""),
         content=body.get("content", ""),
         history=body.get("history", []),
-        max_turns=max(1, min(body.get("max_turns") or settings.max_turns, settings.max_turns)),
+        max_turns=max(
+            1, min(body.get("max_turns") or settings.max_turns, settings.max_turns)
+        ),
     )
 
     # ── 深度推理模式：设置 system_prompt 要求输出思考过程 ──
@@ -641,8 +720,10 @@ async def agent_submit(
 
     # 注入记忆服务（L2 档案卡 + L3 摘要），不可用时 None（行为不变）
     from app.memory.service import get_service as get_memory_service
+
     runtime = AgentRuntime(
-        gateway=gateway, session_store=_session_cache,
+        gateway=gateway,
+        session_store=_session_cache,
         memory=get_memory_service(),
     )
     session_id = task.session_id
@@ -686,8 +767,12 @@ async def agent_approval(
     runtime, owner_uid = entry
     caller = request.headers.get("x-user-id", "") or body.get("user_id", "")
     if owner_uid and caller and owner_uid != caller:
-        logger.warning("approval rejected: caller %s != owner %s (session=%s)",
-                       caller, owner_uid, session_id)
+        logger.warning(
+            "approval rejected: caller %s != owner %s (session=%s)",
+            caller,
+            owner_uid,
+            session_id,
+        )
         return {"ok": False, "error": "not session owner"}
     resolved = await runtime.submit_approval(tool_call_id, approved, reason)
     return {"ok": resolved}
@@ -698,7 +783,9 @@ async def kb_build(
     gateway=Depends(get_gateway),
 ):
     """文档 RAG 索引 — SSE 流式进度"""
-    import json, base64
+    import base64
+    import json
+
     from app.rag.builder import RAGBuilder
 
     body = await request.json()
@@ -763,8 +850,10 @@ def _require_gateway_internal(request: Request) -> None:
     import hmac
 
     provided = request.headers.get("X-Internal-Token", "")
-    if not settings.internal_token or not provided or not hmac.compare_digest(
-        provided, settings.internal_token
+    if (
+        not settings.internal_token
+        or not provided
+        or not hmac.compare_digest(provided, settings.internal_token)
     ):
         raise HTTPException(
             status_code=401, detail="admin requires gateway internal token"
@@ -794,6 +883,7 @@ async def admin_add_api_key(
     remark = body.get("remark", "")
     if not provider or not key:
         from fastapi.responses import JSONResponse
+
         return JSONResponse({"error": "provider and key are required"}, status_code=400)
     await pool.add_key(provider, key, remark)
     return {"status": "added", "provider": provider}
@@ -812,13 +902,21 @@ async def admin_update_api_key(
     status_val = body.get("status", "")
     if not key_id or not status_val:
         return JSONResponse(
-            {"status": "error", "error": "key id and status are required", "id": key_id},
+            {
+                "status": "error",
+                "error": "key id and status are required",
+                "id": key_id,
+            },
             status_code=400,
         )
     updated = await pool.update_key_status(key_id, status_val)
     if not updated:
         return JSONResponse(
-            {"status": "not_found", "error": f"API key not found or invalid status: {status_val}", "id": key_id},
+            {
+                "status": "not_found",
+                "error": f"API key not found or invalid status: {status_val}",
+                "id": key_id,
+            },
             status_code=404,
         )
     return {"status": "updated", "id": key_id, "key_status": status_val}
@@ -844,7 +942,11 @@ async def admin_delete_api_key(
             removed = await pool.remove_key(provider, key_full)
         else:
             return JSONResponse(
-                {"status": "error", "error": "key id (path) or provider+key (body) required", "id": key_id},
+                {
+                    "status": "error",
+                    "error": "key id (path) or provider+key (body) required",
+                    "id": key_id,
+                },
                 status_code=400,
             )
         if not removed:
@@ -862,7 +964,9 @@ async def _run_queue_worker(redis: aioredis.Redis, gateway=None) -> None:
     """后台队列消费者"""
     from app.queue.worker import QueueWorker
 
-    worker = QueueWorker(redis=redis, concurrency=settings.queue_worker_concurrency, gateway=gateway)
+    worker = QueueWorker(
+        redis=redis, concurrency=settings.queue_worker_concurrency, gateway=gateway
+    )
     try:
         await worker.start()
     except asyncio.CancelledError:
@@ -897,8 +1001,8 @@ def _setup_middleware_early(app: FastAPI) -> None:
     """注册中间件（在 app 创建时调用，lifespan 中补充 redis 依赖）"""
     from app.middleware.error_handler import ErrorHandlerMiddleware
     from app.middleware.metrics import MetricsMiddleware
-    from app.middleware.request_context import RequestContextMiddleware
     from app.middleware.privacy_middleware import PrivacyModeMiddleware
+    from app.middleware.request_context import RequestContextMiddleware
 
     # 执行顺序: PrivacyMode → RequestContext → Auth → RateLimit → Metrics → ErrorHandler → handler
     app.add_middleware(ErrorHandlerMiddleware)

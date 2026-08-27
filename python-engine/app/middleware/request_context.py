@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import uuid
 
-from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.middleware.base import (BaseHTTPMiddleware,
+                                       RequestResponseEndpoint)
 from starlette.requests import Request
 from starlette.responses import Response
 
@@ -13,7 +14,9 @@ from app.observability.logging import request_id_var, tenant_id_var
 class RequestContextMiddleware(BaseHTTPMiddleware):
     """为每个请求注入 request_id 和 tenant_id 到 contextvars"""
 
-    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         # request_id: 优先取 header，否则生成
         req_id = request.headers.get("X-Request-ID", "")
         if not req_id:

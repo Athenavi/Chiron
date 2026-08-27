@@ -1,4 +1,5 @@
 """MCP Registry — registers MCP tools into the local Python tool registry."""
+
 from __future__ import annotations
 
 import logging

@@ -4,6 +4,7 @@
 - embedding 以 JSONB 文本存取（asyncpg 默认 codec 下 JSONB 进出为 str，写 json.dumps / 读 json.loads）
 - 所有方法显式携带 tenant_id/user_id，行级租户隔离
 """
+
 from __future__ import annotations
 
 import json
@@ -78,7 +79,9 @@ class ProfileStore:
         rows = await self._pool.fetch(sql, *params)
         return [_row_to_entry(r) for r in rows]
 
-    async def get_by_id(self, tenant_id: str, user_id: str, entry_id: str) -> Optional[MemoryEntry]:
+    async def get_by_id(
+        self, tenant_id: str, user_id: str, entry_id: str
+    ) -> Optional[MemoryEntry]:
         sql = f"SELECT {_COLUMNS} FROM user_memory_entries WHERE tenant_id=$1 AND user_id=$2 AND id=$3"
         row = await self._pool.fetchrow(sql, tenant_id, user_id, entry_id)
         return _row_to_entry(row) if row else None
@@ -98,7 +101,8 @@ class ProfileStore:
             await self._pool.fetchval(
                 "SELECT COUNT(*) FROM user_memory_entries "
                 "WHERE tenant_id=$1 AND user_id=$2 AND status='active'",
-                tenant_id, user_id,
+                tenant_id,
+                user_id,
             )
         )
 
@@ -117,9 +121,17 @@ class ProfileStore:
         )
         emb = json.dumps(entry.embedding) if entry.embedding else None
         row = await self._pool.fetchrow(
-            sql, entry.id, entry.tenant_id, entry.user_id, entry.slot,
-            entry.item_key, entry.item_value, entry.confidence, entry.source,
-            emb, entry.status,
+            sql,
+            entry.id,
+            entry.tenant_id,
+            entry.user_id,
+            entry.slot,
+            entry.item_key,
+            entry.item_value,
+            entry.confidence,
+            entry.source,
+            emb,
+            entry.status,
         )
         return _row_to_entry(row)
 
@@ -160,8 +172,9 @@ class ProfileStore:
             _bind("embedding=?", emb)
 
         sql = (
-            "UPDATE user_memory_entries SET " + ", ".join(sets) +
-            " WHERE tenant_id=$1 AND user_id=$2 AND id=$3 "
+            "UPDATE user_memory_entries SET "
+            + ", ".join(sets)
+            + " WHERE tenant_id=$1 AND user_id=$2 AND id=$3 "
             f"RETURNING {_COLUMNS}"
         )
         row = await self._pool.fetchrow(sql, *params)
@@ -170,14 +183,17 @@ class ProfileStore:
     async def set_embedding(self, entry_id: str, embedding: list[float]) -> bool:
         row = await self._pool.fetchrow(
             "UPDATE user_memory_entries SET embedding=$2, updated_at=NOW() WHERE id=$1 RETURNING id",
-            entry_id, json.dumps(embedding),
+            entry_id,
+            json.dumps(embedding),
         )
         return row is not None
 
     async def delete(self, tenant_id: str, user_id: str, entry_id: str) -> bool:
         row = await self._pool.fetchrow(
             "DELETE FROM user_memory_entries WHERE tenant_id=$1 AND user_id=$2 AND id=$3 RETURNING id",
-            tenant_id, user_id, entry_id,
+            tenant_id,
+            user_id,
+            entry_id,
         )
         return row is not None
 
@@ -189,20 +205,26 @@ class ProfileStore:
             val = await self._pool.fetchval(
                 "DELETE FROM user_memory_entries "
                 "WHERE tenant_id=$1 AND user_id=$2 AND item_key=$3 AND slot=$4 RETURNING id",
-                tenant_id, user_id, item_key, slot,
+                tenant_id,
+                user_id,
+                item_key,
+                slot,
             )
             return 1 if val else 0
         rows = await self._pool.fetch(
             "DELETE FROM user_memory_entries "
             "WHERE tenant_id=$1 AND user_id=$2 AND item_key=$3 RETURNING id",
-            tenant_id, user_id, item_key,
+            tenant_id,
+            user_id,
+            item_key,
         )
         return len(rows)
 
     async def delete_all(self, tenant_id: str, user_id: str) -> int:
         rows = await self._pool.fetch(
             "DELETE FROM user_memory_entries WHERE tenant_id=$1 AND user_id=$2 RETURNING id",
-            tenant_id, user_id,
+            tenant_id,
+            user_id,
         )
         return len(rows)
 

@@ -6,13 +6,8 @@ from typing import AsyncIterator
 
 import anthropic
 
-from app.gateway.provider import (
-    ChatMessage,
-    ChatResponse,
-    EmbeddingResponse,
-    LLMProvider,
-    ToolCall,
-)
+from app.gateway.provider import (ChatMessage, ChatResponse, EmbeddingResponse,
+                                  LLMProvider, ToolCall)
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +72,11 @@ class AnthropicProvider(LLMProvider):
                             ToolCall(
                                 id=block.id,
                                 name=block.name,
-                                arguments=block.input if isinstance(block.input, str) else __import__("json").dumps(block.input),
+                                arguments=(
+                                    block.input
+                                    if isinstance(block.input, str)
+                                    else __import__("json").dumps(block.input)
+                                ),
                             )
                         )
             finish = "tool_calls" if tool_calls else "stop"
@@ -126,7 +125,11 @@ class AnthropicProvider(LLMProvider):
                     ToolCall(
                         id=block.id,
                         name=block.name,
-                        arguments=block.input if isinstance(block.input, str) else _json.dumps(block.input),
+                        arguments=(
+                            block.input
+                            if isinstance(block.input, str)
+                            else _json.dumps(block.input)
+                        ),
                     )
                 )
 
@@ -160,22 +163,33 @@ class AnthropicProvider(LLMProvider):
             if msg.role == "system":
                 system = msg.content
             elif msg.role == "tool":
-                result.append({
-                    "role": "user",
-                    "content": [{"type": "tool_result", "tool_use_id": msg.tool_call_id, "content": msg.content}],
-                })
+                result.append(
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": msg.tool_call_id,
+                                "content": msg.content,
+                            }
+                        ],
+                    }
+                )
             elif msg.role == "assistant" and msg.tool_calls:
                 content = []
                 if msg.content:
                     content.append({"type": "text", "text": msg.content})
                 for tc in msg.tool_calls:
                     import json as _json
-                    content.append({
-                        "type": "tool_use",
-                        "id": tc.id,
-                        "name": tc.name,
-                        "input": _json.loads(tc.arguments) if tc.arguments else {},
-                    })
+
+                    content.append(
+                        {
+                            "type": "tool_use",
+                            "id": tc.id,
+                            "name": tc.name,
+                            "input": _json.loads(tc.arguments) if tc.arguments else {},
+                        }
+                    )
                 result.append({"role": "assistant", "content": content})
             else:
                 result.append({"role": msg.role, "content": msg.content})
@@ -185,12 +199,17 @@ class AnthropicProvider(LLMProvider):
     def _convert_tools(tools: list[dict]) -> list[dict]:
         """OpenAI tools 格式 → Anthropic tools 格式"""
         import json as _json
+
         converted = []
         for t in tools:
             func = t.get("function", t)
-            converted.append({
-                "name": func.get("name", ""),
-                "description": func.get("description", ""),
-                "input_schema": func.get("parameters", _json.loads(func.get("parameters_json", "{}"))),
-            })
+            converted.append(
+                {
+                    "name": func.get("name", ""),
+                    "description": func.get("description", ""),
+                    "input_schema": func.get(
+                        "parameters", _json.loads(func.get("parameters_json", "{}"))
+                    ),
+                }
+            )
         return converted

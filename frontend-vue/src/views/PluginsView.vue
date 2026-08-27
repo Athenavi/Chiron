@@ -233,121 +233,237 @@ async function testPlugin(p: Plugin) {
   <div class="plugins-page">
     <div class="page-head">
       <div class="page-head-text">
-        <h1 class="page-title">插件</h1>
-        <p class="page-sub">管理 MCP 服务器配置，扩展 Agent 工具能力</p>
+        <h1 class="page-title">
+          插件
+        </h1>
+        <p class="page-sub">
+          管理 MCP 服务器配置，扩展 Agent 工具能力
+        </p>
       </div>
-      <Button type="primary" @click="openCreate">
-        <template #icon><PlusOutlined /></template>
+      <Button
+        type="primary"
+        @click="openCreate"
+      >
+        <template #icon>
+          <PlusOutlined />
+        </template>
         新建插件
       </Button>
     </div>
 
-    <Tabs v-model:activeKey="activeTab" class="plugins-tabs">
+    <Tabs
+      v-model:active-key="activeTab"
+      class="plugins-tabs"
+    >
       <!-- ── 插件列表 ── -->
-      <TabPane key="plugins" tab="插件">
-    <div class="list-toolbar">
-      <Input v-model:value="searchQuery" placeholder="搜索插件（名称 / 描述）" allow-clear class="search-input">
-        <template #prefix><SearchOutlined /></template>
-      </Input>
-    </div>
-
-    <PageSkeleton v-if="loading" variant="cards" :columns="3" :rows="6" :header="false" />
-    <EmptyState
-      v-else-if="error"
-      size="page"
-      :icon="markRaw(ThunderboltOutlined)"
-      description="加载失败"
-      hint="无法获取插件列表，请稍后重试"
-    >
-      <Button type="primary" @click="loadPlugins">重试</Button>
-    </EmptyState>
-    <EmptyState
-      v-else-if="filtered.length === 0"
-      size="page"
-      :icon="markRaw(ThunderboltOutlined)"
-      :description="searchQuery ? '暂无匹配的插件' : '暂无插件'"
-      :hint="searchQuery ? '尝试调整搜索关键词' : '点击右上角「新建插件」，配置命令行工具集成'"
-    >
-      <Button v-if="!searchQuery" type="primary" @click="openCreate">
-        <template #icon><PlusOutlined /></template>
-        新建插件
-      </Button>
-    </EmptyState>
-
-    <div v-else class="plugin-grid">
-        <div v-for="p in filtered" :key="p.name" class="plugin-card" :class="{ inactive: p.status !== 'active' }">
-          <div class="card-top">
-            <span class="card-icon"><ThunderboltOutlined /></span>
-            <div class="card-titles">
-              <span class="plugin-name">{{ p.name }}</span>
-              <span class="plugin-desc">{{ p.description || '暂无描述' }}</span>
-            </div>
-            <Switch
-              :checked="p.status === 'active'"
-              size="small"
-              :checked-children="'开'"
-              :un-checked-children="'关'"
-              @change="(v: any) => toggleStatus(p, Boolean(v))"
-            />
-          </div>
-          <div class="card-meta">
-            <Tag :color="p.status === 'active' ? 'green' : 'default'">{{ p.status === 'active' ? '启用' : '已停用' }}</Tag>
-            <Tag>v{{ p.version || '1.0.0' }}</Tag>
-            <span class="card-command">{{ p.command }}</span>
-          </div>
-          <div class="card-actions">
-            <Button size="small" :loading="testingName === p.name" @click="testPlugin(p)">
-              <template #icon><ExperimentOutlined /></template>
-              测试连接
-            </Button>
-            <Button size="small" type="text" @click="toggleExpanded(p.name)">
-              {{ expanded.has(p.name) ? '收起配置' : '查看配置' }}
-              <UpOutlined v-if="expanded.has(p.name)" class="mini-icon" />
-              <DownOutlined v-else class="mini-icon" />
-            </Button>
-            <div class="action-right">
-              <Button type="text" size="small" title="编辑" @click="openEdit(p)">
-                <template #icon><EditOutlined /></template>
-              </Button>
-              <Popconfirm title="确认卸载？" @confirm="requestUninstall(p)">
-                <Button type="text" danger size="small" title="卸载">
-                  <template #icon><DeleteOutlined /></template>
-                </Button>
-              </Popconfirm>
-            </div>
-          </div>
-
-          <!-- 测试结果 -->
-          <div v-if="testResults[p.name]" class="test-result" :class="{ ok: testResults[p.name].ok }">
-            {{ testResults[p.name].ok ? '✅' : '❌' }} {{ testResults[p.name].message }}
-          </div>
-
-          <!-- 配置详情 -->
-          <div v-if="expanded.has(p.name)" class="plugin-detail">
-            <div class="detail-row">
-              <span class="detail-label">Command</span>
-              <code class="detail-code">{{ p.command }}</code>
-            </div>
-            <div v-if="p.args?.length" class="detail-row">
-              <span class="detail-label">Args</span>
-              <div class="detail-code-block">
-                <div v-for="a in p.args" :key="a" class="detail-line">{{ a }}</div>
-              </div>
-            </div>
-            <div v-if="p.env && Object.keys(p.env).length" class="detail-row">
-              <span class="detail-label">Env</span>
-              <div class="detail-code-block">
-                <div v-for="(v, k) in p.env" :key="k" class="detail-line">{{ k }}={{ v }}</div>
-              </div>
-            </div>
+      <TabPane
+        key="plugins"
+        tab="插件"
+      >
+        <div class="list-toolbar">
+          <Input
+            v-model:value="searchQuery"
+            placeholder="搜索插件（名称 / 描述）"
+            allow-clear
+            class="search-input"
+          >
+            <template #prefix>
+              <SearchOutlined />
+            </template>
+          </Input>
         </div>
-      </div>
-    </div>
+
+        <PageSkeleton
+          v-if="loading"
+          variant="cards"
+          :columns="3"
+          :rows="6"
+          :header="false"
+        />
+        <EmptyState
+          v-else-if="error"
+          size="page"
+          :icon="markRaw(ThunderboltOutlined)"
+          description="加载失败"
+          hint="无法获取插件列表，请稍后重试"
+        >
+          <Button
+            type="primary"
+            @click="loadPlugins"
+          >
+            重试
+          </Button>
+        </EmptyState>
+        <EmptyState
+          v-else-if="filtered.length === 0"
+          size="page"
+          :icon="markRaw(ThunderboltOutlined)"
+          :description="searchQuery ? '暂无匹配的插件' : '暂无插件'"
+          :hint="searchQuery ? '尝试调整搜索关键词' : '点击右上角「新建插件」，配置命令行工具集成'"
+        >
+          <Button
+            v-if="!searchQuery"
+            type="primary"
+            @click="openCreate"
+          >
+            <template #icon>
+              <PlusOutlined />
+            </template>
+            新建插件
+          </Button>
+        </EmptyState>
+
+        <div
+          v-else
+          class="plugin-grid"
+        >
+          <div
+            v-for="p in filtered"
+            :key="p.name"
+            class="plugin-card"
+            :class="{ inactive: p.status !== 'active' }"
+          >
+            <div class="card-top">
+              <span class="card-icon"><ThunderboltOutlined /></span>
+              <div class="card-titles">
+                <span class="plugin-name">{{ p.name }}</span>
+                <span class="plugin-desc">{{ p.description || '暂无描述' }}</span>
+              </div>
+              <Switch
+                :checked="p.status === 'active'"
+                size="small"
+                :checked-children="'开'"
+                :un-checked-children="'关'"
+                @change="(v: any) => toggleStatus(p, Boolean(v))"
+              />
+            </div>
+            <div class="card-meta">
+              <Tag :color="p.status === 'active' ? 'green' : 'default'">
+                {{ p.status === 'active' ? '启用' : '已停用' }}
+              </Tag>
+              <Tag>v{{ p.version || '1.0.0' }}</Tag>
+              <span class="card-command">{{ p.command }}</span>
+            </div>
+            <div class="card-actions">
+              <Button
+                size="small"
+                :loading="testingName === p.name"
+                @click="testPlugin(p)"
+              >
+                <template #icon>
+                  <ExperimentOutlined />
+                </template>
+                测试连接
+              </Button>
+              <Button
+                size="small"
+                type="text"
+                @click="toggleExpanded(p.name)"
+              >
+                {{ expanded.has(p.name) ? '收起配置' : '查看配置' }}
+                <UpOutlined
+                  v-if="expanded.has(p.name)"
+                  class="mini-icon"
+                />
+                <DownOutlined
+                  v-else
+                  class="mini-icon"
+                />
+              </Button>
+              <div class="action-right">
+                <Button
+                  type="text"
+                  size="small"
+                  title="编辑"
+                  @click="openEdit(p)"
+                >
+                  <template #icon>
+                    <EditOutlined />
+                  </template>
+                </Button>
+                <Popconfirm
+                  title="确认卸载？"
+                  @confirm="requestUninstall(p)"
+                >
+                  <Button
+                    type="text"
+                    danger
+                    size="small"
+                    title="卸载"
+                  >
+                    <template #icon>
+                      <DeleteOutlined />
+                    </template>
+                  </Button>
+                </Popconfirm>
+              </div>
+            </div>
+
+            <!-- 测试结果 -->
+            <div
+              v-if="testResults[p.name]"
+              class="test-result"
+              :class="{ ok: testResults[p.name].ok }"
+            >
+              {{ testResults[p.name].ok ? '✅' : '❌' }} {{ testResults[p.name].message }}
+            </div>
+
+            <!-- 配置详情 -->
+            <div
+              v-if="expanded.has(p.name)"
+              class="plugin-detail"
+            >
+              <div class="detail-row">
+                <span class="detail-label">Command</span>
+                <code class="detail-code">{{ p.command }}</code>
+              </div>
+              <div
+                v-if="p.args?.length"
+                class="detail-row"
+              >
+                <span class="detail-label">Args</span>
+                <div class="detail-code-block">
+                  <div
+                    v-for="a in p.args"
+                    :key="a"
+                    class="detail-line"
+                  >
+                    {{ a }}
+                  </div>
+                </div>
+              </div>
+              <div
+                v-if="p.env && Object.keys(p.env).length"
+                class="detail-row"
+              >
+                <span class="detail-label">Env</span>
+                <div class="detail-code-block">
+                  <div
+                    v-for="(v, k) in p.env"
+                    :key="k"
+                    class="detail-line"
+                  >
+                    {{ k }}={{ v }}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </TabPane>
 
       <!-- ── MCP 市场 ── -->
-      <TabPane key="market" tab="MCP 市场">
-        <PageSkeleton v-if="marketLoading" variant="cards" :columns="3" :rows="6" :header="false" />
+      <TabPane
+        key="market"
+        tab="MCP 市场"
+      >
+        <PageSkeleton
+          v-if="marketLoading"
+          variant="cards"
+          :columns="3"
+          :rows="6"
+          :header="false"
+        />
         <EmptyState
           v-else-if="marketError"
           size="page"
@@ -355,7 +471,12 @@ async function testPlugin(p: Plugin) {
           description="市场加载失败"
           hint="无法获取市场内容，请稍后重试"
         >
-          <Button type="primary" @click="loadMarket">重试</Button>
+          <Button
+            type="primary"
+            @click="loadMarket"
+          >
+            重试
+          </Button>
         </EmptyState>
         <SkillMarketCard
           v-else
@@ -381,27 +502,51 @@ async function testPlugin(p: Plugin) {
       <div class="editor-form">
         <div class="form-row">
           <label class="form-label">名称 *</label>
-          <Input v-model:value="form.name" placeholder="如：github-mcp" :disabled="!!editingName" :maxlength="60" />
+          <Input
+            v-model:value="form.name"
+            placeholder="如：github-mcp"
+            :disabled="!!editingName"
+            :maxlength="60"
+          />
         </div>
         <div class="form-row">
           <label class="form-label">Command *</label>
-          <Input v-model:value="form.command" placeholder="MCP server 启动命令，如：npx、python、/path/to/server" />
+          <Input
+            v-model:value="form.command"
+            placeholder="MCP server 启动命令，如：npx、python、/path/to/server"
+          />
         </div>
         <div class="form-row">
           <label class="form-label">Args（每行一个）</label>
-          <Input.TextArea v-model:value="form.argsText" :rows="3" placeholder="-y&#10;@modelcontextprotocol/server-github" class="mono-input" />
+          <Input.TextArea
+            v-model:value="form.argsText"
+            :rows="3"
+            placeholder="-y&#10;@modelcontextprotocol/server-github"
+            class="mono-input"
+          />
         </div>
         <div class="form-row">
           <label class="form-label">Env（每行 KEY=VALUE）</label>
-          <Input.TextArea v-model:value="form.envText" :rows="3" placeholder="GITHUB_TOKEN=ghp_xxx" class="mono-input" />
+          <Input.TextArea
+            v-model:value="form.envText"
+            :rows="3"
+            placeholder="GITHUB_TOKEN=ghp_xxx"
+            class="mono-input"
+          />
         </div>
         <div class="form-row">
           <label class="form-label">描述</label>
-          <Input v-model:value="form.description" :maxlength="200" />
+          <Input
+            v-model:value="form.description"
+            :maxlength="200"
+          />
         </div>
         <div class="form-row">
           <label class="form-label">版本</label>
-          <Input v-model:value="form.version" placeholder="1.0.0" />
+          <Input
+            v-model:value="form.version"
+            placeholder="1.0.0"
+          />
         </div>
       </div>
     </Modal>

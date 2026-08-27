@@ -9,11 +9,12 @@
 不依赖 LangGraph 的图执行（其 StateGraph(dict) 为整 state 替换语义，
 并行分支会产生 update 冲突）。
 """
+
 from __future__ import annotations
 
+import logging
 import time
 import uuid
-import logging
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
@@ -46,7 +47,7 @@ class WorkflowInstance:
     error: str = ""  # P1-1: 错误信息
     started_at: float = field(default_factory=time.time)
     finished_at: float | None = None
-    
+
     def _should_timeout(self) -> bool:
         """P1-1: 检查是否超时 (>24 小时)"""
         elapsed = time.time() - self.started_at
@@ -144,7 +145,9 @@ def _build_node_fns(graph_json: dict, gateway: GatewayRouter) -> dict[str, NodeF
         messages.append({"role": "user", "content": prompt})
         text = ""
         try:
-            async for chunk in gateway.chat_stream(messages=messages, model=model or "gpt-4o-mini"):
+            async for chunk in gateway.chat_stream(
+                messages=messages, model=model or "gpt-4o-mini"
+            ):
                 if chunk.content:
                     text += chunk.content
         except Exception as e:
@@ -202,10 +205,16 @@ def _build_node_fns(graph_json: dict, gateway: GatewayRouter) -> dict[str, NodeF
         config = node.get("config", {})
         skill_name = config.get("skill_name", "")
         if not skill_name:
-            return {f"__out_{node_id}__": "error: skill_name is required in node config"}
+            return {
+                f"__out_{node_id}__": "error: skill_name is required in node config"
+            }
         params = config.get("params", {}) or {}
         # 支持将前驱输出作为 skill 的 input 参数
-        if "input" in config and isinstance(config["input"], str) and config["input"].startswith("$"):
+        if (
+            "input" in config
+            and isinstance(config["input"], str)
+            and config["input"].startswith("$")
+        ):
             key = config["input"][1:]
             params = {**params, key: _prev_output(state, node_id)}
         result = await skill_run(skill_name, params)
@@ -235,6 +244,7 @@ def _build_node_fns(graph_json: dict, gateway: GatewayRouter) -> dict[str, NodeF
             return {f"__out_{node_id}__": "error: task is required"}
         from app.agent.multi_agent import SubAgent
         from app.tools.context import get_tenant_id
+
         try:
             agent = SubAgent(
                 name=config.get("name", "workflow_agent"),
@@ -245,7 +255,9 @@ def _build_node_fns(graph_json: dict, gateway: GatewayRouter) -> dict[str, NodeF
                 model=config.get("model", "gpt-4o-mini"),
                 max_turns=int(config.get("max_turns", 6) or 6),
             )
-            result = await agent.run(task=str(task), tenant_id=get_tenant_id() or "default")
+            result = await agent.run(
+                task=str(task), tenant_id=get_tenant_id() or "default"
+            )
         except Exception as e:  # noqa: BLE001
             return {f"__out_{node_id}__": f"agent error: {e}"}
         if not result.success:
@@ -288,6 +300,7 @@ async def run_workflow(
     )
     # 兜底设置工具会话上下文（幂等：不覆盖调用方已设置的 user/tenant）
     from app.tools.context import set_tool_context
+
     set_tool_context(session_id=instance.instance_id)
 
     _instances[instance.instance_id] = instance
@@ -302,7 +315,9 @@ async def run_workflow(
         state = dict(instance.state)
         # 按 DAG 拓扑顺序执行节点：依赖先于依赖者，每节点恰好执行一次，
         # 增量结果合并进 state（各节点输出保留在 __out_<id>__ 下）
-        for node in _topological_sort(graph_json.get("nodes", []), graph_json.get("edges", [])):
+        for node in _topological_sort(
+            graph_json.get("nodes", []), graph_json.get("edges", [])
+        ):
             node_id = node["id"]
             update = await node_fns[node_id](state, node_id)
             state.update(update)
@@ -319,12 +334,12 @@ async def run_workflow(
         instance.error = str(e)
     finally:
         instance.finished_at = time.time()
-        
+
         # P1-1: 检查超时并持久化（如果 DB 可用）
         if instance._should_timeout():
             logger.info(
-                "Workflow instance timed out (%.1fh), cleaning up", 
-                (time.time() - instance.started_at) / 3600
+                "Workflow instance timed out (%.1fh), cleaning up",
+                (time.time() - instance.started_at) / 3600,
             )
             _persist_workflow_instance(instance)  # type: ignore
 

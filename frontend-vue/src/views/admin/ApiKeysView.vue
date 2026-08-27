@@ -111,35 +111,67 @@ onMounted(() => {
     <Spin :spinning="loading">
       <Card title="API Key 管理">
         <template #extra>
-          <Button type="primary" size="large" @click="showAddModal = true">
-            <template #icon><PlusOutlined /></template>
+          <Button
+            type="primary"
+            size="large"
+            @click="showAddModal = true"
+          >
+            <template #icon>
+              <PlusOutlined />
+            </template>
             添加 Key
           </Button>
         </template>
 
         <!-- 统计卡片 -->
-        <Row :gutter="16" style="margin-bottom: 16px">
+        <Row
+          :gutter="16"
+          style="margin-bottom: 16px"
+        >
           <Col :span="6">
-            <Statistic title="总 Key 数" :value="stats.total" />
+            <Statistic
+              title="总 Key 数"
+              :value="stats.total"
+            />
           </Col>
           <Col :span="6">
-            <Statistic title="正常" :value="stats.active">
-              <template #prefix><CheckCircleOutlined class="status-ok" /></template>
+            <Statistic
+              title="正常"
+              :value="stats.active"
+            >
+              <template #prefix>
+                <CheckCircleOutlined class="status-ok" />
+              </template>
             </Statistic>
           </Col>
           <Col :span="6">
-            <Statistic title="限流中" :value="stats.rateLimited">
-              <template #prefix><WarningOutlined class="status-warn" /></template>
+            <Statistic
+              title="限流中"
+              :value="stats.rateLimited"
+            >
+              <template #prefix>
+                <WarningOutlined class="status-warn" />
+              </template>
             </Statistic>
           </Col>
           <Col :span="6">
-            <Statistic title="熔断" :value="stats.circuitOpen">
-              <template #prefix><CloseCircleOutlined class="status-error" /></template>
+            <Statistic
+              title="熔断"
+              :value="stats.circuitOpen"
+            >
+              <template #prefix>
+                <CloseCircleOutlined class="status-error" />
+              </template>
             </Statistic>
           </Col>
         </Row>
 
-        <Table :columns="columns" :dataSource="apiKeys" :pagination="false" :scroll="{ x: 1060 }">
+        <Table
+          :columns="columns"
+          :data-source="apiKeys"
+          :pagination="false"
+          :scroll="{ x: 1060 }"
+        >
           <template #bodyCell="{ column, record }">
             <template v-if="column.dataIndex === 'status'">
               <Tag :color="record.status === 'active' ? 'success' : record.status === 'rate_limited' ? 'warning' : 'error'">
@@ -147,8 +179,21 @@ onMounted(() => {
               </Tag>
             </template>
             <template v-else-if="column.dataIndex === 'actions'">
-              <Button type="link" size="small" @click="handleEdit(record)">编辑</Button>
-              <Button type="link" danger size="small" @click="handleDelete(record)">删除</Button>
+              <Button
+                type="link"
+                size="small"
+                @click="handleEdit(record)"
+              >
+                编辑
+              </Button>
+              <Button
+                type="link"
+                danger
+                size="small"
+                @click="handleDelete(record)"
+              >
+                删除
+              </Button>
             </template>
           </template>
         </Table>
@@ -156,21 +201,47 @@ onMounted(() => {
     </Spin>
 
     <!-- 添加 Key 弹窗 -->
-    <Modal v-model:visible="showAddModal" title="添加 API Key" :footer="null" destroyOnClose>
-      <Form :model="formData" layout="vertical">
+    <Modal
+      v-model:visible="showAddModal"
+      title="添加 API Key"
+      :footer="null"
+      destroy-on-close
+    >
+      <Form
+        :model="formData"
+        layout="vertical"
+      >
         <FormItem label="Provider">
-          <Select v-model:value="formData.provider" :options="providerOptions" style="width: 100%" />
+          <Select
+            v-model:value="formData.provider"
+            :options="providerOptions"
+            style="width: 100%"
+          />
         </FormItem>
         <FormItem label="API Key">
-          <Input v-model:value="formData.key" placeholder="sk-..." />
+          <Input
+            v-model:value="formData.key"
+            placeholder="sk-..."
+          />
         </FormItem>
         <FormItem label="备注">
-          <Input v-model:value="formData.remark" placeholder="可选" />
+          <Input
+            v-model:value="formData.remark"
+            placeholder="可选"
+          />
         </FormItem>
       </Form>
       <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px">
-        <Button @click="showAddModal = false">取消</Button>
-        <Button type="primary" :loading="addLoading" @click="handleAdd">添加</Button>
+        <Button @click="showAddModal = false">
+          取消
+        </Button>
+        <Button
+          type="primary"
+          :loading="addLoading"
+          @click="handleAdd"
+        >
+          添加
+        </Button>
       </div>
     </Modal>
   </div>

@@ -18,17 +18,42 @@ const summary = computed(() => {
 </script>
 
 <template>
-  <div class="reasoning-row" :data-state="streaming ? 'running' : 'ok'">
-    <button class="reasoning-main" type="button" @click="expanded = !expanded">
-      <CaretRightOutlined class="chevron" :class="{ open: expanded }" />
-      <span class="think-icon" aria-hidden>💭</span>
+  <div
+    class="reasoning-row"
+    :data-state="streaming ? 'running' : 'ok'"
+  >
+    <button
+      class="reasoning-main"
+      type="button"
+      @click="expanded = !expanded"
+    >
+      <CaretRightOutlined
+        class="chevron"
+        :class="{ open: expanded }"
+      />
+      <span
+        class="think-icon"
+        aria-hidden
+      >💭</span>
       <span class="think-label">Think</span>
-      <span class="sep" aria-hidden />
-      <span class="state-dot" :class="streaming ? 'running' : 'done'" aria-hidden />
+      <span
+        class="sep"
+        aria-hidden
+      />
+      <span
+        class="state-dot"
+        :class="streaming ? 'running' : 'done'"
+        aria-hidden
+      />
       <span class="think-summary">{{ summary }}</span>
     </button>
     <Transition name="expand">
-      <div v-if="expanded" class="think-body">{{ content }}</div>
+      <div
+        v-if="expanded"
+        class="think-body"
+      >
+        {{ content }}
+      </div>
     </Transition>
   </div>
 </template>

@@ -184,7 +184,13 @@ defineExpose({ reset })
 <template>
   <div class="captcha-widget">
     <template v-if="provider === 'tencent'">
-      <button type="button" class="tencent-trigger" title="点击进行人机验证" :disabled="loading" @click="showTencent">
+      <button
+        type="button"
+        class="tencent-trigger"
+        title="点击进行人机验证"
+        :disabled="loading"
+        @click="showTencent"
+      >
         {{ loading ? '加载中…' : '点击进行人机验证' }}
       </button>
     </template>
@@ -195,10 +201,23 @@ defineExpose({ reset })
       </div>
     </template>
     <template v-else>
-      <div ref="container" class="captcha-container"></div>
+      <div
+        ref="container"
+        class="captcha-container"
+      />
     </template>
-    <div v-if="loading && provider !== 'tencent'" class="captcha-loading">验证组件加载中…</div>
-    <div v-if="loadError" class="captcha-error">{{ loadError }}</div>
+    <div
+      v-if="loading && provider !== 'tencent'"
+      class="captcha-loading"
+    >
+      验证组件加载中…
+    </div>
+    <div
+      v-if="loadError"
+      class="captcha-error"
+    >
+      {{ loadError }}
+    </div>
   </div>
 </template>
 

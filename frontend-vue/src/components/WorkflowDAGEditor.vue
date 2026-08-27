@@ -3,46 +3,158 @@
   <div class="workflow-dag-editor">
     <!-- 工具栏 -->
     <div class="toolbar">
-      <button @click="addNode" class="toolbar-btn">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-          <path d="M8 1v14M1 8h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <button
+        class="toolbar-btn"
+        @click="addNode"
+      >
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="currentColor"
+        >
+          <path
+            d="M8 1v14M1 8h14"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+          />
         </svg>
         添加节点
       </button>
-      <button @click="autoLayout" class="toolbar-btn">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-          <rect x="2" y="2" width="5" height="5" fill="none" stroke="currentColor" stroke-width="1.5"/>
-          <rect x="9" y="2" width="5" height="5" fill="none" stroke="currentColor" stroke-width="1.5"/>
-          <rect x="2" y="9" width="5" height="5" fill="none" stroke="currentColor" stroke-width="1.5"/>
-          <rect x="9" y="9" width="5" height="5" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <button
+        class="toolbar-btn"
+        @click="autoLayout"
+      >
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="currentColor"
+        >
+          <rect
+            x="2"
+            y="2"
+            width="5"
+            height="5"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          />
+          <rect
+            x="9"
+            y="2"
+            width="5"
+            height="5"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          />
+          <rect
+            x="2"
+            y="9"
+            width="5"
+            height="5"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          />
+          <rect
+            x="9"
+            y="9"
+            width="5"
+            height="5"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          />
         </svg>
         自动布局
       </button>
-      <button @click="exportJSON" class="toolbar-btn">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-          <path d="M3 3h10v10H3V3z" fill="none" stroke="currentColor" stroke-width="1.5"/>
-          <path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      <button
+        class="toolbar-btn"
+        @click="exportJSON"
+      >
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="currentColor"
+        >
+          <path
+            d="M3 3h10v10H3V3z"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          />
+          <path
+            d="M8 2v12M2 8h12"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+          />
         </svg>
         导出 JSON
       </button>
-      <button @click="importJSON" class="toolbar-btn">导入 JSON</button>
-      <button @click="validateWorkflow" class="toolbar-btn btn-validate">验证</button>
-      <button @click="saveWorkflow" class="toolbar-btn btn-save">保存</button>
+      <button
+        class="toolbar-btn"
+        @click="importJSON"
+      >
+        导入 JSON
+      </button>
+      <button
+        class="toolbar-btn btn-validate"
+        @click="validateWorkflow"
+      >
+        验证
+      </button>
+      <button
+        class="toolbar-btn btn-save"
+        @click="saveWorkflow"
+      >
+        保存
+      </button>
     </div>
     
     <!-- SVG 画布 -->
     <div class="canvas-container">
-      <svg ref="svgCanvas" class="dag-canvas" @click="handleCanvasClick">
+      <svg
+        ref="svgCanvas"
+        class="dag-canvas"
+        @click="handleCanvasClick"
+      >
         <defs>
           <!-- 箭头标记 -->
-          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-            <polygon points="0 0, 10 3.5, 0 7" fill="#6b7280"/>
+          <marker
+            id="arrowhead"
+            markerWidth="10"
+            markerHeight="7"
+            refX="9"
+            refY="3.5"
+            orient="auto"
+          >
+            <polygon
+              points="0 0, 10 3.5, 0 7"
+              fill="#6b7280"
+            />
           </marker>
           
           <!-- 渐变定义 -->
-          <linearGradient id="nodeGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" style="stop-color:var(--bg-card);stop-opacity:1" />
-            <stop offset="100%" style="stop-color:var(--bg-secondary);stop-opacity:1" />
+          <linearGradient
+            id="nodeGradient"
+            x1="0%"
+            y1="0%"
+            x2="0%"
+            y2="100%"
+          >
+            <stop
+              offset="0%"
+              style="stop-color:var(--bg-card);stop-opacity:1"
+            />
+            <stop
+              offset="100%"
+              style="stop-color:var(--bg-secondary);stop-opacity:1"
+            />
           </linearGradient>
         </defs>
         
@@ -138,8 +250,13 @@
               height="20"
             >
               <div class="skill-badge">
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
-                  <path d="M5 1l3 3h-2v5H4V4H2L5 1z"/>
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 10 10"
+                  fill="currentColor"
+                >
+                  <path d="M5 1l3 3h-2v5H4V4H2L5 1z" />
                 </svg>
                 {{ node.boundSkill.name }}
               </div>
@@ -149,35 +266,72 @@
       </svg>
       
       <!-- 属性面板 -->
-      <div v-if="selectedNode" class="properties-panel">
+      <div
+        v-if="selectedNode"
+        class="properties-panel"
+      >
         <div class="panel-header">
           <span>节点属性</span>
-          <button @click="selectedNode = null" class="btn-close" title="关闭属性面板">×</button>
+          <button
+            class="btn-close"
+            title="关闭属性面板"
+            @click="selectedNode = null"
+          >
+            ×
+          </button>
         </div>
         <div class="panel-body">
           <div class="form-group">
             <label>标题</label>
-            <input v-model="selectedNode.title" type="text" class="form-input" />
+            <input
+              v-model="selectedNode.title"
+              type="text"
+              class="form-input"
+            >
           </div>
           <div class="form-group">
             <label>类型</label>
-            <select v-model="selectedNode.type" class="form-select">
-              <option value="llm_call">LLM 调用</option>
-              <option value="tool_execution">工具执行</option>
-              <option value="condition">条件判断</option>
-              <option value="loop">循环</option>
-              <option value="end">结束</option>
-              <option value="agent">Agent</option>
+            <select
+              v-model="selectedNode.type"
+              class="form-select"
+            >
+              <option value="llm_call">
+                LLM 调用
+              </option>
+              <option value="tool_execution">
+                工具执行
+              </option>
+              <option value="condition">
+                条件判断
+              </option>
+              <option value="loop">
+                循环
+              </option>
+              <option value="end">
+                结束
+              </option>
+              <option value="agent">
+                Agent
+              </option>
             </select>
           </div>
           <div class="form-group">
             <label>描述</label>
-            <textarea v-model="selectedNode.description" class="form-textarea" rows="3"></textarea>
+            <textarea
+              v-model="selectedNode.description"
+              class="form-textarea"
+              rows="3"
+            />
           </div>
           <div class="form-group">
             <label>绑定技能</label>
-            <select v-model="selectedNode.boundSkillId" class="form-select">
-              <option value="">无</option>
+            <select
+              v-model="selectedNode.boundSkillId"
+              class="form-select"
+            >
+              <option value="">
+                无
+              </option>
               <option
                 v-for="skill in availableSkills"
                 :key="skill.capabilityId"
@@ -188,7 +342,9 @@
             </select>
           </div>
           <template v-if="selectedNode.type === 'agent'">
-            <div class="section-label">Agent 配置</div>
+            <div class="section-label">
+              Agent 配置
+            </div>
             <div class="form-group">
               <label>Agent</label>
               <select
@@ -197,8 +353,16 @@
                 class="form-select"
                 @change="onAgentSelect"
               >
-                <option value="">请选择 Agent</option>
-                <option v-for="a in agentList" :key="a.id" :value="a.id">{{ a.name }}</option>
+                <option value="">
+                  请选择 Agent
+                </option>
+                <option
+                  v-for="a in agentList"
+                  :key="a.id"
+                  :value="a.id"
+                >
+                  {{ a.name }}
+                </option>
               </select>
               <input
                 v-else
@@ -206,33 +370,74 @@
                 type="text"
                 class="form-input"
                 placeholder="手动输入 Agent 名称"
-              />
-              <div v-if="agentManualMode && !agentLoading" class="agent-hint">Agent 列表不可用，请手动填写名称</div>
+              >
+              <div
+                v-if="agentManualMode && !agentLoading"
+                class="agent-hint"
+              >
+                Agent 列表不可用，请手动填写名称
+              </div>
             </div>
             <div class="form-group">
               <label>名称（自动填入，可覆盖）</label>
-              <input v-model="editAgentName" type="text" class="form-input" placeholder="Agent 名称" />
+              <input
+                v-model="editAgentName"
+                type="text"
+                class="form-input"
+                placeholder="Agent 名称"
+              >
             </div>
             <div class="form-group">
               <label>System Prompt（自动填入，可覆盖）</label>
-              <textarea v-model="editAgentSystemPrompt" class="form-textarea" rows="3" placeholder="留空则使用 Agent 默认提示词"></textarea>
+              <textarea
+                v-model="editAgentSystemPrompt"
+                class="form-textarea"
+                rows="3"
+                placeholder="留空则使用 Agent 默认提示词"
+              />
             </div>
             <div class="form-group">
               <label>模型（自动填入，可覆盖）</label>
-              <input v-model="editAgentModel" type="text" class="form-input" placeholder="如 gpt-4o-mini / deepseek-chat" />
+              <input
+                v-model="editAgentModel"
+                type="text"
+                class="form-input"
+                placeholder="如 gpt-4o-mini / deepseek-chat"
+              >
             </div>
             <div class="form-group">
               <label>最大轮数（自动填入，可覆盖）</label>
-              <input v-model.number="editAgentMaxTurns" type="number" min="1" max="50" class="form-input" />
+              <input
+                v-model.number="editAgentMaxTurns"
+                type="number"
+                min="1"
+                max="50"
+                class="form-input"
+              >
             </div>
             <div class="form-group">
               <label>任务输入</label>
-              <textarea v-model="editAgentTask" class="form-textarea" rows="3" placeholder="子任务描述；支持 $节点ID 引用前置输出（如 $llm_1），留空则使用前置输出"></textarea>
+              <textarea
+                v-model="editAgentTask"
+                class="form-textarea"
+                rows="3"
+                placeholder="子任务描述；支持 $节点ID 引用前置输出（如 $llm_1），留空则使用前置输出"
+              />
             </div>
           </template>
           <div class="form-actions">
-            <button @click="deleteSelectedNode" class="btn-delete">删除节点</button>
-            <button @click="duplicateNode" class="btn-duplicate">复制</button>
+            <button
+              class="btn-delete"
+              @click="deleteSelectedNode"
+            >
+              删除节点
+            </button>
+            <button
+              class="btn-duplicate"
+              @click="duplicateNode"
+            >
+              复制
+            </button>
           </div>
         </div>
       </div>

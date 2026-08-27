@@ -4,6 +4,7 @@ read_file 记录文件版本签名（mtime+size+首块 hash）；write/edit 前�
 文件"被读过但已变化"则拒绝（FS_NOT_OBSERVED 语义），防止模型基于过期
 视图编辑。从未被 read 过的文件不受限制（兼容旧行为）。
 """
+
 from __future__ import annotations
 
 import hashlib

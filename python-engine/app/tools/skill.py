@@ -13,6 +13,7 @@
 - 函数签名保持兼容：调用方不传身份时行为与历史一致（共享目录）。
 - 身份段非法（路径穿越）时回退共享目录并告警，避免工具调用中断。
 """
+
 from __future__ import annotations
 
 import json
@@ -21,8 +22,8 @@ import os
 import re
 from typing import Any
 
+from app.skill.store import SkillDef, SkillStore
 from app.tools.registry import registry
-from app.skill.store import SkillStore, SkillDef
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +47,9 @@ def _get_store() -> SkillStore:
             return SkillStore(tenant_id=tid, user_id=uid)
         except ValueError as e:
             # 身份段非法（路径穿越防护失败）→ 回退共享目录，不中断工具调用
-            logger.warning("skill store: invalid identity from context, fallback to shared: %s", e)
+            logger.warning(
+                "skill store: invalid identity from context, fallback to shared: %s", e
+            )
     return _store
 
 
@@ -54,7 +57,9 @@ async def skill_list() -> dict[str, Any]:
     skills = _get_store().list()
     if not skills:
         return {"output": "No skills installed.", "count": 0, "skills": []}
-    lines = [f"  - {s.name}: {s.description} (v{s.version}, {s.exec_type})" for s in skills]
+    lines = [
+        f"  - {s.name}: {s.description} (v{s.version}, {s.exec_type})" for s in skills
+    ]
     payload = []
     for s in skills:
         item = s.to_dict()
@@ -63,7 +68,9 @@ async def skill_list() -> dict[str, Any]:
     return {"output": "\n".join(lines), "count": len(skills), "skills": payload}
 
 
-async def skill_install(url: str = "", file: str = "", inline: str = "") -> dict[str, Any]:
+async def skill_install(
+    url: str = "", file: str = "", inline: str = ""
+) -> dict[str, Any]:
     if not url and not file and not inline:
         return {"error": "one of url, file, or inline is required"}
 
@@ -74,14 +81,17 @@ async def skill_install(url: str = "", file: str = "", inline: str = "") -> dict
             data = json.loads(inline)
         elif file:
             from app.tools.core import _safe_path
+
             safe_file = _safe_path(file, str(_get_store().root))
             if safe_file.stat().st_size > 1_048_576:
                 return {"error": "skill file too large (max 1MB)"}
             data = json.loads(safe_file.read_text(encoding="utf-8"))
         else:
             from app.tools.ssrf import assert_safe_url
+
             assert_safe_url(url)  # S4: SSRF 防护
             import httpx
+
             async with httpx.AsyncClient(timeout=20) as client:
                 resp = await client.get(url)
                 resp.raise_for_status()
@@ -114,7 +124,11 @@ async def skill_install(url: str = "", file: str = "", inline: str = "") -> dict
         parameters=data.get("parameters", []),
     )
     _get_store().save(skill)
-    return {"output": f"Skill installed: {skill.name} (v{skill.version})\n{json.dumps(skill.to_dict(), ensure_ascii=False, indent=2)}", "skill": skill.name, "version": skill.version}
+    return {
+        "output": f"Skill installed: {skill.name} (v{skill.version})\n{json.dumps(skill.to_dict(), ensure_ascii=False, indent=2)}",
+        "skill": skill.name,
+        "version": skill.version,
+    }
 
 
 async def skill_generate(description: str, install: bool = False) -> dict[str, Any]:
@@ -140,7 +154,9 @@ async def skill_generate(description: str, install: bool = False) -> dict[str, A
         try:
             _get_store().save(skill)
             result["installed"] = True
-            result["output"] = f"Generated and installed skill: {skill.name}\n{json.dumps(skill.to_dict(), ensure_ascii=False, indent=2)}"
+            result["output"] = (
+                f"Generated and installed skill: {skill.name}\n{json.dumps(skill.to_dict(), ensure_ascii=False, indent=2)}"
+            )
         except Exception as e:
             result["install_error"] = str(e)
 
@@ -153,6 +169,7 @@ async def skill_discover(url: str = "") -> dict[str, Any]:
     if url:
         try:
             import httpx
+
             async with httpx.AsyncClient(timeout=20) as client:
                 resp = await client.get(url)
                 resp.raise_for_status()
@@ -160,29 +177,40 @@ async def skill_discover(url: str = "") -> dict[str, Any]:
                 installed_names = {s.name for s in _get_store().list()}
                 for item in items:
                     name = item.get("name", "")
-                    results.append({
-                        "name": name,
-                        "description": item.get("description", ""),
-                        "version": item.get("version", ""),
-                        "author": item.get("author", ""),
-                        "source": item.get("source", url),
-                        "installed": name in installed_names,
-                    })
+                    results.append(
+                        {
+                            "name": name,
+                            "description": item.get("description", ""),
+                            "version": item.get("version", ""),
+                            "author": item.get("author", ""),
+                            "source": item.get("source", url),
+                            "installed": name in installed_names,
+                        }
+                    )
         except Exception as e:
             return {"error": f"discover remote failed: {e}"}
     else:
         for s in _get_store().list():
-            results.append({
-                "name": s.name,
-                "description": s.description,
-                "version": s.version,
-                "author": s.author,
-                "source": s.source,
-                "installed": True,
-            })
+            results.append(
+                {
+                    "name": s.name,
+                    "description": s.description,
+                    "version": s.version,
+                    "author": s.author,
+                    "source": s.source,
+                    "installed": True,
+                }
+            )
 
-    lines = [f"  [{'✓' if r['installed'] else ' '}] {r['name']}: {r['description']} (v{r['version']})" for r in results]
-    return {"output": f"Available skills ({len(results)})\n" + "\n".join(lines), "count": len(results), "results": results}
+    lines = [
+        f"  [{'✓' if r['installed'] else ' '}] {r['name']}: {r['description']} (v{r['version']})"
+        for r in results
+    ]
+    return {
+        "output": f"Available skills ({len(results)})\n" + "\n".join(lines),
+        "count": len(results),
+        "results": results,
+    }
 
 
 async def skill_run(name: str, params: str | dict = "{}") -> dict[str, Any]:
@@ -224,7 +252,9 @@ async def skill_run(name: str, params: str | dict = "{}") -> dict[str, Any]:
     return {"output": output, "skill": name, "exec_type": skill.exec_type}
 
 
-def _render_template(source: str, params: dict[str, Any], parameters: list[dict[str, Any]]) -> str:
+def _render_template(
+    source: str, params: dict[str, Any], parameters: list[dict[str, Any]]
+) -> str:
     """渲染模板：先注入参数默认值，再替换 {key} 占位符。"""
     merged: dict[str, Any] = {}
     for p in parameters or []:
@@ -359,7 +389,11 @@ registry.register(
         "type": "object",
         "properties": {
             "name": {"type": "string", "description": "Name of the installed skill"},
-            "params": {"type": "string", "default": "{}", "description": "JSON string of parameters to inject into the skill template"},
+            "params": {
+                "type": "string",
+                "default": "{}",
+                "description": "JSON string of parameters to inject into the skill template",
+            },
         },
         "required": ["name"],
     },

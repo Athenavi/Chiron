@@ -203,19 +203,50 @@ onMounted(fetchItems)
 <template>
   <div class="market-view">
     <div class="page-header">
-      <h2 class="page-title">企业能力市场</h2>
+      <h2 class="page-title">
+        企业能力市场
+      </h2>
       <a-space class="filter-bar">
-        <a-select v-model:value="filterType" placeholder="类型" allow-clear style="width: 120px" @change="fetchItems">
-          <a-select-option value="plugin">plugin</a-select-option>
-          <a-select-option value="skill">skill</a-select-option>
+        <a-select
+          v-model:value="filterType"
+          placeholder="类型"
+          allow-clear
+          style="width: 120px"
+          @change="fetchItems"
+        >
+          <a-select-option value="plugin">
+            plugin
+          </a-select-option>
+          <a-select-option value="skill">
+            skill
+          </a-select-option>
         </a-select>
-        <a-select v-model:value="filterStatus" placeholder="状态" allow-clear style="width: 140px" @change="fetchItems">
-          <a-select-option value="draft">draft</a-select-option>
-          <a-select-option value="published">published</a-select-option>
-          <a-select-option value="retired">retired</a-select-option>
+        <a-select
+          v-model:value="filterStatus"
+          placeholder="状态"
+          allow-clear
+          style="width: 140px"
+          @change="fetchItems"
+        >
+          <a-select-option value="draft">
+            draft
+          </a-select-option>
+          <a-select-option value="published">
+            published
+          </a-select-option>
+          <a-select-option value="retired">
+            retired
+          </a-select-option>
         </a-select>
-        <a-button @click="fetchItems">刷新</a-button>
-        <a-button type="primary" @click="openCreateItem">新建条目</a-button>
+        <a-button @click="fetchItems">
+          刷新
+        </a-button>
+        <a-button
+          type="primary"
+          @click="openCreateItem"
+        >
+          新建条目
+        </a-button>
       </a-space>
     </div>
 
@@ -236,17 +267,49 @@ onMounted(fetchItems)
       size="small"
     >
       <template #emptyText>
-        <div class="empty-block"><span class="empty-icon">📭</span><span class="empty-text">暂无数据</span></div>
+        <div class="empty-block">
+          <span class="empty-icon">📭</span><span class="empty-text">暂无数据</span>
+        </div>
       </template>
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'status'">
-          <a-tag :color="statusColor(record.status)">{{ record.status }}</a-tag>
+          <a-tag :color="statusColor(record.status)">
+            {{ record.status }}
+          </a-tag>
         </template>
         <template v-if="column.key === 'action'">
-          <a-button type="link" size="small" @click="openGrantDrawer(record as MarketItem)">授权</a-button>
-          <a-button v-if="record.status === 'draft'" type="link" size="small" @click="publishItem(record as MarketItem)">发布</a-button>
-          <a-button v-if="record.status === 'published'" type="link" size="small" danger @click="retireItem(record as MarketItem)">退役</a-button>
-          <a-button type="link" size="small" danger @click="confirmDeleteItem(record as MarketItem)">删除</a-button>
+          <a-button
+            type="link"
+            size="small"
+            @click="openGrantDrawer(record as MarketItem)"
+          >
+            授权
+          </a-button>
+          <a-button
+            v-if="record.status === 'draft'"
+            type="link"
+            size="small"
+            @click="publishItem(record as MarketItem)"
+          >
+            发布
+          </a-button>
+          <a-button
+            v-if="record.status === 'published'"
+            type="link"
+            size="small"
+            danger
+            @click="retireItem(record as MarketItem)"
+          >
+            退役
+          </a-button>
+          <a-button
+            type="link"
+            size="small"
+            danger
+            @click="confirmDeleteItem(record as MarketItem)"
+          >
+            删除
+          </a-button>
         </template>
       </template>
     </a-table>
@@ -255,24 +318,39 @@ onMounted(fetchItems)
       v-model:open="itemModalVisible"
       title="新建市场条目"
       :confirm-loading="itemSaving"
-      @ok="saveItem"
       width="640"
+      @ok="saveItem"
     >
       <a-form layout="vertical">
         <a-form-item label="类型">
           <a-radio-group v-model:value="itemForm.type">
-            <a-radio value="plugin">plugin</a-radio>
-            <a-radio value="skill">skill</a-radio>
+            <a-radio value="plugin">
+              plugin
+            </a-radio>
+            <a-radio value="skill">
+              skill
+            </a-radio>
           </a-radio-group>
         </a-form-item>
         <a-form-item label="名称（唯一，max 128）">
-          <a-input v-model:value="itemForm.name" placeholder="如 web-search-skill" />
+          <a-input
+            v-model:value="itemForm.name"
+            placeholder="如 web-search-skill"
+          />
         </a-form-item>
         <a-form-item label="版本">
-          <a-input v-model:value="itemForm.version" placeholder="1.0.0" />
+          <a-input
+            v-model:value="itemForm.version"
+            placeholder="1.0.0"
+          />
         </a-form-item>
         <a-form-item label="Manifest（JSON）">
-          <a-textarea v-model:value="itemForm.manifest" :rows="6" class="code-editor" placeholder='{"description": "...", "entry": "..."}' />
+          <a-textarea
+            v-model:value="itemForm.manifest"
+            :rows="6"
+            class="code-editor"
+            placeholder="{&quot;description&quot;: &quot;...&quot;, &quot;entry&quot;: &quot;...&quot;}"
+          />
         </a-form-item>
       </a-form>
     </a-modal>
@@ -284,10 +362,20 @@ onMounted(fetchItems)
       placement="right"
     >
       <div class="grant-form">
-        <a-input v-model:value="grantForm.tenant_id" placeholder="租户 ID（UUID）" style="flex: 1" />
+        <a-input
+          v-model:value="grantForm.tenant_id"
+          placeholder="租户 ID（UUID）"
+          style="flex: 1"
+        />
         <a-switch v-model:checked="grantForm.enabled" />
         <span class="hint">启用</span>
-        <a-button type="primary" :loading="grantSaving" @click="addGrant">授权</a-button>
+        <a-button
+          type="primary"
+          :loading="grantSaving"
+          @click="addGrant"
+        >
+          授权
+        </a-button>
       </div>
       <a-table
         :columns="grantColumns"
@@ -299,11 +387,20 @@ onMounted(fetchItems)
         style="margin-top: 16px"
       >
         <template #emptyText>
-          <div class="empty-block"><span class="empty-icon">📭</span><span class="empty-text">暂无数据</span></div>
+          <div class="empty-block">
+            <span class="empty-icon">📭</span><span class="empty-text">暂无数据</span>
+          </div>
         </template>
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'action'">
-            <a-button type="link" size="small" danger @click="removeGrant(record as MarketGrant)">撤销</a-button>
+            <a-button
+              type="link"
+              size="small"
+              danger
+              @click="removeGrant(record as MarketGrant)"
+            >
+              撤销
+            </a-button>
           </template>
         </template>
       </a-table>

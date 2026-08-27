@@ -266,26 +266,58 @@ async function handleGenerate() {
   <div class="skills-page">
     <div class="page-head">
       <div class="page-head-text">
-        <h1 class="page-title">技能</h1>
-        <p class="page-sub">扩展 Agent 的自定义能力，可启用、运行与 AI 生成</p>
+        <h1 class="page-title">
+          技能
+        </h1>
+        <p class="page-sub">
+          扩展 Agent 的自定义能力，可启用、运行与 AI 生成
+        </p>
       </div>
-      <Button type="primary" @click="activeTab = 'install'">
-        <template #icon><DownloadOutlined /></template>
+      <Button
+        type="primary"
+        @click="activeTab = 'install'"
+      >
+        <template #icon>
+          <DownloadOutlined />
+        </template>
         安装技能
       </Button>
     </div>
 
-    <Tabs v-model:activeKey="activeTab" class="skills-tabs">
+    <Tabs
+      v-model:active-key="activeTab"
+      class="skills-tabs"
+    >
       <!-- ── 技能列表 ── -->
-      <TabPane key="list" tab="技能列表">
+      <TabPane
+        key="list"
+        tab="技能列表"
+      >
         <div class="list-toolbar">
-          <Input v-model:value="searchQuery" placeholder="搜索名称 / 描述 / 标签" allow-clear class="search-input">
-            <template #prefix><SearchOutlined /></template>
+          <Input
+            v-model:value="searchQuery"
+            placeholder="搜索名称 / 描述 / 标签"
+            allow-clear
+            class="search-input"
+          >
+            <template #prefix>
+              <SearchOutlined />
+            </template>
           </Input>
-          <Select v-model:value="typeFilter" class="type-filter" :options="[{ value: 'all', label: '全部类型' }, ...execTypes.map(t => ({ value: t, label: t }))]" />
+          <Select
+            v-model:value="typeFilter"
+            class="type-filter"
+            :options="[{ value: 'all', label: '全部类型' }, ...execTypes.map(t => ({ value: t, label: t }))]"
+          />
         </div>
 
-        <PageSkeleton v-if="loading" variant="cards" :columns="3" :rows="6" :header="false" />
+        <PageSkeleton
+          v-if="loading"
+          variant="cards"
+          :columns="3"
+          :rows="6"
+          :header="false"
+        />
         <EmptyState
           v-else-if="error"
           size="page"
@@ -293,7 +325,12 @@ async function handleGenerate() {
           description="加载失败"
           hint="无法获取技能列表，请稍后重试"
         >
-          <Button type="primary" @click="loadSkills">重试</Button>
+          <Button
+            type="primary"
+            @click="loadSkills"
+          >
+            重试
+          </Button>
         </EmptyState>
         <EmptyState
           v-else-if="filteredSkills.length === 0"
@@ -303,14 +340,27 @@ async function handleGenerate() {
           :hint="searchQuery || typeFilter !== 'all' ? '尝试调整搜索关键词或类型筛选' : '从市场安装技能或上传本地技能包'"
         />
 
-        <div v-else class="skill-grid">
-          <div v-for="s in filteredSkills" :key="s.name" class="skill-card" :class="{ disabled: s.enabled === false }">
+        <div
+          v-else
+          class="skill-grid"
+        >
+          <div
+            v-for="s in filteredSkills"
+            :key="s.name"
+            class="skill-card"
+            :class="{ disabled: s.enabled === false }"
+          >
             <div class="card-top">
               <span class="card-icon"><CodeOutlined /></span>
               <div class="card-titles">
                 <div class="card-name-line">
                   <span class="card-name">{{ s.name }}</span>
-                  <Tag :color="execColors[s.exec?.type] || 'default'" class="exec-tag">{{ s.exec?.type || 'unknown' }}</Tag>
+                  <Tag
+                    :color="execColors[s.exec?.type] || 'default'"
+                    class="exec-tag"
+                  >
+                    {{ s.exec?.type || 'unknown' }}
+                  </Tag>
                 </div>
                 <span class="card-desc">{{ s.description || '暂无描述' }}</span>
               </div>
@@ -324,27 +374,65 @@ async function handleGenerate() {
             </div>
             <div class="card-meta">
               <Tag>v{{ s.version }}</Tag>
-              <Tag v-if="s.parameters?.length">{{ s.parameters.length }} 参数</Tag>
-              <Tag v-for="t in (s.tags || []).slice(0, 3)" :key="t">{{ t }}</Tag>
+              <Tag v-if="s.parameters?.length">
+                {{ s.parameters.length }} 参数
+              </Tag>
+              <Tag
+                v-for="t in (s.tags || []).slice(0, 3)"
+                :key="t"
+              >
+                {{ t }}
+              </Tag>
             </div>
             <div class="card-actions">
-              <Button size="small" type="text" @click="toggleDetail(s.name)">
+              <Button
+                size="small"
+                type="text"
+                @click="toggleDetail(s.name)"
+              >
                 {{ expandedNames.has(s.name) ? '收起详情' : '查看详情' }}
               </Button>
               <div class="action-right">
-                <Button size="small" title="在对话中使用该技能" @click="useInChat(s)">
-                  <template #icon><MessageOutlined /></template>
+                <Button
+                  size="small"
+                  title="在对话中使用该技能"
+                  @click="useInChat(s)"
+                >
+                  <template #icon>
+                    <MessageOutlined />
+                  </template>
                   在对话中使用
                 </Button>
-                <Button size="small" :disabled="s.enabled === false" @click="openRun(s)">
-                  <template #icon><PlayCircleOutlined /></template>
+                <Button
+                  size="small"
+                  :disabled="s.enabled === false"
+                  @click="openRun(s)"
+                >
+                  <template #icon>
+                    <PlayCircleOutlined />
+                  </template>
                   运行
                 </Button>
-                <Dropdown trigger="click" placement="bottomRight">
-                  <Button type="text" size="small" title="更多操作">⋯</Button>
+                <Dropdown
+                  trigger="click"
+                  placement="bottomRight"
+                >
+                  <Button
+                    type="text"
+                    size="small"
+                    title="更多操作"
+                  >
+                    ⋯
+                  </Button>
                   <template #overlay>
                     <Menu class="card-menu">
-                      <MenuItem key="delete" danger @click="requestDelete(s)"><DeleteOutlined class="menu-icon" />删除</MenuItem>
+                      <MenuItem
+                        key="delete"
+                        danger
+                        @click="requestDelete(s)"
+                      >
+                        <DeleteOutlined class="menu-icon" />删除
+                      </MenuItem>
                     </Menu>
                   </template>
                 </Dropdown>
@@ -352,20 +440,32 @@ async function handleGenerate() {
             </div>
 
             <!-- 详情展开 -->
-            <div v-if="expandedNames.has(s.name)" class="skill-detail">
+            <div
+              v-if="expandedNames.has(s.name)"
+              class="skill-detail"
+            >
               <div class="detail-row">
                 <span class="detail-label">执行类型</span>
                 <span class="detail-value">{{ s.exec?.type }}</span>
               </div>
-              <div v-if="s.exec?.source" class="detail-row">
+              <div
+                v-if="s.exec?.source"
+                class="detail-row"
+              >
                 <span class="detail-label">执行内容</span>
                 <pre class="detail-pre">{{ s.exec.source }}</pre>
               </div>
-              <div v-if="s.parameters?.length" class="detail-row">
+              <div
+                v-if="s.parameters?.length"
+                class="detail-row"
+              >
                 <span class="detail-label">参数</span>
                 <pre class="detail-pre">{{ JSON.stringify(s.parameters, null, 2) }}</pre>
               </div>
-              <div v-if="s.author" class="detail-row">
+              <div
+                v-if="s.author"
+                class="detail-row"
+              >
                 <span class="detail-label">作者</span>
                 <span class="detail-value">{{ s.author }}</span>
               </div>
@@ -375,8 +475,17 @@ async function handleGenerate() {
       </TabPane>
 
       <!-- ── 技能市场 ── -->
-      <TabPane key="market" tab="市场">
-        <PageSkeleton v-if="marketLoading" variant="cards" :columns="3" :rows="6" :header="false" />
+      <TabPane
+        key="market"
+        tab="市场"
+      >
+        <PageSkeleton
+          v-if="marketLoading"
+          variant="cards"
+          :columns="3"
+          :rows="6"
+          :header="false"
+        />
         <EmptyState
           v-else-if="marketError"
           size="page"
@@ -384,7 +493,12 @@ async function handleGenerate() {
           description="市场加载失败"
           hint="无法获取市场内容，请稍后重试"
         >
-          <Button type="primary" @click="loadMarket">重试</Button>
+          <Button
+            type="primary"
+            @click="loadMarket"
+          >
+            重试
+          </Button>
         </EmptyState>
         <SkillMarketCard
           v-else
@@ -396,45 +510,81 @@ async function handleGenerate() {
       </TabPane>
 
       <!-- ── 安装技能 ── -->
-      <TabPane key="install" tab="安装技能">
+      <TabPane
+        key="install"
+        tab="安装技能"
+      >
         <div class="panel-card">
-          <h3 class="panel-title"><DownloadOutlined /> 从 URL 安装</h3>
-          <Input v-model:value="installURL" placeholder="https://example.com/my-skill.skill.json" />
-          <div class="or-divider">或</div>
-          <h3 class="panel-title"><CodeOutlined /> 内联 JSON</h3>
+          <h3 class="panel-title">
+            <DownloadOutlined /> 从 URL 安装
+          </h3>
+          <Input
+            v-model:value="installURL"
+            placeholder="https://example.com/my-skill.skill.json"
+          />
+          <div class="or-divider">
+            或
+          </div>
+          <h3 class="panel-title">
+            <CodeOutlined /> 内联 JSON
+          </h3>
           <Input.TextArea
             v-model:value="installInline"
             :rows="6"
-            placeholder='{"name":"my-skill","description":"...","exec":{"type":"prompt","source":"..."},"parameters":[]}'
+            placeholder="{&quot;name&quot;:&quot;my-skill&quot;,&quot;description&quot;:&quot;...&quot;,&quot;exec&quot;:{&quot;type&quot;:&quot;prompt&quot;,&quot;source&quot;:&quot;...&quot;},&quot;parameters&quot;:[]}"
             class="mono-input"
           />
-          <Button type="primary" :loading="installLoading" @click="handleInstall" class="install-btn">
-            <template #icon><DownloadOutlined /></template>
+          <Button
+            type="primary"
+            :loading="installLoading"
+            class="install-btn"
+            @click="handleInstall"
+          >
+            <template #icon>
+              <DownloadOutlined />
+            </template>
             安装
           </Button>
         </div>
       </TabPane>
 
       <!-- ── AI 生成 ── -->
-      <TabPane key="generate" tab="AI 生成">
+      <TabPane
+        key="generate"
+        tab="AI 生成"
+      >
         <div class="panel-card">
-          <h3 class="panel-title"><ThunderboltOutlined /> 用一句话描述技能</h3>
+          <h3 class="panel-title">
+            <ThunderboltOutlined /> 用一句话描述技能
+          </h3>
           <Input.TextArea
             v-model:value="genDesc"
             :rows="4"
             placeholder="例如：创建一个能分析 Jenkins 构建日志并汇总失败原因的技能"
           />
-          <Button type="primary" :loading="genLoading" @click="handleGenerate" class="install-btn">
-            <template #icon><ThunderboltOutlined /></template>
+          <Button
+            type="primary"
+            :loading="genLoading"
+            class="install-btn"
+            @click="handleGenerate"
+          >
+            <template #icon>
+              <ThunderboltOutlined />
+            </template>
             生成并安装
           </Button>
           <Alert
             v-if="genResult"
-            type="success" show-icon class="gen-alert"
+            type="success"
+            show-icon
+            class="gen-alert"
             :message="`已生成：${genResult.name}`"
             :description="genResult.description"
           />
-          <pre v-if="genResult" class="gen-pre">{{ JSON.stringify(genResult, null, 2) }}</pre>
+          <pre
+            v-if="genResult"
+            class="gen-pre"
+          >{{ JSON.stringify(genResult, null, 2) }}</pre>
         </div>
       </TabPane>
     </Tabs>
@@ -447,13 +597,28 @@ async function handleGenerate() {
       width="560px"
       @cancel="runOpen = false"
     >
-      <div class="run-desc">{{ runTarget?.description }}</div>
-      <div v-if="runTarget?.parameters?.length" class="run-form">
-        <div v-for="p in runTarget.parameters" :key="p.name" class="run-field">
+      <div class="run-desc">
+        {{ runTarget?.description }}
+      </div>
+      <div
+        v-if="runTarget?.parameters?.length"
+        class="run-form"
+      >
+        <div
+          v-for="p in runTarget.parameters"
+          :key="p.name"
+          class="run-field"
+        >
           <label class="field-label">
             {{ p.name }}
-            <span v-if="p.required" class="required">*</span>
-            <span v-if="p.type" class="field-type">{{ p.type }}</span>
+            <span
+              v-if="p.required"
+              class="required"
+            >*</span>
+            <span
+              v-if="p.type"
+              class="field-type"
+            >{{ p.type }}</span>
           </label>
           <Select
             v-if="p.enum?.length"
@@ -485,15 +650,31 @@ async function handleGenerate() {
           />
         </div>
       </div>
-      <div v-else class="run-empty">该技能无需参数</div>
+      <div
+        v-else
+        class="run-empty"
+      >
+        该技能无需参数
+      </div>
       <div class="run-actions">
-        <Button type="primary" :loading="runSubmitting" @click="submitRun">
-          <template #icon><PlayCircleOutlined /></template>
+        <Button
+          type="primary"
+          :loading="runSubmitting"
+          @click="submitRun"
+        >
+          <template #icon>
+            <PlayCircleOutlined />
+          </template>
           执行
         </Button>
       </div>
-      <div v-if="runResult" class="run-result">
-        <div class="result-label">执行结果</div>
+      <div
+        v-if="runResult"
+        class="run-result"
+      >
+        <div class="result-label">
+          执行结果
+        </div>
         <pre class="result-pre">{{ renderResult(runResult) }}</pre>
       </div>
     </Modal>

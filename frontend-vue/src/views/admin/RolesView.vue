@@ -112,8 +112,15 @@ onMounted(fetchRoles)
 <template>
   <div class="roles-view">
     <div class="page-header">
-      <h2 class="page-title">角色管理</h2>
-      <a-button type="primary" @click="openCreate">新建角色</a-button>
+      <h2 class="page-title">
+        角色管理
+      </h2>
+      <a-button
+        type="primary"
+        @click="openCreate"
+      >
+        新建角色
+      </a-button>
     </div>
 
     <a-table
@@ -126,12 +133,27 @@ onMounted(fetchRoles)
       size="small"
     >
       <template #emptyText>
-        <div class="empty-block"><span class="empty-icon">📭</span><span class="empty-text">暂无数据</span></div>
+        <div class="empty-block">
+          <span class="empty-icon">📭</span><span class="empty-text">暂无数据</span>
+        </div>
       </template>
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'action'">
-          <a-button type="link" size="small" @click="openEdit(record as EntRole)">编辑</a-button>
-          <a-button type="link" size="small" danger @click="confirmDelete(record as EntRole)">删除</a-button>
+          <a-button
+            type="link"
+            size="small"
+            @click="openEdit(record as EntRole)"
+          >
+            编辑
+          </a-button>
+          <a-button
+            type="link"
+            size="small"
+            danger
+            @click="confirmDelete(record as EntRole)"
+          >
+            删除
+          </a-button>
         </template>
       </template>
     </a-table>
@@ -144,10 +166,17 @@ onMounted(fetchRoles)
     >
       <a-form layout="vertical">
         <a-form-item label="角色名（唯一，max 64）">
-          <a-input v-model:value="form.name" :disabled="modalMode === 'edit'" placeholder="如 content-editor" />
+          <a-input
+            v-model:value="form.name"
+            :disabled="modalMode === 'edit'"
+            placeholder="如 content-editor"
+          />
         </a-form-item>
         <a-form-item label="显示名">
-          <a-input v-model:value="form.display_name" placeholder="如 内容编辑者" />
+          <a-input
+            v-model:value="form.display_name"
+            placeholder="如 内容编辑者"
+          />
         </a-form-item>
         <a-form-item label="权限点（每行一个）">
           <a-textarea

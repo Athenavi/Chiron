@@ -171,11 +171,18 @@ onMounted(loadDomains)
       <h1>🌐 域名管理</h1>
       <Space>
         <Button @click="loadDomains">
-          <template #icon><ReloadOutlined /></template>
+          <template #icon>
+            <ReloadOutlined />
+          </template>
           刷新
         </Button>
-        <Button type="primary" @click="openCreate">
-          <template #icon><PlusOutlined /></template>
+        <Button
+          type="primary"
+          @click="openCreate"
+        >
+          <template #icon>
+            <PlusOutlined />
+          </template>
           添加域名
         </Button>
       </Space>
@@ -199,7 +206,10 @@ onMounted(loadDomains)
           :scroll="{ x: 900 }"
         >
           <template #emptyText>
-            <EmptyState description="暂无域名" hint="点击右上角「添加域名」接入第一个域名" />
+            <EmptyState
+              description="暂无域名"
+              hint="点击右上角「添加域名」接入第一个域名"
+            />
           </template>
 
           <template #bodyCell="{ column, record }">
@@ -210,7 +220,9 @@ onMounted(loadDomains)
             </template>
 
             <template v-else-if="column.key === 'ssl_status'">
-              <Tag :color="sslStatusColor(record.ssl_status)">{{ sslStatusText(record.ssl_status) }}</Tag>
+              <Tag :color="sslStatusColor(record.ssl_status)">
+                {{ sslStatusText(record.ssl_status) }}
+              </Tag>
             </template>
 
             <template v-else-if="column.key === 'created_at'">
@@ -218,17 +230,37 @@ onMounted(loadDomains)
             </template>
 
             <template v-else-if="column.key === 'actions'">
-              <Space :size="4" wrap>
-                <Button size="small" :loading="verifyingId === record.id" @click="verifyDomain(record)">
-                  <template #icon><CheckCircleOutlined /></template>
+              <Space
+                :size="4"
+                wrap
+              >
+                <Button
+                  size="small"
+                  :loading="verifyingId === record.id"
+                  @click="verifyDomain(record)"
+                >
+                  <template #icon>
+                    <CheckCircleOutlined />
+                  </template>
                   验证
                 </Button>
-                <Button size="small" :loading="renewingId === record.id" @click="renewSSL(record)">
-                  <template #icon><SyncOutlined /></template>
+                <Button
+                  size="small"
+                  :loading="renewingId === record.id"
+                  @click="renewSSL(record)"
+                >
+                  <template #icon>
+                    <SyncOutlined />
+                  </template>
                   续期 SSL
                 </Button>
-                <Button size="small" @click="openEdit(record)">
-                  <template #icon><EditOutlined /></template>
+                <Button
+                  size="small"
+                  @click="openEdit(record)"
+                >
+                  <template #icon>
+                    <EditOutlined />
+                  </template>
                   编辑
                 </Button>
                 <Popconfirm
@@ -237,8 +269,13 @@ onMounted(loadDomains)
                   cancel-text="取消"
                   @confirm="removeDomain(record)"
                 >
-                  <Button size="small" danger>
-                    <template #icon><DeleteOutlined /></template>
+                  <Button
+                    size="small"
+                    danger
+                  >
+                    <template #icon>
+                      <DeleteOutlined />
+                    </template>
                     删除
                   </Button>
                 </Popconfirm>
@@ -264,7 +301,12 @@ onMounted(loadDomains)
           show-icon
           style="margin-bottom: 16px"
         />
-        <Descriptions v-if="verifyResult.verified" :column="1" bordered size="small">
+        <Descriptions
+          v-if="verifyResult.verified"
+          :column="1"
+          bordered
+          size="small"
+        >
           <Descriptions.Item label="解析地址">
             {{ formatAddresses(verifyResult.addresses) }}
           </Descriptions.Item>
@@ -288,8 +330,15 @@ onMounted(loadDomains)
       @ok="submitForm"
     >
       <Form layout="vertical">
-        <Form.Item label="域名" required>
-          <Input v-model:value="form.domain" placeholder="example.com" @press-enter="submitForm" />
+        <Form.Item
+          label="域名"
+          required
+        >
+          <Input
+            v-model:value="form.domain"
+            placeholder="example.com"
+            @press-enter="submitForm"
+          />
         </Form.Item>
       </Form>
     </Modal>

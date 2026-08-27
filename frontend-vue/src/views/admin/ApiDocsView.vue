@@ -17,7 +17,9 @@ const redocUrl = computed(() =>
   <div class="api-docs-page">
     <div class="api-docs-header">
       <h2>API 文档</h2>
-      <p class="api-docs-desc">Chiron API 完整文档（OpenAPI 3.0）�?含认证、聊天、企业功能、SSO、系统监控等。</p>
+      <p class="api-docs-desc">
+        Chiron API 完整文档（OpenAPI 3.0）�?含认证、聊天、企业功能、SSO、系统监控等。
+      </p>
     </div>
     <div class="redoc-wrapper">
       <iframe

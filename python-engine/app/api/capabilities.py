@@ -3,6 +3,7 @@
 - GET  /v1/capabilities            按工作台列出能力
 - POST /v1/capabilities/search     语义搜索能力
 """
+
 from __future__ import annotations
 
 import logging
@@ -10,7 +11,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Request
 
-from app.core.capabilities import get_registry, WorkstationType
+from app.core.capabilities import WorkstationType, get_registry
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +29,13 @@ def _serialize(cap) -> dict:
         "status": cap.status,
         "version": cap.version,
         "input_schema": [
-            {"name": p.name, "type": p.type, "description": p.description,
-             "required": p.required, "default": p.default}
+            {
+                "name": p.name,
+                "type": p.type,
+                "description": p.description,
+                "required": p.required,
+                "default": p.default,
+            }
             for p in cap.input_schema
         ],
         "stats": {

@@ -10,8 +10,8 @@ import redis.asyncio as aioredis
 
 from app.config import settings
 from app.gateway.router import GatewayRouter
-from app.interfaces.vectorstore import VectorStore
 from app.interfaces.cache import CacheClient
+from app.interfaces.vectorstore import VectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -36,8 +36,13 @@ class MemoryManager:
     def _ensure_milvus(self):
         if not self._milvus_connected:
             from pymilvus import connections
+
             host = settings.milvus_address.split(":")[0]
-            port = int(settings.milvus_address.split(":")[1]) if ":" in settings.milvus_address else 19530
+            port = (
+                int(settings.milvus_address.split(":")[1])
+                if ":" in settings.milvus_address
+                else 19530
+            )
             connections.connect(alias="memory", host=host, port=port)
             self._milvus_connected = True
 
@@ -45,15 +50,23 @@ class MemoryManager:
         if self._milvus_collection is not None:
             return self._milvus_collection
         self._ensure_milvus()
-        from pymilvus import Collection, FieldSchema, CollectionSchema, DataType
+        from pymilvus import (Collection, CollectionSchema, DataType,
+                              FieldSchema)
+
         fields = [
-            FieldSchema(name="id", dtype=DataType.VARCHAR, is_primary=True, max_length=64),
+            FieldSchema(
+                name="id", dtype=DataType.VARCHAR, is_primary=True, max_length=64
+            ),
             FieldSchema(name="tenant_id", dtype=DataType.VARCHAR, max_length=64),
             FieldSchema(name="user_id", dtype=DataType.VARCHAR, max_length=64),
             FieldSchema(name="session_id", dtype=DataType.VARCHAR, max_length=64),
             FieldSchema(name="content", dtype=DataType.VARCHAR, max_length=65535),
             FieldSchema(name="memory_type", dtype=DataType.VARCHAR, max_length=32),
-            FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=settings.embedding_dim),
+            FieldSchema(
+                name="embedding",
+                dtype=DataType.FLOAT_VECTOR,
+                dim=settings.embedding_dim,
+            ),
             FieldSchema(name="created_at", dtype=DataType.VARCHAR, max_length=32),
             FieldSchema(name="metadata_json", dtype=DataType.VARCHAR, max_length=65535),
         ]
@@ -62,9 +75,14 @@ class MemoryManager:
             self._milvus_collection = Collection("memory_store", using="memory")
         except Exception:
             self._milvus_collection = Collection("memory_store", schema, using="memory")
-            self._milvus_collection.create_index("embedding", {
-                "metric_type": "COSINE", "index_type": "IVF_FLAT", "params": {"nlist": 256},
-            })
+            self._milvus_collection.create_index(
+                "embedding",
+                {
+                    "metric_type": "COSINE",
+                    "index_type": "IVF_FLAT",
+                    "params": {"nlist": 256},
+                },
+            )
         self._milvus_collection.load(using="memory")
         return self._milvus_collection
 
@@ -82,35 +100,69 @@ class MemoryManager:
         created_at = str(int(time.time()))
         try:
             if memory_type == "short_term":
-                return await self._save_short_term(memory_id, tenant_id, user_id, session_id, content, created_at, metadata)
+                return await self._save_short_term(
+                    memory_id,
+                    tenant_id,
+                    user_id,
+                    session_id,
+                    content,
+                    created_at,
+                    metadata,
+                )
             else:
-                return await self._save_long_term(memory_id, tenant_id, user_id, session_id, content, created_at, metadata)
+                return await self._save_long_term(
+                    memory_id,
+                    tenant_id,
+                    user_id,
+                    session_id,
+                    content,
+                    created_at,
+                    metadata,
+                )
         except Exception as e:
             logger.error("保存记忆失败: %s", e)
             return {"memory_id": memory_id, "status": "failed", "error": str(e)}
 
-    async def _save_short_term(self, memory_id, tenant_id, user_id, session_id, content, created_at, metadata) -> dict:
+    async def _save_short_term(
+        self, memory_id, tenant_id, user_id, session_id, content, created_at, metadata
+    ) -> dict:
         """保存短期记忆"""
         if self._cache_client:
             # 使用 CacheClient 接口
             key = f"memory:{tenant_id}:{user_id}:{session_id}"
-            data = {"id": memory_id, "content": content, "created_at": created_at, "metadata": metadata or {}}
+            data = {
+                "id": memory_id,
+                "content": content,
+                "created_at": created_at,
+                "metadata": metadata or {},
+            }
             await self._cache_client.rpush(key, json.dumps(data))
             await self._cache_client.expire(key, settings.short_term_ttl)
         else:
             # 直接使用 Redis
             key = f"memory:{tenant_id}:{user_id}:{session_id}"
-            data = {"id": memory_id, "content": content, "created_at": created_at, "metadata": metadata or {}}
+            data = {
+                "id": memory_id,
+                "content": content,
+                "created_at": created_at,
+                "metadata": metadata or {},
+            }
             await self._redis.rpush(key, json.dumps(data))
             await self._redis.expire(key, settings.short_term_ttl)
         return {"memory_id": memory_id, "status": "saved"}
 
-    async def _save_long_term(self, memory_id, tenant_id, user_id, session_id, content, created_at, metadata) -> dict:
+    async def _save_long_term(
+        self, memory_id, tenant_id, user_id, session_id, content, created_at, metadata
+    ) -> dict:
         """保存长期记忆"""
         # 计算嵌入向量
         resp = await self._gateway.embed(content, settings.embedding_model)
         if not resp.embedding:
-            return {"memory_id": memory_id, "status": "failed", "error": "Embedding failed"}
+            return {
+                "memory_id": memory_id,
+                "status": "failed",
+                "error": "Embedding failed",
+            }
 
         if self._vector_store:
             # 使用 VectorStore 接口
@@ -120,24 +172,34 @@ class MemoryManager:
                 collection=collection,
                 ids=[memory_id],
                 vectors=[resp.embedding],
-                payloads=[{
-                    "tenant_id": tenant_id,
-                    "user_id": user_id,
-                    "session_id": session_id,
-                    "content": content,
-                    "memory_type": "long_term",
-                    "created_at": created_at,
-                    "metadata_json": json.dumps(metadata or {}),
-                }],
+                payloads=[
+                    {
+                        "tenant_id": tenant_id,
+                        "user_id": user_id,
+                        "session_id": session_id,
+                        "content": content,
+                        "memory_type": "long_term",
+                        "created_at": created_at,
+                        "metadata_json": json.dumps(metadata or {}),
+                    }
+                ],
             )
         else:
             # 直接使用 Milvus
             collection = self._get_milvus_collection()
-            collection.insert([
-                [memory_id], [tenant_id], [user_id], [session_id],
-                [content], ["long_term"], [resp.embedding],
-                [created_at], [json.dumps(metadata or {})],
-            ])
+            collection.insert(
+                [
+                    [memory_id],
+                    [tenant_id],
+                    [user_id],
+                    [session_id],
+                    [content],
+                    ["long_term"],
+                    [resp.embedding],
+                    [created_at],
+                    [json.dumps(metadata or {})],
+                ]
+            )
             collection.flush(using="memory")
         return {"memory_id": memory_id, "status": "saved"}
 
@@ -155,7 +217,9 @@ class MemoryManager:
             if memory_type in ("short_term", "all"):
                 results.extend(await self._query_short_term(tenant_id, user_id, top_k))
             if memory_type in ("long_term", "all"):
-                results.extend(await self._query_long_term(tenant_id, user_id, query, top_k))
+                results.extend(
+                    await self._query_long_term(tenant_id, user_id, query, top_k)
+                )
             results.sort(key=lambda x: x.get("relevance", 0), reverse=True)
             return results[:top_k]
         except Exception as e:
@@ -176,11 +240,16 @@ class MemoryManager:
                 for mem_str in memories:
                     try:
                         mem = json.loads(mem_str)
-                        results.append({
-                            "memory_id": mem["id"], "content": mem["content"],
-                            "relevance": 0.8, "created_at": mem.get("created_at", ""),
-                            "memory_type": "short_term", "metadata": mem.get("metadata", {}),
-                        })
+                        results.append(
+                            {
+                                "memory_id": mem["id"],
+                                "content": mem["content"],
+                                "relevance": 0.8,
+                                "created_at": mem.get("created_at", ""),
+                                "memory_type": "short_term",
+                                "metadata": mem.get("metadata", {}),
+                            }
+                        )
                     except (json.JSONDecodeError, KeyError):
                         continue
             return results
@@ -195,12 +264,19 @@ class MemoryManager:
                 memories = await self._redis.lrange(key, -top_k, -1)
                 for mem_str in memories:
                     try:
-                        mem = json.loads(mem_str if isinstance(mem_str, str) else mem_str.decode())
-                        results.append({
-                            "memory_id": mem["id"], "content": mem["content"],
-                            "relevance": 0.8, "created_at": mem.get("created_at", ""),
-                            "memory_type": "short_term", "metadata": mem.get("metadata", {}),
-                        })
+                        mem = json.loads(
+                            mem_str if isinstance(mem_str, str) else mem_str.decode()
+                        )
+                        results.append(
+                            {
+                                "memory_id": mem["id"],
+                                "content": mem["content"],
+                                "relevance": 0.8,
+                                "created_at": mem.get("created_at", ""),
+                                "memory_type": "short_term",
+                                "metadata": mem.get("metadata", {}),
+                            }
+                        )
                     except (json.JSONDecodeError, KeyError):
                         continue
             return results
@@ -224,35 +300,45 @@ class MemoryManager:
             )
             memories = []
             for r in results:
-                memories.append({
-                    "memory_id": r["id"],
-                    "content": r.get("content", ""),
-                    "relevance": r.get("score", 0),
-                    "created_at": r.get("created_at", ""),
-                    "memory_type": "long_term",
-                    "metadata": json.loads(r.get("metadata_json", "{}")),
-                })
+                memories.append(
+                    {
+                        "memory_id": r["id"],
+                        "content": r.get("content", ""),
+                        "relevance": r.get("score", 0),
+                        "created_at": r.get("created_at", ""),
+                        "memory_type": "long_term",
+                        "metadata": json.loads(r.get("metadata_json", "{}")),
+                    }
+                )
             return memories
         else:
             # 直接使用 Milvus
             try:
                 collection = self._get_milvus_collection()
                 results = collection.search(
-                    data=[resp.embedding], anns_field="embedding",
+                    data=[resp.embedding],
+                    anns_field="embedding",
                     param={"metric_type": "COSINE", "params": {"nprobe": 10}},
-                    limit=top_k, expr=f'tenant_id == "{tenant_id}"',
+                    limit=top_k,
+                    expr=f'tenant_id == "{tenant_id}"',
                     output_fields=["content", "created_at", "metadata_json"],
                 )
                 memories = []
                 for hits in results:
                     for hit in hits:
                         if hit.score >= 0.5:
-                            memories.append({
-                                "memory_id": hit.id, "content": hit.entity.get("content", ""),
-                                "relevance": hit.score, "created_at": hit.entity.get("created_at", ""),
-                                "memory_type": "long_term",
-                                "metadata": json.loads(hit.entity.get("metadata_json", "{}")),
-                            })
+                            memories.append(
+                                {
+                                    "memory_id": hit.id,
+                                    "content": hit.entity.get("content", ""),
+                                    "relevance": hit.score,
+                                    "created_at": hit.entity.get("created_at", ""),
+                                    "memory_type": "long_term",
+                                    "metadata": json.loads(
+                                        hit.entity.get("metadata_json", "{}")
+                                    ),
+                                }
+                            )
                 return memories
             except Exception as e:
                 logger.error("长期记忆查询失败: %s", e)

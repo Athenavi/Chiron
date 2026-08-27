@@ -5,19 +5,19 @@
 2. 运行时动态修改节点参数 (租户隔离 state)
 3. Pause-Mode 编辑: 暂停执行 → 用户修改 → 恢复执行
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import time
-from typing import Any, AsyncIterator, Optional
 from dataclasses import dataclass, field
+from typing import Any, AsyncIterator, Optional
 
 from app.agent.runtime import AgentEvent
 from app.trace import record_span
-from app.workflow.engine import (
-    WorkflowInstance, NodeResult, _topological_sort, _build_node_fns,
-)
+from app.workflow.engine import (NodeResult, WorkflowInstance, _build_node_fns,
+                                 _topological_sort)
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class EditCommand:
     """运行时编辑命令"""
+
     node_id: str
     command: str  # "update_config" / "skip_node" / "replay_node"
     config_updates: dict[str, Any] = field(default_factory=dict)  # {key: new_value}
@@ -35,16 +36,17 @@ class EditCommand:
 @dataclass
 class WorkflowEditSession:
     """工作流编辑会话 (SaaS 租户隔离)
-    
+
     存储运行时编辑状态,带 TTL 自动过期
     """
+
     session_id: str
     workflow_instance_id: str
     tenant_id: str  # SaaS 安全: 租户隔离
     commands: list[EditCommand] = field(default_factory=list)
     created_at: float = field(default_factory=time.time)
     expires_at: float = 0  # 0 表示永不过期,默认 1 小时
-    
+
     def is_expired(self) -> bool:
         if self.expires_at == 0:
             return False
@@ -74,6 +76,7 @@ def create_edit_session(
 ) -> str:
     """创建编辑会话,返回 session_id"""
     import uuid
+
     session_id = uuid.uuid4().hex[:12]
     _edit_sessions[session_id] = WorkflowEditSession(
         session_id=session_id,
@@ -87,16 +90,16 @@ def create_edit_session(
 # ── 增强版工作流引擎 ─────────────────────────────────────────────
 class TracingWorkflowEngine:
     """带链路追踪的工作流引擎
-    
+
     增强点:
     1. 每个节点执行前后记录 span
     2. 支持运行时编辑 (通过 EditCommand)
     3. 节点级别重试与降级
     """
-    
+
     def __init__(self, gateway_router):
         self.gateway = gateway_router
-    
+
     async def run_workflow_with_trace(
         self,
         graph_json: dict,
@@ -105,7 +108,7 @@ class TracingWorkflowEngine:
         instance_id: Optional[str] = None,
     ) -> AsyncIterator[AgentEvent]:
         """运行工作流 (带完整 trace)
-        
+
         流程:
         1. 拓扑排序节点
         2. 按序执行每个节点
@@ -114,12 +117,12 @@ class TracingWorkflowEngine:
         5. 聚合输出到最终事件
         """
         import uuid as uuid_mod
-        
+
         trace_id = instance_id or uuid_mod.uuid4().hex[:12]
         graph_name = graph_json.get("name", "unnamed_workflow")
-        
+
         start_time = time.time()
-        
+
         # ── 生成 Workflow Instance ──────────────────────────────────
         workflow_id = instance_id or f"wf_{trace_id}"
         instance = WorkflowInstance(
@@ -127,19 +130,21 @@ class TracingWorkflowEngine:
             graph_name=graph_name,
             state=initial_state.copy(),
         )
-        
+
         yield AgentEvent(
             type="workflow_start",
-            content=json.dumps({
-                "workflow_id": workflow_id,
-                "graph_name": graph_name,
-                "node_count": len(graph_json.get("nodes", [])),
-                "trace_id": trace_id,
-                "tenant_id": tenant_id,
-            }),
+            content=json.dumps(
+                {
+                    "workflow_id": workflow_id,
+                    "graph_name": graph_name,
+                    "node_count": len(graph_json.get("nodes", [])),
+                    "trace_id": trace_id,
+                    "tenant_id": tenant_id,
+                }
+            ),
             trace_id=trace_id,
         )
-        
+
         try:
             # ── 拓扑排序 ──────────────────────────────────────────────
             nodes = graph_json.get("nodes", [])
@@ -151,32 +156,35 @@ class TracingWorkflowEngine:
 
             logger.info(
                 "Workflow %s: executing %d nodes in topo order",
-                workflow_id, len(sorted_nodes),
+                workflow_id,
+                len(sorted_nodes),
             )
-            
+
             # ── 按序执行节点 ──────────────────────────────────────────
             for node_idx, node in enumerate(sorted_nodes):
                 node_id = node["id"]
                 node_type = node.get("node_type", node.get("type", "default"))
                 node_label = node.get("label", node_id)
-                
+
                 # ── 记录节点开始 span ───────────────────────────────────
                 node_start = time.time()
-                
+
                 yield AgentEvent(
                     type="workflow_node_start",
-                    content=json.dumps({
-                        "node_id": node_id,
-                        "node_type": node_type,
-                        "node_label": node_label,
-                        "index": node_idx,
-                        "total": len(sorted_nodes),
-                        "trace_id": trace_id,
-                    }),
+                    content=json.dumps(
+                        {
+                            "node_id": node_id,
+                            "node_type": node_type,
+                            "node_label": node_label,
+                            "index": node_idx,
+                            "total": len(sorted_nodes),
+                            "trace_id": trace_id,
+                        }
+                    ),
                     trace_id=trace_id,
                     span_name=f"workflow:{node_label}",
                 )
-                
+
                 # ── 检查是否有编辑命令 (Pause-Mode) ────────────────────
                 edit_session = self._check_edit_commands(workflow_id, tenant_id)
                 if edit_session:
@@ -187,12 +195,14 @@ class TracingWorkflowEngine:
                             node["config"] = {**current_config, **cmd.config_updates}
                             logger.info(
                                 "Workflow %s: applied edit for node %s: %s",
-                                workflow_id, node_id, cmd.config_updates,
+                                workflow_id,
+                                node_id,
+                                cmd.config_updates,
                             )
-                    
+
                     # 清理编辑会话
                     del _edit_sessions[edit_session.session_id]
-                
+
                 # ── 执行节点 ────────────────────────────────────────────
                 try:
                     node_result = await self._execute_node_with_trace(
@@ -216,7 +226,9 @@ class TracingWorkflowEngine:
                 except Exception as e:
                     logger.error(
                         "Workflow %s: node %s failed: %s",
-                        workflow_id, node_id, e,
+                        workflow_id,
+                        node_id,
+                        e,
                     )
                     node_result = NodeResult(
                         node_id=node_id,
@@ -225,7 +237,7 @@ class TracingWorkflowEngine:
                         duration_ms=int((time.time() - node_start) * 1000),
                     )
                     instance.results[node_id] = node_result
-                    
+
                     # 记录错误 span
                     await record_span(
                         trace_id=trace_id,
@@ -239,21 +251,23 @@ class TracingWorkflowEngine:
                         },
                         tenant_id=tenant_id,
                     )
-                    
+
                     yield AgentEvent(
                         type="workflow_node_error",
-                        content=json.dumps({
-                            "node_id": node_id,
-                            "error": str(e),
-                            "trace_id": trace_id,
-                        }),
+                        content=json.dumps(
+                            {
+                                "node_id": node_id,
+                                "error": str(e),
+                                "trace_id": trace_id,
+                            }
+                        ),
                         trace_id=trace_id,
                     )
-                
+
                 finally:
                     # ── 记录节点完成 span ─────────────────────────────────
                     node_duration = int((time.time() - node_start) * 1000)
-                    
+
                     await record_span(
                         trace_id=trace_id,
                         span_name=f"node:{node_label}",
@@ -267,12 +281,12 @@ class TracingWorkflowEngine:
                         },
                         tenant_id=tenant_id,
                     )
-            
+
             # ── 工作流完成 ──────────────────────────────────────────────
             total_duration = int((time.time() - start_time) * 1000)
             instance.status = "completed"
             instance.finished_at = time.time()
-            
+
             # 构建摘要
             summary = {
                 "workflow_id": workflow_id,
@@ -287,28 +301,31 @@ class TracingWorkflowEngine:
                 "total_duration_ms": total_duration,
                 "trace_id": trace_id,
             }
-            
+
             yield AgentEvent(
                 type="workflow_done",
                 content=json.dumps(summary, ensure_ascii=False),
                 trace_id=trace_id,
             )
-            
+
             logger.info(
                 "Workflow %s completed (trace_id=%s, duration=%dms, nodes=%d/%d)",
-                workflow_id, trace_id, total_duration,
-                summary["completed_nodes"], summary["total_nodes"],
+                workflow_id,
+                trace_id,
+                total_duration,
+                summary["completed_nodes"],
+                summary["total_nodes"],
             )
-            
+
         except Exception as e:
             logger.error("Workflow %s failed: %s", workflow_id, e)
-            
+
             yield AgentEvent(
                 type="workflow_error",
                 content=f"工作流执行失败: {str(e)}",
                 trace_id=trace_id,
             )
-    
+
     async def _execute_node_with_trace(
         self,
         node: dict,
@@ -370,7 +387,7 @@ class TracingWorkflowEngine:
             )
 
             return node_result
-    
+
     def _check_edit_commands(
         self,
         workflow_id: str,

@@ -341,20 +341,33 @@ function amountText(amount: number): string {
       @close="payResult = null"
     />
 
-    <div v-if="loading" class="loading-state">
-      <PageSkeleton variant="cards" :columns="2" />
+    <div
+      v-if="loading"
+      class="loading-state"
+    >
+      <PageSkeleton
+        variant="cards"
+        :columns="2"
+      />
     </div>
 
     <template v-else>
       <!-- 概览卡片 -->
       <div class="overview-grid">
         <Card class="balance-card">
-          <template #title><WalletOutlined /> 当前余额</template>
+          <template #title>
+            <WalletOutlined /> 当前余额
+          </template>
           <div class="balance-display">
             <span class="balance-amount">{{ balance ?? 0 }}</span>
-            <Tag color="#f59e0b">credits</Tag>
+            <Tag color="#f59e0b">
+              credits
+            </Tag>
           </div>
-          <div v-if="freeInfo" class="free-quota">
+          <div
+            v-if="freeInfo"
+            class="free-quota"
+          >
             <div class="free-quota-label">
               今日免费对话额度
               <span class="free-quota-count">{{ freeInfo.used }} / {{ freeInfo.limit }}</span>
@@ -368,7 +381,9 @@ function amountText(amount: number): string {
         </Card>
 
         <Card class="usage-card">
-          <template #title><BarChartOutlined /> 近 {{ usage?.period_days ?? 30 }} 天使用</template>
+          <template #title>
+            <BarChartOutlined /> 近 {{ usage?.period_days ?? 30 }} 天使用
+          </template>
           <div class="usage-stats">
             <div class="stat-item">
               <span class="stat-label">今日消耗</span>
@@ -387,27 +402,50 @@ function amountText(amount: number): string {
       </div>
 
       <!-- 消耗趋势 -->
-      <Card v-if="chartData.length" class="chart-card" style="margin-top: 16px">
-        <template #title><ThunderboltOutlined /> 每日消耗趋势</template>
+      <Card
+        v-if="chartData.length"
+        class="chart-card"
+        style="margin-top: 16px"
+      >
+        <template #title>
+          <ThunderboltOutlined /> 每日消耗趋势
+        </template>
         <div class="bar-chart">
-          <div v-for="d in chartData" :key="d.day" class="bar-col" :title="`${d.day}: ${d.spent} credits`">
-            <div class="bar-value">{{ d.spent > 0 ? d.spent : '' }}</div>
+          <div
+            v-for="d in chartData"
+            :key="d.day"
+            class="bar-col"
+            :title="`${d.day}: ${d.spent} credits`"
+          >
+            <div class="bar-value">
+              {{ d.spent > 0 ? d.spent : '' }}
+            </div>
             <div
               class="bar"
               :style="{ height: Math.max(2, Math.round((d.spent / chartMax) * 120)) + 'px' }"
               :class="{ 'bar-zero': d.spent === 0 }"
             />
-            <div class="bar-label">{{ d.label }}</div>
+            <div class="bar-label">
+              {{ d.label }}
+            </div>
           </div>
         </div>
       </Card>
     </template>
 
-    <Tabs v-model:activeKey="activeTab" style="margin-top: 20px">
+    <Tabs
+      v-model:active-key="activeTab"
+      style="margin-top: 20px"
+    >
       <!-- 充值 -->
-      <TabPane key="purchase" tab="充值">
+      <TabPane
+        key="purchase"
+        tab="充值"
+      >
         <Card>
-          <template #title><ShoppingOutlined /> 充值 Credits</template>
+          <template #title>
+            <ShoppingOutlined /> 充值 Credits
+          </template>
 
           <div class="purchase-form">
             <div class="form-item">
@@ -437,7 +475,12 @@ function amountText(amount: number): string {
 
             <div class="form-item">
               <label>支付方式</label>
-              <Radio.Group v-model:value="provider" :options="providerOptions" option-type="button" button-style="solid" />
+              <Radio.Group
+                v-model:value="provider"
+                :options="providerOptions"
+                option-type="button"
+                button-style="solid"
+              />
             </div>
 
             <div class="price-hint">
@@ -449,10 +492,12 @@ function amountText(amount: number): string {
               size="large"
               :loading="checkoutLoading"
               :disabled="effectiveCredits <= 0"
-              @click="handlePurchase"
               class="purchase-submit"
+              @click="handlePurchase"
             >
-              <template #icon><WalletOutlined /></template>
+              <template #icon>
+                <WalletOutlined />
+              </template>
               立即充值
             </Button>
 
@@ -467,14 +512,19 @@ function amountText(amount: number): string {
       </TabPane>
 
       <!-- 交易历史 -->
-      <TabPane key="history" tab="交易记录">
+      <TabPane
+        key="history"
+        tab="交易记录"
+      >
         <Card>
-          <template #title><BarChartOutlined /> 交易历史</template>
+          <template #title>
+            <BarChartOutlined /> 交易历史
+          </template>
           <Spin :spinning="historyLoading">
             <Table
               v-if="history.length"
               :columns="historyColumns"
-              :dataSource="history"
+              :data-source="history"
               row-key="id"
               :scroll="{ x: 640 }"
               :pagination="{ pageSize: 10, showSizeChanger: false, showTotal: (t: number) => `共 ${t} 条` }"
@@ -484,7 +534,9 @@ function amountText(amount: number): string {
                   {{ formatTime(record.created_at) }}
                 </template>
                 <template v-else-if="column.key === 'reason'">
-                  <Tag :color="reasonInfo(record.reason).color">{{ reasonInfo(record.reason).label }}</Tag>
+                  <Tag :color="reasonInfo(record.reason).color">
+                    {{ reasonInfo(record.reason).label }}
+                  </Tag>
                 </template>
                 <template v-else-if="column.key === 'amount'">
                   <span :class="record.amount >= 0 ? 'amount-add' : 'amount-deduct'">
@@ -496,7 +548,10 @@ function amountText(amount: number): string {
                 </template>
               </template>
             </Table>
-            <EmptyState v-else-if="!historyLoading" description="暂无交易记录" />
+            <EmptyState
+              v-else-if="!historyLoading"
+              description="暂无交易记录"
+            />
           </Spin>
         </Card>
       </TabPane>
@@ -507,7 +562,7 @@ function amountText(amount: number): string {
       :open="qrVisible"
       :footer="null"
       :closable="true"
-      :maskClosable="false"
+      :mask-closable="false"
       width="340px"
       title="扫码支付"
       @cancel="closeQR"
@@ -515,23 +570,45 @@ function amountText(amount: number): string {
       <div class="qr-body">
         <div class="qr-channel">
           {{ qrChannel === 'alipay' ? '支付宝' : '微信支付' }}
-          <Tag color="#f59e0b">{{ effectiveCredits }} credits</Tag>
+          <Tag color="#f59e0b">
+            {{ effectiveCredits }} credits
+          </Tag>
         </div>
 
-        <Spin :spinning="payStatus === 'pending' && !qrCode" tip="生成二维码中...">
-          <canvas v-show="qrCode" ref="qrCanvas" class="qr-canvas" />
+        <Spin
+          :spinning="payStatus === 'pending' && !qrCode"
+          tip="生成二维码中..."
+        >
+          <canvas
+            v-show="qrCode"
+            ref="qrCanvas"
+            class="qr-canvas"
+          />
         </Spin>
 
-        <div v-if="payStatus === 'pending'" class="qr-tip">
+        <div
+          v-if="payStatus === 'pending'"
+          class="qr-tip"
+        >
           <QrcodeOutlined /> 请使用{{ qrChannel === 'alipay' ? '支付宝' : '微信' }}扫码完成支付
-          <br />
+          <br>
           <span class="qr-sub">页面将自动检测支付结果，无需手动刷新</span>
         </div>
-        <div v-else-if="payStatus === 'paid'" class="qr-success">
+        <div
+          v-else-if="payStatus === 'paid'"
+          class="qr-success"
+        >
           <PayCircleOutlined /> 支付成功，Credits 已到账
         </div>
-        <div v-else class="qr-expired">
-          <Alert type="warning" message="订单已{{ payStatus === 'expired' ? '超时' : '失败' }}" description="请关闭后重新发起充值" />
+        <div
+          v-else
+          class="qr-expired"
+        >
+          <Alert
+            type="warning"
+            message="订单已{{ payStatus === 'expired' ? '超时' : '失败' }}"
+            description="请关闭后重新发起充值"
+          />
         </div>
       </div>
     </Modal>

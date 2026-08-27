@@ -387,7 +387,11 @@ onUnmounted(() => {
 <template>
   <Teleport to="body">
     <Transition name="palette">
-      <div v-if="open" class="palette-overlay" @click.self="closePalette">
+      <div
+        v-if="open"
+        class="palette-overlay"
+        @click.self="closePalette"
+      >
         <div
           class="palette-panel"
           role="dialog"
@@ -406,19 +410,27 @@ onUnmounted(() => {
               placeholder="搜索消息、媒体，或输入命令..."
               autocomplete="off"
               spellcheck="false"
-            />
+            >
             <kbd class="palette-kbd">Esc</kbd>
           </div>
 
           <!-- 结果列表 -->
-          <div ref="listEl" class="palette-body">
+          <div
+            ref="listEl"
+            class="palette-body"
+          >
             <template v-if="rows.length > 0">
               <div
                 v-for="row in rows"
                 :key="row.key"
                 class="palette-row"
               >
-                <div v-if="row.kind === 'header'" class="palette-group">{{ row.label }}</div>
+                <div
+                  v-if="row.kind === 'header'"
+                  class="palette-group"
+                >
+                  {{ row.label }}
+                </div>
                 <div
                   v-else
                   class="palette-item"
@@ -431,7 +443,10 @@ onUnmounted(() => {
                   </span>
                   <span class="palette-item-main">
                     <span class="palette-item-label">{{ row.entry?.label }}</span>
-                    <span v-if="row.entry?.desc" class="palette-item-desc">{{ row.entry?.desc }}</span>
+                    <span
+                      v-if="row.entry?.desc"
+                      class="palette-item-desc"
+                    >{{ row.entry?.desc }}</span>
                   </span>
                   <span class="palette-item-go">↵</span>
                 </div>
@@ -439,17 +454,28 @@ onUnmounted(() => {
             </template>
 
             <!-- 搜索中 -->
-            <div v-else-if="searchLoading" class="palette-status">
-              <span class="palette-status-spinner"></span>
+            <div
+              v-else-if="searchLoading"
+              class="palette-status"
+            >
+              <span class="palette-status-spinner" />
               <span>正在搜索...</span>
             </div>
 
             <!-- 搜索失败 -->
-            <div v-else-if="searchError" class="palette-status">搜索失败，请稍后重试</div>
+            <div
+              v-else-if="searchError"
+              class="palette-status"
+            >
+              搜索失败，请稍后重试
+            </div>
 
             <!-- 最近活动加载中（空输入、活动未就绪） -->
-            <div v-else-if="recentLoading" class="palette-status">
-              <span class="palette-status-spinner"></span>
+            <div
+              v-else-if="recentLoading"
+              class="palette-status"
+            >
+              <span class="palette-status-spinner" />
               <span>正在加载最近活动...</span>
             </div>
 

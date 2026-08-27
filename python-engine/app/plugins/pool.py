@@ -9,6 +9,7 @@
 多实例部署：各实例独立运行本池（MCP stdio 子进程无法跨实例共享）；
 ActiveTracker 换 Redis 实现后，轮询范围由共享活跃标记驱动。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -39,19 +40,22 @@ def _fingerprint(server: ServerConfig) -> str:
 @dataclass
 class _SharedConnection:
     """按配置指纹共享的 MCP 连接及其用户集合。"""
+
     key: str
     client: MCPClient
     users: set[str] = field(default_factory=set)
 
 
 class MCPClientPool:
-    def __init__(self, store: PluginStore | None = None, tracker: ActiveTracker | None = None) -> None:
+    def __init__(
+        self, store: PluginStore | None = None, tracker: ActiveTracker | None = None
+    ) -> None:
         self._store = store or PluginStore()
         self._tracker = tracker or ActiveTracker()
-        self._conns: dict[str, _SharedConnection] = {}   # fingerprint -> shared conn
-        self._user_sigs: dict[str, str] = {}             # user_id -> 已加载配置签名
-        self._user_conns: dict[str, set[str]] = {}       # user_id -> 引用的指纹集合
-        self._user_tools: dict[str, set[str]] = {}       # user_id -> 注册的工具名集合
+        self._conns: dict[str, _SharedConnection] = {}  # fingerprint -> shared conn
+        self._user_sigs: dict[str, str] = {}  # user_id -> 已加载配置签名
+        self._user_conns: dict[str, set[str]] = {}  # user_id -> 引用的指纹集合
+        self._user_tools: dict[str, set[str]] = {}  # user_id -> 注册的工具名集合
         self._lock = asyncio.Lock()
         self._poll_task: asyncio.Task | None = None
 
@@ -115,7 +119,9 @@ class MCPClientPool:
                 try:
                     await client.start()
                 except Exception as e:  # 单个服务器失败不阻塞其余
-                    logger.warning("mcp connect %s failed for user %s: %s", server.name, uid, e)
+                    logger.warning(
+                        "mcp connect %s failed for user %s: %s", server.name, uid, e
+                    )
                     continue
                 shared = _SharedConnection(key=key, client=client)
                 self._conns[key] = shared
@@ -167,7 +173,10 @@ class MCPClientPool:
 
 def _server_to_def(server: ServerConfig):
     from app.mcp.client import ServerDef
-    return ServerDef(name=server.name, command=server.command, args=server.args, env=server.env)
+
+    return ServerDef(
+        name=server.name, command=server.command, args=server.args, env=server.env
+    )
 
 
 def _make_tool_handler(client: MCPClient, tool_name: str):

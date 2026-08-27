@@ -1,4 +1,5 @@
 """Graph/Workflow API endpoints — CRUD + execution with PostgreSQL persistence."""
+
 from __future__ import annotations
 
 import asyncio
@@ -13,7 +14,7 @@ from pydantic import BaseModel
 
 from app.db import get_pool
 from app.main import get_gateway
-from app.workflow.engine import run_workflow, get_instance
+from app.workflow.engine import get_instance, run_workflow
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,9 @@ async def list_graphs(user_id: Optional[str] = Query(None, alias="user_id")):
 
 
 @router.post("/v1/graphs")
-async def create_graph(body: GraphCreateRequest, user_id: str = Query("", alias="user_id")):
+async def create_graph(
+    body: GraphCreateRequest, user_id: str = Query("", alias="user_id")
+):
     """Create or update a graph definition."""
     import uuid as _uuid
 
@@ -102,7 +105,12 @@ async def create_graph(body: GraphCreateRequest, user_id: str = Query("", alias=
             """INSERT INTO workflow_graphs (id, name, user_id, graph_json, created_at, updated_at)
                VALUES ($1, $2, $3, $4, $5, $6)
                ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, graph_json = EXCLUDED.graph_json, updated_at = EXCLUDED.updated_at""",
-            graph_id, body.name, effective_user_id or None, json.dumps(graph_json), now, now,
+            graph_id,
+            body.name,
+            effective_user_id or None,
+            json.dumps(graph_json),
+            now,
+            now,
         )
     except Exception as e:
         logger.error("graph insert failed: %s", e)
@@ -125,8 +133,12 @@ async def get_graph(graph_id: str):
             record = dict(row)
             if isinstance(record.get("graph_json"), str):
                 record["graph_json"] = json.loads(record["graph_json"])
-            record["created_at"] = record["created_at"].isoformat() if record.get("created_at") else ""
-            record["updated_at"] = record["updated_at"].isoformat() if record.get("updated_at") else ""
+            record["created_at"] = (
+                record["created_at"].isoformat() if record.get("created_at") else ""
+            )
+            record["updated_at"] = (
+                record["updated_at"].isoformat() if record.get("updated_at") else ""
+            )
             return {"success": True, "data": record}
     except Exception as e:
         logger.warning("graph get failed: %s", e)
@@ -141,7 +153,9 @@ async def delete_graph(graph_id: str):
         raise HTTPException(status_code=400, detail="graph_id is required")
     try:
         pool = get_pool()
-        result = await pool.execute("DELETE FROM workflow_graphs WHERE id = $1", graph_id)
+        result = await pool.execute(
+            "DELETE FROM workflow_graphs WHERE id = $1", graph_id
+        )
         if result == "DELETE 0":
             raise HTTPException(status_code=404, detail="graph not found")
     except HTTPException:
@@ -167,7 +181,8 @@ async def execute_graph(
     try:
         pool = get_pool()
         row = await pool.fetchrow(
-            "SELECT graph_json FROM workflow_graphs WHERE id = $1", graph_id,
+            "SELECT graph_json FROM workflow_graphs WHERE id = $1",
+            graph_id,
         )
         if row:
             graph_json = row["graph_json"]
@@ -178,7 +193,11 @@ async def execute_graph(
 
     # Fallback to request body
     if not graph_json:
-        graph_json = {"name": body.name or graph_id, "nodes": body.nodes, "edges": body.edges}
+        graph_json = {
+            "name": body.name or graph_id,
+            "nodes": body.nodes,
+            "edges": body.edges,
+        }
 
     graph_name = graph_json.get("name") or graph_id
     instance_id = f"wf_{uuid.uuid4().hex[:10]}"
@@ -190,12 +209,18 @@ async def execute_graph(
         await pool.execute(
             """INSERT INTO workflow_instances (id, user_id, workflow_id, workflow_name, status, results, created_at, updated_at)
                VALUES ($1, $2, $3, $4, 'running', '{}', $5, $5)""",
-            instance_id, user_id, graph_id, graph_name, now,
+            instance_id,
+            user_id,
+            graph_id,
+            graph_name,
+            now,
         )
     except Exception as e:
         logger.warning("workflow instance insert failed: %s", e)
 
-    task = asyncio.create_task(_run_and_store(instance_id, graph_json, gateway, body.initial_state, user_id))
+    task = asyncio.create_task(
+        _run_and_store(instance_id, graph_json, gateway, body.initial_state, user_id)
+    )
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
 
@@ -213,21 +238,28 @@ async def _run_and_store(
     # 工具沙箱上下文：create_task 不继承 contextvars，必须在任务内显式设置
     # （MCP 插件工具/技能等按当前用户过滤，S 安全修复）
     from app.tools.context import set_tool_context
-    set_tool_context(session_id=instance_id, user_id=user_id or "", tenant_id=user_id or "")
+
+    set_tool_context(
+        session_id=instance_id, user_id=user_id or "", tenant_id=user_id or ""
+    )
 
     status = "error"
     results_json = "{}"
     error_text = ""
     try:
-        instance = await run_workflow(graph_json, gateway, initial_state, instance_id=instance_id)
+        instance = await run_workflow(
+            graph_json, gateway, initial_state, instance_id=instance_id
+        )
         if instance.status == "completed":
             status = "completed"
         else:
             error_text = "workflow execution failed"
-        results_json = json.dumps({
-            nid: {"status": nr.status, "output": nr.output}
-            for nid, nr in instance.results.items()
-        })
+        results_json = json.dumps(
+            {
+                nid: {"status": nr.status, "output": nr.output}
+                for nid, nr in instance.results.items()
+            }
+        )
     except Exception as e:  # noqa: BLE001
         logger.error("workflow background execution failed: %s", e)
         error_text = str(e)
@@ -237,7 +269,10 @@ async def _run_and_store(
         await pool.execute(
             """UPDATE workflow_instances SET status = $1, results = $2, error = $3, updated_at = NOW()
                WHERE id = $4""",
-            status, results_json, error_text or None, instance_id,
+            status,
+            results_json,
+            error_text or None,
+            instance_id,
         )
     except Exception as e:
         logger.warning("workflow instance update failed: %s", e)
@@ -286,7 +321,10 @@ async def workflow_status(instance_id: str):
             "instance_id": inst.instance_id,
             "workflow": inst.graph_name,
             "status": inst.status,
-            "results": {nid: {"status": nr.status, "output": nr.output} for nid, nr in inst.results.items()},
+            "results": {
+                nid: {"status": nr.status, "output": nr.output}
+                for nid, nr in inst.results.items()
+            },
         }
     try:
         pool = get_pool()

@@ -2,6 +2,7 @@
 
 Mirrors Go internal/mcp/client.go with multi-server support.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -16,6 +17,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ServerDef:
     """MCP server configuration."""
+
     name: str
     command: str
     args: list[str] = field(default_factory=list)
@@ -25,6 +27,7 @@ class ServerDef:
 @dataclass
 class MCPTool:
     """A tool provided by an MCP server."""
+
     name: str  # Namespaced: {server_name}_{tool_name}
     description: str
     input_schema: dict[str, Any]
@@ -48,11 +51,15 @@ class ServerConnection:
         try:
             async for line in self.proc.stderr:
                 if line.strip():
-                    logger.warning("MCP stderr [%s]: %s", self.name, line.decode().rstrip())
+                    logger.warning(
+                        "MCP stderr [%s]: %s", self.name, line.decode().rstrip()
+                    )
         except Exception:
             pass
 
-    async def send_jsonrpc(self, method: str, params: Optional[dict] = None) -> dict[str, Any]:
+    async def send_jsonrpc(
+        self, method: str, params: Optional[dict] = None
+    ) -> dict[str, Any]:
         """Send a JSON-RPC request and read the response."""
         self._req_id += 1
         req = {
@@ -118,10 +125,12 @@ class MCPClient:
         env = None
         if server.env:
             import os
+
             env = {**os.environ, **server.env}
 
         proc = await asyncio.create_subprocess_exec(
-            server.command, *server.args,
+            server.command,
+            *server.args,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -131,10 +140,13 @@ class MCPClient:
         self._conns[server.name] = conn
 
         # Initialize
-        await conn.send_jsonrpc("initialize", {
-            "protocolVersion": "2025-03-26",
-            "clientInfo": {"name": "chiron-python", "version": "3.0.0"},
-        })
+        await conn.send_jsonrpc(
+            "initialize",
+            {
+                "protocolVersion": "2025-03-26",
+                "clientInfo": {"name": "chiron-python", "version": "3.0.0"},
+            },
+        )
 
         # List tools
         result = await conn.send_jsonrpc("tools/list", None)
@@ -157,19 +169,24 @@ class MCPClient:
     def tools(self) -> list[MCPTool]:
         return self._tools
 
-    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    async def call_tool(
+        self, tool_name: str, arguments: dict[str, Any]
+    ) -> dict[str, Any]:
         """Call a tool on the appropriate MCP server."""
         for server in self._servers:
             prefix = f"{server.name}_"
             if tool_name.startswith(prefix):
-                local_name = tool_name[len(prefix):]
+                local_name = tool_name[len(prefix) :]
                 conn = self._conns.get(server.name)
                 if not conn:
                     return {"error": f"MCP server {server.name} not connected"}
-                result = await conn.send_jsonrpc("tools/call", {
-                    "name": local_name,
-                    "arguments": arguments,
-                })
+                result = await conn.send_jsonrpc(
+                    "tools/call",
+                    {
+                        "name": local_name,
+                        "arguments": arguments,
+                    },
+                )
                 return result
         return {"error": f"Tool {tool_name} not found on any MCP server"}
 
@@ -194,10 +211,12 @@ async def load_mcp_config(config_path: str) -> list[ServerDef]:
     data = json.loads(p.read_text(encoding="utf-8"))
     servers = []
     for s in data.get("mcp_servers", []):
-        servers.append(ServerDef(
-            name=s["name"],
-            command=s["command"],
-            args=s.get("args", []),
-            env=s.get("env", {}),
-        ))
+        servers.append(
+            ServerDef(
+                name=s["name"],
+                command=s["command"],
+                args=s.get("args", []),
+                env=s.get("env", {}),
+            )
+        )
     return servers

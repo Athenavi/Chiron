@@ -8,8 +8,8 @@ from typing import Optional
 
 import jwt
 from jwt import InvalidTokenError
-
-from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.middleware.base import (BaseHTTPMiddleware,
+                                       RequestResponseEndpoint)
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
@@ -21,15 +21,17 @@ logger = logging.getLogger(__name__)
 PUBLIC_PATHS = {"/healthz", "/readyz", "/metrics", "/info", "/docs", "/openapi.json"}
 
 # 弱密钥黑名单：与 Go 端 config.go ValidateJWTSecret 保持一致
-_WEAK_JWT_SECRETS = frozenset({
-    "",
-    "dev-secret-change-in-production",
-    "dev-secret-change-in-production-12345678",
-    "changeme",
-    "secret",
-    "test-secret",
-    "change-me",
-})
+_WEAK_JWT_SECRETS = frozenset(
+    {
+        "",
+        "dev-secret-change-in-production",
+        "dev-secret-change-in-production-12345678",
+        "changeme",
+        "secret",
+        "test-secret",
+        "change-me",
+    }
+)
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -49,20 +51,30 @@ class AuthMiddleware(BaseHTTPMiddleware):
       - JWT 弱密钥在签发和校验两端均被拒绝
     """
 
-    def __init__(self, app, redis_client=None, jwt_secret: str = "", internal_token: str = ""):
+    def __init__(
+        self, app, redis_client=None, jwt_secret: str = "", internal_token: str = ""
+    ):
         super().__init__(app)
         self._redis = redis_client
         self._internal_token = internal_token
 
         if not jwt_secret or jwt_secret in _WEAK_JWT_SECRETS:
             env_secret = os.getenv("JWT_SECRET", "")
-            if env_secret and env_secret not in _WEAK_JWT_SECRETS and len(env_secret) >= 32:
+            if (
+                env_secret
+                and env_secret not in _WEAK_JWT_SECRETS
+                and len(env_secret) >= 32
+            ):
                 jwt_secret = env_secret
             else:
-                logger.warning("AuthMiddleware: JWT_SECRET 未配置或为弱密钥，Bearer Token 路径将拒绝所有请求")
+                logger.warning(
+                    "AuthMiddleware: JWT_SECRET 未配置或为弱密钥，Bearer Token 路径将拒绝所有请求"
+                )
         self._jwt_secret = jwt_secret
 
-    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         # 公开路径
         if request.url.path in PUBLIC_PATHS:
             return await call_next(request)
@@ -73,9 +85,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
             token = auth_header[7:]
             tenant_id = await self._validate_jwt(token)
             if tenant_id:
-                logger.info("Direct JWT auth accepted (bypassing gateway): tenant=%s", tenant_id)
+                logger.info(
+                    "Direct JWT auth accepted (bypassing gateway): tenant=%s", tenant_id
+                )
                 return self._set_tenant_and_continue(request, call_next, tenant_id)
-            logger.warning("JWT auth failed: invalid/expired token from %s", request.client.host if request.client else "unknown")
+            logger.warning(
+                "JWT auth failed: invalid/expired token from %s",
+                request.client.host if request.client else "unknown",
+            )
             return JSONResponse({"error": "Invalid or expired token"}, status_code=401)
 
         # 网关代理路径：仅在 X-Internal-Token 校验通过时才信任 query 透传身份

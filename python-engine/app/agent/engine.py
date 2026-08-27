@@ -6,6 +6,7 @@ Enhanced Agent Engine — Claude Code-style agent loop with:
   - Context compression (token-aware message windowing)
   - System prompt assembly (rich context injection)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -15,10 +16,10 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Callable, Awaitable
+from typing import Any, AsyncIterator, Awaitable, Callable
 
-from app.gateway.router import GatewayRouter
 from app.config import settings
+from app.gateway.router import GatewayRouter
 
 logger = logging.getLogger(__name__)
 
@@ -38,9 +39,11 @@ DANGEROUS_TOOLS: set[str] = {
 # Data classes
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 @dataclass
 class AgentTask:
     """Agent task definition passed into the engine."""
+
     id: str = ""
     tenant_id: str = ""
     user_id: str = ""
@@ -71,6 +74,7 @@ class AgentTask:
 @dataclass
 class AgentEvent:
     """Typed event yielded by the engine's ``run`` method."""
+
     type: str  # text | tool_call | tool_result | approval | done | error
     content: str = ""
     tool_call_id: str = ""
@@ -86,6 +90,7 @@ class AgentEvent:
 @dataclass
 class ToolApprovalRequest:
     """Request approval for a dangerous tool execution."""
+
     tool_name: str
     arguments: dict
     risk_level: str  # low | medium | high
@@ -103,6 +108,7 @@ class ToolApprovalRequest:
 @dataclass
 class ToolApprovalResponse:
     """External response to a :class:`ToolApprovalRequest`."""
+
     approved: bool
     reason: str = ""
 
@@ -110,6 +116,7 @@ class ToolApprovalResponse:
 # ═══════════════════════════════════════════════════════════════════════════
 # Prompt Engine
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class PromptEngine:
     """Assembles the system prompt from base prompt + context extras."""
@@ -142,6 +149,7 @@ class PromptEngine:
 # ═══════════════════════════════════════════════════════════════════════════
 # Context Manager
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class ContextManager:
     """Keeps the message list within the model's context window.
@@ -182,6 +190,7 @@ class ContextManager:
 # ═══════════════════════════════════════════════════════════════════════════
 # Session Persistence
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class AgentSession:
     """Persistent conversation session backed by PostgreSQL."""
@@ -250,8 +259,7 @@ class AgentSession:
             return
         async with pool.acquire() as conn:
             async with conn.transaction():
-                await conn.execute(
-                    """
+                await conn.execute("""
                     CREATE TABLE IF NOT EXISTS agent_sessions (
                         id            VARCHAR(64) PRIMARY KEY,
                         user_id       VARCHAR(64) NOT NULL DEFAULT '',
@@ -259,8 +267,7 @@ class AgentSession:
                         created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                         updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
                     )
-                    """
-                )
+                    """)
                 await conn.execute(
                     "CREATE INDEX IF NOT EXISTS idx_agent_sessions_user ON agent_sessions(user_id)"
                 )
@@ -271,7 +278,10 @@ class AgentSession:
         # tool_calls 统一中立化（SaaS：内部不存 provider 包装）
         if extra.get("tool_calls"):
             from app.agent.message_codec import make_message
-            msg = make_message(role=role, content=content, tool_calls=extra.pop("tool_calls"))
+
+            msg = make_message(
+                role=role, content=content, tool_calls=extra.pop("tool_calls")
+            )
             if extra:
                 msg.update(extra)
             self.messages.append(msg)
@@ -282,25 +292,30 @@ class AgentSession:
 
     def append_tool_call(self, tool_call_id: str, name: str, arguments: str) -> None:
         # 中立格式（SaaS 多提供商切换：内部一律 {id,name,arguments}）
-        self.messages.append({
-            "role": "assistant",
-            "content": "",
-            "tool_calls": [
-                {"id": tool_call_id, "name": name, "arguments": arguments}
-            ],
-        })
+        self.messages.append(
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {"id": tool_call_id, "name": name, "arguments": arguments}
+                ],
+            }
+        )
 
     def append_tool_result(self, tool_call_id: str, result_json: str) -> None:
-        self.messages.append({
-            "role": "tool",
-            "tool_call_id": tool_call_id,
-            "content": result_json,
-        })
+        self.messages.append(
+            {
+                "role": "tool",
+                "tool_call_id": tool_call_id,
+                "content": result_json,
+            }
+        )
 
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Agent Engine
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class AgentEngine:
     """Enhanced Claude Code-style agent engine.
@@ -333,7 +348,9 @@ class AgentEngine:
         context_manager: ContextManager | None = None,
         memory_manager: Any = None,
         db_pool: Any = None,
-        approval_handler: Callable[[ToolApprovalRequest], Awaitable[ToolApprovalResponse]] | None = None,
+        approval_handler: (
+            Callable[[ToolApprovalRequest], Awaitable[ToolApprovalResponse]] | None
+        ) = None,
     ):
         self._gateway = gateway
         self._tool_registry = tool_registry
@@ -346,6 +363,7 @@ class AgentEngine:
         self._pending_approvals: dict[str, asyncio.Future[ToolApprovalResponse]] = {}
         # 三栅栏（S 安全修复：输入/工具/输出）
         from app.agent.guards import InputGuard, OutputGuard, ToolGuard
+
         self._input_guard = InputGuard()
         self._tool_guard = ToolGuard()
         self._output_guard = OutputGuard(max_hits=3)
@@ -379,8 +397,12 @@ class AgentEngine:
         # ── 0. 输入栅栏：注入检测（S 安全修复）────────────────────────────
         injection = self._input_guard.check(task.content)
         if injection:
-            logger.warning("Input guard blocked (task=%s) pattern=%s", task.id, injection)
-            yield AgentEvent(type="guardrail_blocked", content="输入包含不允许的指令，已拒绝本次请求")
+            logger.warning(
+                "Input guard blocked (task=%s) pattern=%s", task.id, injection
+            )
+            yield AgentEvent(
+                type="guardrail_blocked", content="输入包含不允许的指令，已拒绝本次请求"
+            )
             return
 
         # ── 2. Assemble system prompt ─────────────────────────────────────
@@ -424,17 +446,25 @@ class AgentEngine:
                             response_content += safe
                             yield AgentEvent(type="text", content=safe)
                         if self._output_guard.blocked:
-                            logger.warning("Output guard blocked (task=%s): repeated host-path/secret leak", task.id)
-                            yield AgentEvent(type="guardrail_blocked", content="输出包含敏感路径，已截断")
+                            logger.warning(
+                                "Output guard blocked (task=%s): repeated host-path/secret leak",
+                                task.id,
+                            )
+                            yield AgentEvent(
+                                type="guardrail_blocked",
+                                content="输出包含敏感路径，已截断",
+                            )
                             break
 
                     if chunk.tool_calls:
                         for tc in chunk.tool_calls:
-                            tool_calls.append({
-                                "id": tc.id,
-                                "name": tc.name,
-                                "arguments": tc.arguments,
-                            })
+                            tool_calls.append(
+                                {
+                                    "id": tc.id,
+                                    "name": tc.name,
+                                    "arguments": tc.arguments,
+                                }
+                            )
 
                     if chunk.input_tokens:
                         total_input_tokens += chunk.input_tokens
@@ -471,6 +501,7 @@ class AgentEngine:
 
                 for tc, result in zip(tool_calls, results):
                     from app.agent.guards import OutputGuard
+
                     result_json = json.dumps(result, ensure_ascii=False)
                     # S 安全修复：工具结果进上下文前过输出清洗（宿主路径/secret 替换）
                     result_json = OutputGuard(max_hits=10_000).sanitize(result_json)
@@ -506,7 +537,9 @@ class AgentEngine:
 
     # -- approval API -------------------------------------------------------
 
-    async def submit_approval(self, tool_call_id: str, response: ToolApprovalResponse) -> None:
+    async def submit_approval(
+        self, tool_call_id: str, response: ToolApprovalResponse
+    ) -> None:
         """External callers resolve an approval request via this method.
 
         This is the counterpart to the ``approval`` event yielded by ``run()``.
@@ -522,9 +555,13 @@ class AgentEngine:
             existing = await AgentSession.load(self._db_pool, task.session_id)
             if existing:
                 return existing
-        return AgentSession(id=task.session_id or str(uuid.uuid4()), user_id=task.user_id)
+        return AgentSession(
+            id=task.session_id or str(uuid.uuid4()), user_id=task.user_id
+        )
 
-    def _build_raw_messages(self, system_prompt: str, session_messages: list[dict]) -> list[dict]:
+    def _build_raw_messages(
+        self, system_prompt: str, session_messages: list[dict]
+    ) -> list[dict]:
         """Build the message list sent to the LLM."""
         messages: list[dict] = []
         if system_prompt:
@@ -542,14 +579,16 @@ class AgentEngine:
                     params = json.loads(tool["parameters_json"])
                 except (json.JSONDecodeError, TypeError):
                     params = {}
-            converted.append({
-                "type": "function",
-                "function": {
-                    "name": tool.get("name", ""),
-                    "description": tool.get("description", ""),
-                    "parameters": params or {},
-                },
-            })
+            converted.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": tool.get("name", ""),
+                        "description": tool.get("description", ""),
+                        "parameters": params or {},
+                    },
+                }
+            )
         return converted
 
     async def _execute_tool_calls(
@@ -571,7 +610,11 @@ class AgentEngine:
         for idx, tc in enumerate(tool_calls):
             # 工具栅栏：三态裁决（S 安全修复）
             try:
-                targs = json.loads(tc["arguments"]) if isinstance(tc["arguments"], str) else tc["arguments"]
+                targs = (
+                    json.loads(tc["arguments"])
+                    if isinstance(tc["arguments"], str)
+                    else tc["arguments"]
+                )
             except (json.JSONDecodeError, TypeError):
                 targs = {}
             verdict = self._tool_guard.evaluate(tc["name"], targs or {})
@@ -579,7 +622,9 @@ class AgentEngine:
                 blocked_results[idx] = {
                     "error": f"Tool '{tc['name']}' blocked by guard: {verdict.reason}",
                 }
-                logger.warning("Tool guard blocked %s reason=%s", tc["name"], verdict.reason)
+                logger.warning(
+                    "Tool guard blocked %s reason=%s", tc["name"], verdict.reason
+                )
                 continue
             if verdict.action == "confirm" or self._needs_approval(tc["name"]):
                 approval_tasks.append((idx, tc))
@@ -593,8 +638,10 @@ class AgentEngine:
 
         # ── Execute auto-approved tools in parallel ───────────────────────
         if auto_tasks:
+
             async def _run_tool(tc: dict) -> dict:
                 return await self._execute_single_tool(tc, task)
+
             auto_results = await asyncio.gather(
                 *[_run_tool(tc) for _, tc in auto_tasks],
                 return_exceptions=True,
@@ -616,7 +663,11 @@ class AgentEngine:
         """Execute one tool call via the registry or external executor."""
         name = tc["name"]
         try:
-            args = json.loads(tc["arguments"]) if isinstance(tc["arguments"], str) else tc["arguments"]
+            args = (
+                json.loads(tc["arguments"])
+                if isinstance(tc["arguments"], str)
+                else tc["arguments"]
+            )
         except (json.JSONDecodeError, TypeError):
             args = {}
 
@@ -643,6 +694,7 @@ class AgentEngine:
     def _to_chat_messages(messages: list[dict]):
         """中立格式 → gateway.ChatMessage（provider 边界）。"""
         from app.agent.message_codec import to_chat_messages
+
         return to_chat_messages(messages)
 
     async def _handle_approval(
@@ -657,7 +709,11 @@ class AgentEngine:
         """
         name = tc["name"]
         try:
-            args = json.loads(tc["arguments"]) if isinstance(tc["arguments"], str) else tc["arguments"]
+            args = (
+                json.loads(tc["arguments"])
+                if isinstance(tc["arguments"], str)
+                else tc["arguments"]
+            )
         except (json.JSONDecodeError, TypeError):
             args = {}
 

@@ -203,17 +203,27 @@ async function runQuickCommand() {
 <template>
   <div class="app-shell">
     <!-- 左上角浮动品牌胶囊 -->
-    <header :title="currentLabel || '导航菜单'" class="topbar">
-      <Dropdown placement="bottomLeft" trigger="click">
-        <button class="brand-btn" title="导航菜单" type="button">
+    <header
+      :title="currentLabel || '导航菜单'"
+      class="topbar"
+    >
+      <Dropdown
+        placement="bottomLeft"
+        trigger="click"
+      >
+        <button
+          class="brand-btn"
+          title="导航菜单"
+          type="button"
+        >
           <span class="brand-logo">MC</span>
           <span class="brand-name">Chiron</span>
-          <DownOutlined class="brand-caret"/>
+          <DownOutlined class="brand-caret" />
         </button>
         <template #overlay>
           <Menu
             :items="menuItems"
-            :selectedKeys="selectedKeys"
+            :selected-keys="selectedKeys"
             class="nav-menu"
             @click="handleMenuClick"
           />
@@ -222,7 +232,11 @@ async function runQuickCommand() {
     </header>
 
     <!-- 工作台停靠坞 -->
-    <nav v-if="showDock" aria-label="工作台停靠坞" class="dock">
+    <nav
+      v-if="showDock"
+      aria-label="工作台停靠坞"
+      class="dock"
+    >
       <div class="dock-items">
         <button
           v-for="item in dockItems"
@@ -233,8 +247,14 @@ async function runQuickCommand() {
           type="button"
           @click="goDock(item.key)"
         >
-          <component :is="item.icon" class="dock-icon"/>
-          <span class="dock-tip" role="tooltip">
+          <component
+            :is="item.icon"
+            class="dock-icon"
+          />
+          <span
+            class="dock-tip"
+            role="tooltip"
+          >
             <span class="dock-tip-name">{{ item.label }}</span>
             <span class="dock-tip-desc">{{ item.desc }}</span>
           </span>
@@ -251,7 +271,7 @@ async function runQuickCommand() {
           type="button"
           @click="toggleQuickCommand"
         >
-          <ConsoleSqlOutlined/>
+          <ConsoleSqlOutlined />
         </button>
         <Transition name="dock-pop">
           <div
@@ -273,14 +293,17 @@ async function runQuickCommand() {
                 type="text"
                 @keydown.enter="runQuickCommand"
                 @keydown.esc="closeQuickCommand"
-              />
+              >
               <button
                 :disabled="quickLoading"
                 class="dock-command-go"
                 type="button"
                 @click="runQuickCommand"
               >
-                <span v-if="quickLoading" class="dock-spinner"></span>
+                <span
+                  v-if="quickLoading"
+                  class="dock-spinner"
+                />
                 <span v-else>执行</span>
               </button>
             </div>
@@ -291,8 +314,11 @@ async function runQuickCommand() {
 
     <!-- 右上角用户胶囊 -->
     <div class="topbar-actions">
-      <ThemeSwitcher/>
-      <div v-if="authStore.user" class="user-fab">
+      <ThemeSwitcher />
+      <div
+        v-if="authStore.user"
+        class="user-fab"
+      >
         <Dropdown :menu="{ items: userMenuItems, onClick: handleUserMenuClick }">
           <Avatar
             :size="30"
@@ -306,16 +332,22 @@ async function runQuickCommand() {
     </div>
 
     <!-- 全宽内容区 -->
-    <main :class="{ 'app-content--docked': showDock }" class="app-content">
+    <main
+      :class="{ 'app-content--docked': showDock }"
+      class="app-content"
+    >
       <router-view v-slot="{ Component }">
-        <Transition mode="out-in" name="fade">
-          <component :is="Component"/>
+        <Transition
+          mode="out-in"
+          name="fade"
+        >
+          <component :is="Component" />
         </Transition>
       </router-view>
     </main>
 
     <!-- 全局命令面板 -->
-    <CommandPalette/>
+    <CommandPalette />
   </div>
 </template>
 

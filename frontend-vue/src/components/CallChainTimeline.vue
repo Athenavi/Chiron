@@ -1,21 +1,46 @@
 <!-- Unified CallChain Timeline — 聊天界面底部折叠面板 -->
 <template>
-  <div v-if="isVisible" class="callchain-timeline">
+  <div
+    v-if="isVisible"
+    class="callchain-timeline"
+  >
     <CollapseTransition>
-      <div class="timeline-header" @click="toggle">
+      <div
+        class="timeline-header"
+        @click="toggle"
+      >
         <span class="header-title">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M8 1v14M1 8h14" stroke="currentColor" stroke-width="2"/>
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="none"
+          >
+            <path
+              d="M8 1v14M1 8h14"
+              stroke="currentColor"
+              stroke-width="2"
+            />
           </svg>
           工具调用链 ({{ spanCount }} 个工具, 总耗时 {{ totalDurationMs }}ms)
         </span>
         <span class="header-icon">{{ isExpanded ? '▼' : '▶' }}</span>
       </div>
 
-      <div v-if="isExpanded" class="timeline-body">
+      <div
+        v-if="isExpanded"
+        class="timeline-body"
+      >
         <!-- 时间线渲染 -->
-        <div v-for="(span, idx) in displaySpans" :key="idx" class="timeline-node">
-          <div class="node-line" :class="getNodeClass(span)">
+        <div
+          v-for="(span, idx) in displaySpans"
+          :key="idx"
+          class="timeline-node"
+        >
+          <div
+            class="node-line"
+            :class="getNodeClass(span)"
+          >
             <span class="node-icon">{{ getNodeIcon(span) }}</span>
             <div class="node-content">
               <div class="node-header">
@@ -24,12 +49,18 @@
               </div>
               
               <!-- 展开详情 -->
-              <div v-if="span.showDetails" class="node-details">
+              <div
+                v-if="span.showDetails"
+                class="node-details"
+              >
                 <pre class="metadata-json">{{ formatMetadata(span.metadata) }}</pre>
               </div>
             </div>
             
-            <button class="details-toggle" @click.stop="span.showDetails = !span.showDetails">
+            <button
+              class="details-toggle"
+              @click.stop="span.showDetails = !span.showDetails"
+            >
               {{ span.showDetails ? '收起' : '详情' }}
             </button>
           </div>

@@ -20,12 +20,7 @@ from typing import Any, Optional
 
 import redis.asyncio as aioredis
 
-from app.memory.layers import (
-    MemoryConflict,
-    ProfileItem,
-    SlotType,
-    SourceType,
-)
+from app.memory.layers import MemoryConflict, ProfileItem, SlotType, SourceType
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +61,9 @@ class ConflictManager:
         return f"memory:conflict:pending_list:{tenant_id}:{user_id}"
 
     @staticmethod
-    def _derived_count_key(tenant_id: str, user_id: str, slot: str, item_key: str) -> str:
+    def _derived_count_key(
+        tenant_id: str, user_id: str, slot: str, item_key: str
+    ) -> str:
         """生成 derived 出现次数计数键。"""
         return f"memory:conflict:derived_count:{tenant_id}:{user_id}:{slot}:{item_key}"
 
@@ -101,12 +98,18 @@ class ConflictManager:
 
         # 如果 Redis 不可用，跳过冲突管理，允许直接写入
         if self._redis is None:
-            logger.debug("Conflict manager disabled (Redis unavailable), allowing write for %s:%s", slot, item_key)
+            logger.debug(
+                "Conflict manager disabled (Redis unavailable), allowing write for %s:%s",
+                slot,
+                item_key,
+            )
             return False, None
 
         # user_confirmed 冲突：如果现有条目是 user_confirmed，新条目不是
-        if (existing_item.source == SourceType.USER_CONFIRMED
-                and new_source != SourceType.USER_CONFIRMED):
+        if (
+            existing_item.source == SourceType.USER_CONFIRMED
+            and new_source != SourceType.USER_CONFIRMED
+        ):
             # 检查 derived 二次出现
             if new_source == SourceType.DERIVED:
                 count = await self._increment_derived_count(
@@ -117,7 +120,11 @@ class ConflictManager:
                     logger.info(
                         "Derived auto-write triggered for %s:%s "
                         "(count=%d, tenant=%s, user=%s)",
-                        slot, item_key, count, tenant_id, user_id,
+                        slot,
+                        item_key,
+                        count,
+                        tenant_id,
+                        user_id,
                     )
                     return False, None  # 允许写入
 
@@ -136,7 +143,9 @@ class ConflictManager:
             await self._store_pending_confirmation(conflict)
             logger.info(
                 "Conflict detected and stored: %s (slot=%s, key=%s)",
-                conflict.conflict_id, slot, item_key,
+                conflict.conflict_id,
+                slot,
+                item_key,
             )
             return True, conflict  # 阻止写入
 
@@ -251,17 +260,19 @@ class ConflictManager:
             if data:
                 try:
                     item = json.loads(data)
-                    conflicts.append(MemoryConflict(
-                        conflict_id=item["conflict_id"],
-                        slot=SlotType(item["slot"]),
-                        item_key=item["item_key"],
-                        old_value=item["old_value"],
-                        new_value=item["new_value"],
-                        source=SourceType(item["source"]),
-                        tenant_id=item["tenant_id"],
-                        user_id=item["user_id"],
-                        created_at=item["created_at"],
-                    ))
+                    conflicts.append(
+                        MemoryConflict(
+                            conflict_id=item["conflict_id"],
+                            slot=SlotType(item["slot"]),
+                            item_key=item["item_key"],
+                            old_value=item["old_value"],
+                            new_value=item["new_value"],
+                            source=SourceType(item["source"]),
+                            tenant_id=item["tenant_id"],
+                            user_id=item["user_id"],
+                            created_at=item["created_at"],
+                        )
+                    )
                 except (json.JSONDecodeError, KeyError) as e:
                     logger.warning("Failed to parse conflict %s: %s", cid, e)
 
@@ -301,7 +312,9 @@ class ConflictManager:
             final_value = conflict["new_value"]
         elif resolution == "manual":
             if manual_value is None:
-                return False, {"error": "manual_value is required for manual resolution"}
+                return False, {
+                    "error": "manual_value is required for manual resolution"
+                }
             final_value = manual_value
         else:
             return False, {"error": f"Unknown resolution: {resolution}"}
@@ -313,7 +326,9 @@ class ConflictManager:
 
         logger.info(
             "Conflict %s resolved: %s → %s",
-            conflict_id, resolution, final_value,
+            conflict_id,
+            resolution,
+            final_value,
         )
 
         return True, {

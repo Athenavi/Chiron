@@ -38,21 +38,52 @@ const padLeft = computed(() => (props.depth || 0) * 22)
 </script>
 
 <template>
-  <div class="tool-row-wrap" :data-state="item.status" :data-tool="item.name">
+  <div
+    class="tool-row-wrap"
+    :data-state="item.status"
+    :data-tool="item.name"
+  >
     <!-- 工具树缩进连接线 -->
-    <div v-if="(depth || 0) > 0" class="tree-guide" :style="{ left: `${padLeft - 14}px` }" aria-hidden />
+    <div
+      v-if="(depth || 0) > 0"
+      class="tree-guide"
+      :style="{ left: `${padLeft - 14}px` }"
+      aria-hidden
+    />
 
-    <div class="tool-row" :style="{ marginLeft: `${padLeft}px` }">
-      <button class="tool-main" type="button" @click="expanded = !expanded">
-        <CaretRightOutlined class="chevron" :class="{ open: expanded }" />
+    <div
+      class="tool-row"
+      :style="{ marginLeft: `${padLeft}px` }"
+    >
+      <button
+        class="tool-main"
+        type="button"
+        @click="expanded = !expanded"
+      >
+        <CaretRightOutlined
+          class="chevron"
+          :class="{ open: expanded }"
+        />
         <span class="tool-name">{{ item.name }}</span>
-        <span class="sep" aria-hidden />
-        <span class="state-dot" :class="item.status" aria-hidden />
+        <span
+          class="sep"
+          aria-hidden
+        />
+        <span
+          class="state-dot"
+          :class="item.status"
+          aria-hidden
+        />
         <span class="tool-summary">{{ summary }}</span>
       </button>
 
       <Transition name="expand">
-        <div v-if="expanded" class="tool-args"><pre>{{ prettyArgs() }}</pre></div>
+        <div
+          v-if="expanded"
+          class="tool-args"
+        >
+          <pre>{{ prettyArgs() }}</pre>
+        </div>
       </Transition>
     </div>
   </div>

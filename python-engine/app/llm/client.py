@@ -7,6 +7,7 @@ gateway 由 main.py 启动时通过 bind_gateway 注入（与 tools/graph.py 等
 fail-loud：未配置任何后端（本地模型 + gateway 均不可用）时抛出 RuntimeError，
 绝不返回零向量伪装成功。
 """
+
 from __future__ import annotations
 
 import asyncio

@@ -150,13 +150,23 @@ onMounted(() => {
     <div class="page-header">
       <h1>🔴 Redis 管理</h1>
       <Space>
-        <Button @click="loadRedis">刷新状态</Button>
+        <Button @click="loadRedis">
+          刷新状态
+        </Button>
         <Button @click="loadSlowLog">
-          <template #icon><ReloadOutlined /></template>
+          <template #icon>
+            <ReloadOutlined />
+          </template>
           刷新慢日志
         </Button>
-        <Button danger type="primary" @click="flushVisible = true">
-          <template #icon><ClearOutlined /></template>
+        <Button
+          danger
+          type="primary"
+          @click="flushVisible = true"
+        >
+          <template #icon>
+            <ClearOutlined />
+          </template>
           FLUSH ALL
         </Button>
       </Space>
@@ -164,22 +174,55 @@ onMounted(() => {
 
     <Spin :spinning="loading && !redisData">
       <!-- 状态卡 -->
-      <Card title="实例状态" style="margin-bottom: 16px">
-        <Descriptions v-if="redisData" :column="2" bordered size="small">
+      <Card
+        title="实例状态"
+        style="margin-bottom: 16px"
+      >
+        <Descriptions
+          v-if="redisData"
+          :column="2"
+          bordered
+          size="small"
+        >
           <Descriptions.Item label="状态">
-            <Tag :color="statusColor(redisData.status)">{{ statusText(redisData.status) }}</Tag>
+            <Tag :color="statusColor(redisData.status)">
+              {{ statusText(redisData.status) }}
+            </Tag>
           </Descriptions.Item>
-          <Descriptions.Item label="运行模式">{{ redisData.mode || '-' }}</Descriptions.Item>
+          <Descriptions.Item label="运行模式">
+            {{ redisData.mode || '-' }}
+          </Descriptions.Item>
         </Descriptions>
-        <EmptyState v-else description="暂无 Redis 实例信息" />
+        <EmptyState
+          v-else
+          description="暂无 Redis 实例信息"
+        />
       </Card>
 
       <!-- 连接池统计 -->
-      <Card title="连接池统计" style="margin-bottom: 16px">
+      <Card
+        title="连接池统计"
+        style="margin-bottom: 16px"
+      >
         <Row :gutter="[16, 16]">
-          <Col v-for="s in poolStats" :key="s.title" :xs="12" :sm="8" :md="6" :lg="4">
-            <Card size="small" class="pool-stat">
-              <Statistic :title="s.title" :value="s.value" :precision="s.precision" :suffix="s.suffix" />
+          <Col
+            v-for="s in poolStats"
+            :key="s.title"
+            :xs="12"
+            :sm="8"
+            :md="6"
+            :lg="4"
+          >
+            <Card
+              size="small"
+              class="pool-stat"
+            >
+              <Statistic
+                :title="s.title"
+                :value="s.value"
+                :precision="s.precision"
+                :suffix="s.suffix"
+              />
             </Card>
           </Col>
         </Row>

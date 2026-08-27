@@ -8,6 +8,7 @@
 说明：这是 A 层（代码层）约束——提高绕过门槛；完整隔离仍需部署侧 B 层
 （容器/低权限/subprocess，见 plugin_runner.py）。
 """
+
 from __future__ import annotations
 
 import ast
@@ -15,33 +16,84 @@ import builtins as _b
 
 # ── 静态安全检查：禁止沙箱代码直接访问宿主 ─────────────────────────────
 DANGEROUS_MODULES = {
-    "os", "subprocess", "sys", "ctypes", "socket", "importlib",
-    "pathlib", "shutil", "tempfile", "glob", "atexit", "signal", "multiprocessing",
-    "pickle", "marshal", "dbm", "shelve",  # 防止序列化攻击
-    "asyncio.tasks", "http.client", "urllib", "requests",  # 防止网络请求
-    "telnetlib", "ftplib", "smtplib", "imaplib", "poplib",  # 防止协议攻击
+    "os",
+    "subprocess",
+    "sys",
+    "ctypes",
+    "socket",
+    "importlib",
+    "pathlib",
+    "shutil",
+    "tempfile",
+    "glob",
+    "atexit",
+    "signal",
+    "multiprocessing",
+    "pickle",
+    "marshal",
+    "dbm",
+    "shelve",  # 防止序列化攻击
+    "asyncio.tasks",
+    "http.client",
+    "urllib",
+    "requests",  # 防止网络请求
+    "telnetlib",
+    "ftplib",
+    "smtplib",
+    "imaplib",
+    "poplib",  # 防止协议攻击
 }
-DANGEROUS_CALLS = {"open", "exec", "eval", "compile", "__import__", "input", "breakpoint"}
+DANGEROUS_CALLS = {
+    "open",
+    "exec",
+    "eval",
+    "compile",
+    "__import__",
+    "input",
+    "breakpoint",
+}
 DANGEROUS_ATTRS = ("os.", "subprocess.", "sys.", "socket.", "ctypes.")
 # 注意：getattr/setattr 等反射函数不在静态层封杀 —— 静态层无法识别动态构造的
 # 混淆调用，这类攻击由运行时守卫（_safe_builtins stub）兜底拦截（纵深防御）。
 
 DANGEROUS_ATTR_PATHS = (
-    "os.system", "os.popen", "os.startfile", "os.remove",
-    "os.rename", "os.chdir", "os.mkdir", "os.makedirs",
-    "sys.exit", "subprocess.run", "subprocess.Popen",
-    "subprocess.call", "socket.socket", "shutil.rmtree",
-    "shutil.copy", "shutil.move", "pathlib.Path",
+    "os.system",
+    "os.popen",
+    "os.startfile",
+    "os.remove",
+    "os.rename",
+    "os.chdir",
+    "os.mkdir",
+    "os.makedirs",
+    "sys.exit",
+    "subprocess.run",
+    "subprocess.Popen",
+    "subprocess.call",
+    "socket.socket",
+    "shutil.rmtree",
+    "shutil.copy",
+    "shutil.move",
+    "pathlib.Path",
 )
 
 # 对象内省/逃逸链属性（S 修复）：堵死 __class__.__mro__[].__subclasses__()
 # 一类访问宿主模块的经典沙箱逃逸。这些是对象属性访问,运行时 __builtins__
 # stub 拦不到(不经 getattr),故在静态层直接封禁属性名。沙箱代码无合法需要。
-BLOCKED_SUBCLASS_ATTRS = frozenset({
-    "__class__", "__subclasses__", "__base__", "__bases__", "__mro__",
-    "__dict__", "__globals__", "__closure__", "__code__",
-    "__getattribute__", "__build_class__",
-})
+BLOCKED_SUBCLASS_ATTRS = frozenset(
+    {
+        "__class__",
+        "__subclasses__",
+        "__base__",
+        "__bases__",
+        "__mro__",
+        "__dict__",
+        "__globals__",
+        "__closure__",
+        "__code__",
+        "__getattribute__",
+        "__build_class__",
+    }
+)
 
 
 def check_static(code: str) -> str | None:
@@ -92,19 +144,34 @@ def check_static(code: str) -> str | None:
 # 导致沙箱逃逸。模型代码不需要它们（文件 IO 由 tools 注入 namespace 提供）。
 # asyncio 保留：模型代码常需 `await asyncio.sleep()`/`asyncio.gather()`，且
 # 危险子模块（asyncio.subprocess）由 DANGEROUS_ATTRS 静态守卫拦截。
-SAFE_IMPORTS = frozenset({
-    "json", "math", "random", "datetime", "re", "collections",
-    "itertools", "typing", "time", "functools", "decimal",
-    "string", "asyncio",
-})
+SAFE_IMPORTS = frozenset(
+    {
+        "json",
+        "math",
+        "random",
+        "datetime",
+        "re",
+        "collections",
+        "itertools",
+        "typing",
+        "time",
+        "functools",
+        "decimal",
+        "string",
+        "asyncio",
+    }
+)
 BLOCKED_BUILTINS = frozenset({"open", "exec", "eval", "compile", "input", "breakpoint"})
 # 反射攻击函数
-BLOCKED_REFLECTIVE = frozenset({"getattr", "setattr", "delattr", "dir", "vars", "locals", "globals"})
+BLOCKED_REFLECTIVE = frozenset(
+    {"getattr", "setattr", "delattr", "dir", "vars", "locals", "globals"}
+)
 
 
 def _make_blocked_builtin(name: str):
     def _blocked(*_args, **_kwargs):  # noqa: ANN002, ANN003 — 桩函数
         raise RuntimeError(f"blocked by runtime guard: {name}()")
+
     return _blocked
 
 
@@ -113,7 +180,9 @@ def safe_builtins() -> dict:
     orig = vars(_b).copy()
     real_import = orig["__import__"]
 
-    def _guarded_import(name, globals=None, locals=None, fromlist=(), level=0):  # noqa: A002
+    def _guarded_import(
+        name, globals=None, locals=None, fromlist=(), level=0
+    ):  # noqa: A002
         root = (name or "").split(".")[0]
         if root in SAFE_IMPORTS:
             return real_import(name, globals, locals, fromlist, level)

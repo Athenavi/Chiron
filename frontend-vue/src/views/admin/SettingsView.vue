@@ -395,224 +395,510 @@ onMounted(async () => {
   <div class="settings">
     <Row :gutter="16">
       <!-- 限流配置 -->
-      <Col :xs="24" :sm="12">
+      <Col
+        :xs="24"
+        :sm="12"
+      >
         <Card title="限流配置">
-          <Form :model="rateLimitConfig" layout="vertical">
+          <Form
+            :model="rateLimitConfig"
+            layout="vertical"
+          >
             <FormItem label="全局（每分钟）">
-              <InputNumber v-model:value="rateLimitConfig.global" :min="100" :max="1000000" style="width: 100%" />
+              <InputNumber
+                v-model:value="rateLimitConfig.global"
+                :min="100"
+                :max="1000000"
+                style="width: 100%"
+              />
             </FormItem>
             <FormItem label="单租户（每分钟）">
-              <InputNumber v-model:value="rateLimitConfig.tenant" :min="10" :max="100000" style="width: 100%" />
+              <InputNumber
+                v-model:value="rateLimitConfig.tenant"
+                :min="10"
+                :max="100000"
+                style="width: 100%"
+              />
             </FormItem>
             <FormItem label="单用户（每分钟）">
-              <InputNumber v-model:value="rateLimitConfig.user" :min="1" :max="10000" style="width: 100%" />
+              <InputNumber
+                v-model:value="rateLimitConfig.user"
+                :min="1"
+                :max="10000"
+                style="width: 100%"
+              />
             </FormItem>
           </Form>
-          <Button type="primary" :loading="saving" @click="saveRateLimit">保存</Button>
-          <div class="config-note">保存后即刻生效（热更新）。</div>
+          <Button
+            type="primary"
+            :loading="saving"
+            @click="saveRateLimit"
+          >
+            保存
+          </Button>
+          <div class="config-note">
+            保存后即刻生效（热更新）。
+          </div>
         </Card>
       </Col>
 
       <!-- 降级配置 -->
-      <Col :xs="24" :sm="12">
+      <Col
+        :xs="24"
+        :sm="12"
+      >
         <Card title="降级配置">
-          <Form :model="degradationConfig" layout="vertical">
+          <Form
+            :model="degradationConfig"
+            layout="vertical"
+          >
             <FormItem label="启用降级">
               <Switch v-model:checked="degradationConfig.enabled" />
             </FormItem>
             <FormItem label="轻度过载阈值">
-              <InputNumber v-model:value="degradationConfig.lightThreshold" :min="10000" :max="1000000" style="width: 100%" />
+              <InputNumber
+                v-model:value="degradationConfig.lightThreshold"
+                :min="10000"
+                :max="1000000"
+                style="width: 100%"
+              />
             </FormItem>
             <FormItem label="中度过载阈值">
-              <InputNumber v-model:value="degradationConfig.mediumThreshold" :min="50000" :max="1000000" style="width: 100%" />
+              <InputNumber
+                v-model:value="degradationConfig.mediumThreshold"
+                :min="50000"
+                :max="1000000"
+                style="width: 100%"
+              />
             </FormItem>
             <FormItem label="重度过载阈值">
-              <InputNumber v-model:value="degradationConfig.heavyThreshold" :min="100000" :max="1000000" style="width: 100%" />
+              <InputNumber
+                v-model:value="degradationConfig.heavyThreshold"
+                :min="100000"
+                :max="1000000"
+                style="width: 100%"
+              />
             </FormItem>
             <FormItem label="VIP 优先">
               <Switch v-model:checked="degradationConfig.vipPriority" />
             </FormItem>
           </Form>
-          <Button type="primary" :loading="saving" @click="saveDegradation">保存</Button>
+          <Button
+            type="primary"
+            :loading="saving"
+            @click="saveDegradation"
+          >
+            保存
+          </Button>
         </Card>
       </Col>
 
       <!-- 缓存配置 -->
-      <Col :xs="24" :sm="12">
+      <Col
+        :xs="24"
+        :sm="12"
+      >
         <Card title="缓存配置">
-          <Form :model="cacheConfig" layout="vertical">
+          <Form
+            :model="cacheConfig"
+            layout="vertical"
+          >
             <FormItem label="L1 容量">
-              <InputNumber v-model:value="cacheConfig.l1Capacity" :min="100" :max="10000" style="width: 100%" />
+              <InputNumber
+                v-model:value="cacheConfig.l1Capacity"
+                :min="100"
+                :max="10000"
+                style="width: 100%"
+              />
             </FormItem>
             <FormItem label="L2 TTL">
-              <InputNumber v-model:value="cacheConfig.l2Ttl" :min="60" :max="86400" style="width: 100%" />
+              <InputNumber
+                v-model:value="cacheConfig.l2Ttl"
+                :min="60"
+                :max="86400"
+                style="width: 100%"
+              />
             </FormItem>
             <FormItem label="语义缓存阈值">
-              <Slider v-model:value="cacheConfig.semanticThreshold" :min="0.5" :max="1" :step="0.01" />
+              <Slider
+                v-model:value="cacheConfig.semanticThreshold"
+                :min="0.5"
+                :max="1"
+                :step="0.01"
+              />
             </FormItem>
             <FormItem label="启用预取">
               <Switch v-model:checked="cacheConfig.prefetchEnabled" />
             </FormItem>
           </Form>
-          <Button type="primary" :loading="saving" @click="saveCache">保存</Button>
+          <Button
+            type="primary"
+            :loading="saving"
+            @click="saveCache"
+          >
+            保存
+          </Button>
         </Card>
       </Col>
 
       <!-- API Key 配置 -->
-      <Col :xs="24" :sm="12">
+      <Col
+        :xs="24"
+        :sm="12"
+      >
         <Card title="API Key 配置">
-          <Form :model="apiKeyConfig" layout="vertical">
+          <Form
+            :model="apiKeyConfig"
+            layout="vertical"
+          >
             <FormItem label="熔断阈值">
-              <InputNumber v-model:value="apiKeyConfig.circuitBreakerThreshold" :min="1" :max="100" style="width: 100%" />
+              <InputNumber
+                v-model:value="apiKeyConfig.circuitBreakerThreshold"
+                :min="1"
+                :max="100"
+                style="width: 100%"
+              />
             </FormItem>
             <FormItem label="恢复超时">
-              <InputNumber v-model:value="apiKeyConfig.recoveryTimeout" :min="10" :max="3600" style="width: 100%" />
+              <InputNumber
+                v-model:value="apiKeyConfig.recoveryTimeout"
+                :min="10"
+                :max="3600"
+                style="width: 100%"
+              />
             </FormItem>
             <FormItem label="权重衰减">
-              <Slider v-model:value="apiKeyConfig.weightDecay" :min="0.1" :max="1" :step="0.1" />
+              <Slider
+                v-model:value="apiKeyConfig.weightDecay"
+                :min="0.1"
+                :max="1"
+                :step="0.1"
+              />
             </FormItem>
             <FormItem label="自动恢复">
               <Switch v-model:checked="apiKeyConfig.autoRecovery" />
             </FormItem>
           </Form>
-          <Button type="primary" :loading="saving" @click="saveApiKey">保存</Button>
+          <Button
+            type="primary"
+            :loading="saving"
+            @click="saveApiKey"
+          >
+            保存
+          </Button>
         </Card>
       </Col>
     </Row>
 
     <!-- 迁移自 .env 的业务配置（持久化到 DB system_settings） -->
-    <Row :gutter="16" class="config-row">
+    <Row
+      :gutter="16"
+      class="config-row"
+    >
       <!-- Agent 配置 -->
-      <Col :xs="24" :sm="12">
+      <Col
+        :xs="24"
+        :sm="12"
+      >
         <Card title="Agent 配置">
-          <Form :model="agentConfig" layout="vertical">
+          <Form
+            :model="agentConfig"
+            layout="vertical"
+          >
             <FormItem label="最大推理轮数">
-              <InputNumber v-model:value="agentConfig.max_turns" :min="1" :max="100" style="width: 100%" />
+              <InputNumber
+                v-model:value="agentConfig.max_turns"
+                :min="1"
+                :max="100"
+                style="width: 100%"
+              />
             </FormItem>
             <FormItem label="每次调用最大 Token">
-              <InputNumber v-model:value="agentConfig.max_tokens" :min="256" :max="32768" style="width: 100%" />
+              <InputNumber
+                v-model:value="agentConfig.max_tokens"
+                :min="256"
+                :max="32768"
+                style="width: 100%"
+              />
             </FormItem>
             <FormItem label="上下文消息数限制">
-              <InputNumber v-model:value="agentConfig.context_limit" :min="1" :max="100" style="width: 100%" />
+              <InputNumber
+                v-model:value="agentConfig.context_limit"
+                :min="1"
+                :max="100"
+                style="width: 100%"
+              />
             </FormItem>
           </Form>
-          <Button type="primary" :loading="saving" @click="saveAgent">保存</Button>
-          <div class="config-note">保存到 DB，运行时消费项重启后生效。</div>
+          <Button
+            type="primary"
+            :loading="saving"
+            @click="saveAgent"
+          >
+            保存
+          </Button>
+          <div class="config-note">
+            保存到 DB，运行时消费项重启后生效。
+          </div>
         </Card>
       </Col>
 
       <!-- LLM / 模型配置 -->
-      <Col :xs="24" :sm="12">
+      <Col
+        :xs="24"
+        :sm="12"
+      >
         <Card title="模型配置">
-          <Form :model="llmConfig" layout="vertical">
+          <Form
+            :model="llmConfig"
+            layout="vertical"
+          >
             <FormItem label="Provider">
-              <Select v-model:value="llmConfig.provider" style="width: 100%">
-                <Select.Option value="openai">OpenAI</Select.Option>
-                <Select.Option value="anthropic">Anthropic</Select.Option>
-                <Select.Option value="deepseek">DeepSeek</Select.Option>
+              <Select
+                v-model:value="llmConfig.provider"
+                style="width: 100%"
+              >
+                <Select.Option value="openai">
+                  OpenAI
+                </Select.Option>
+                <Select.Option value="anthropic">
+                  Anthropic
+                </Select.Option>
+                <Select.Option value="deepseek">
+                  DeepSeek
+                </Select.Option>
               </Select>
             </FormItem>
             <FormItem label="默认模型">
-              <Input v-model:value="llmConfig.model" placeholder="gpt-4o" />
+              <Input
+                v-model:value="llmConfig.model"
+                placeholder="gpt-4o"
+              />
             </FormItem>
           </Form>
-          <Button type="primary" :loading="saving" @click="saveLlm">保存</Button>
-          <div class="config-note">Provider/Model 已持久化到 DB，重启生效；密钥类敏感值加密入库。</div>
+          <Button
+            type="primary"
+            :loading="saving"
+            @click="saveLlm"
+          >
+            保存
+          </Button>
+          <div class="config-note">
+            Provider/Model 已持久化到 DB，重启生效；密钥类敏感值加密入库。
+          </div>
         </Card>
       </Col>
 
       <!-- 存储配置 -->
-      <Col :xs="24" :sm="12">
+      <Col
+        :xs="24"
+        :sm="12"
+      >
         <Card title="存储配置">
-          <Form :model="storageConfig" layout="vertical">
+          <Form
+            :model="storageConfig"
+            layout="vertical"
+          >
             <FormItem label="后端类型">
-              <Select v-model:value="storageConfig.backend" style="width: 100%">
-                <Select.Option value="local">本地磁盘</Select.Option>
-                <Select.Option value="s3">S3 / MinIO</Select.Option>
+              <Select
+                v-model:value="storageConfig.backend"
+                style="width: 100%"
+              >
+                <Select.Option value="local">
+                  本地磁盘
+                </Select.Option>
+                <Select.Option value="s3">
+                  S3 / MinIO
+                </Select.Option>
               </Select>
             </FormItem>
             <FormItem label="存储根目录">
-              <Input v-model:value="storageConfig.root" placeholder="./workspace" />
+              <Input
+                v-model:value="storageConfig.root"
+                placeholder="./workspace"
+              />
             </FormItem>
           </Form>
-          <Button type="primary" :loading="saving" @click="saveStorage">保存</Button>
-          <div class="config-note">保存到 DB，运行时消费项重启后生效。</div>
+          <Button
+            type="primary"
+            :loading="saving"
+            @click="saveStorage"
+          >
+            保存
+          </Button>
+          <div class="config-note">
+            保存到 DB，运行时消费项重启后生效。
+          </div>
         </Card>
       </Col>
 
       <!-- 支付配置（非敏感项） -->
-      <Col :xs="24" :sm="12">
+      <Col
+        :xs="24"
+        :sm="12"
+      >
         <Card title="支付配置">
-          <Form :model="paymentConfig" layout="vertical">
+          <Form
+            :model="paymentConfig"
+            layout="vertical"
+          >
             <FormItem label="公网基础 URL">
-              <Input v-model:value="paymentConfig.public_base_url" placeholder="https://api.example.com" />
+              <Input
+                v-model:value="paymentConfig.public_base_url"
+                placeholder="https://api.example.com"
+              />
             </FormItem>
             <FormItem label="支付宝网关">
-              <Input v-model:value="paymentConfig.alipay_gateway" placeholder="https://openapi.alipay.com/gateway.do" />
+              <Input
+                v-model:value="paymentConfig.alipay_gateway"
+                placeholder="https://openapi.alipay.com/gateway.do"
+              />
             </FormItem>
           </Form>
-          <Button type="primary" :loading="saving" @click="savePayment">保存</Button>
-          <div class="config-note">密钥类凭据不入库，由环境变量注入。</div>
+          <Button
+            type="primary"
+            :loading="saving"
+            @click="savePayment"
+          >
+            保存
+          </Button>
+          <div class="config-note">
+            密钥类凭据不入库，由环境变量注入。
+          </div>
         </Card>
       </Col>
     </Row>
 
     <!-- 连接与密钥配置（敏感值 AES-GCM 加密入库） -->
-    <Row :gutter="16" class="config-row">
+    <Row
+      :gutter="16"
+      class="config-row"
+    >
       <!-- Redis 配置 -->
-      <Col :xs="24" :sm="12">
+      <Col
+        :xs="24"
+        :sm="12"
+      >
         <Card title="Redis 配置">
-          <Form :model="redisConfig" layout="vertical">
+          <Form
+            :model="redisConfig"
+            layout="vertical"
+          >
             <FormItem label="地址">
-              <Input v-model:value="redisConfig.addr" placeholder="localhost:6379" />
+              <Input
+                v-model:value="redisConfig.addr"
+                placeholder="localhost:6379"
+              />
             </FormItem>
             <FormItem label="密码（加密入库）">
-              <InputPassword v-model:value="redisConfig.password" placeholder="空则无密码" />
+              <InputPassword
+                v-model:value="redisConfig.password"
+                placeholder="空则无密码"
+              />
             </FormItem>
             <FormItem label="DB">
-              <InputNumber v-model:value="redisConfig.db" :min="0" :max="15" style="width: 100%" />
+              <InputNumber
+                v-model:value="redisConfig.db"
+                :min="0"
+                :max="15"
+                style="width: 100%"
+              />
             </FormItem>
           </Form>
-          <Button type="primary" :loading="saving" @click="saveRedis">保存</Button>
-          <div class="config-note">保存后热更新连接；可切换 Redis 集群。</div>
+          <Button
+            type="primary"
+            :loading="saving"
+            @click="saveRedis"
+          >
+            保存
+          </Button>
+          <div class="config-note">
+            保存后热更新连接；可切换 Redis 集群。
+          </div>
         </Card>
       </Col>
 
       <!-- PostgreSQL 配置 -->
-      <Col :xs="24" :sm="12">
+      <Col
+        :xs="24"
+        :sm="12"
+      >
         <Card title="数据库（PostgreSQL）配置">
-          <Form :model="postgresConfig" layout="vertical">
+          <Form
+            :model="postgresConfig"
+            layout="vertical"
+          >
             <FormItem label="DSN（加密入库）">
-              <InputPassword v-model:value="postgresConfig.dsn" placeholder="postgres://user:pass@host:5432/chiron" />
+              <InputPassword
+                v-model:value="postgresConfig.dsn"
+                placeholder="postgres://user:pass@host:5432/chiron"
+              />
             </FormItem>
           </Form>
-          <Button type="primary" :loading="saving" @click="savePostgres">保存</Button>
-          <div class="config-note">保存到 DB，切换数据库集群需重启生效。</div>
+          <Button
+            type="primary"
+            :loading="saving"
+            @click="savePostgres"
+          >
+            保存
+          </Button>
+          <div class="config-note">
+            保存到 DB，切换数据库集群需重启生效。
+          </div>
         </Card>
       </Col>
 
       <!-- CORS 配置 -->
-      <Col :xs="24" :sm="12">
+      <Col
+        :xs="24"
+        :sm="12"
+      >
         <Card title="CORS 配置">
-          <Form :model="corsConfig" layout="vertical">
+          <Form
+            :model="corsConfig"
+            layout="vertical"
+          >
             <FormItem label="允许来源（逗号分隔）">
-              <Input v-model:value="corsConfig.origins" placeholder="http://localhost:5173,https://app.example.com" />
+              <Input
+                v-model:value="corsConfig.origins"
+                placeholder="http://localhost:5173,https://app.example.com"
+              />
             </FormItem>
           </Form>
-          <Button type="primary" :loading="saving" @click="saveCors">保存</Button>
-          <div class="config-note">保存后重启生效。</div>
+          <Button
+            type="primary"
+            :loading="saving"
+            @click="saveCors"
+          >
+            保存
+          </Button>
+          <div class="config-note">
+            保存后重启生效。
+          </div>
         </Card>
       </Col>
 
       <!-- S3 / MinIO 配置 -->
-      <Col :xs="24" :sm="12">
+      <Col
+        :xs="24"
+        :sm="12"
+      >
         <Card title="对象存储（S3/MinIO）配置">
-          <Form :model="s3Config" layout="vertical">
+          <Form
+            :model="s3Config"
+            layout="vertical"
+          >
             <FormItem label="Endpoint">
-              <Input v-model:value="s3Config.endpoint" placeholder="localhost:9000" />
+              <Input
+                v-model:value="s3Config.endpoint"
+                placeholder="localhost:9000"
+              />
             </FormItem>
             <FormItem label="Bucket">
-              <Input v-model:value="s3Config.bucket" placeholder="chiron-media" />
+              <Input
+                v-model:value="s3Config.bucket"
+                placeholder="chiron-media"
+              />
             </FormItem>
             <FormItem label="Access Key">
               <Input v-model:value="s3Config.access_key" />
@@ -624,70 +910,152 @@ onMounted(async () => {
               <Switch v-model:checked="s3Config.use_ssl" />
             </FormItem>
           </Form>
-          <Button type="primary" :loading="saving" @click="saveS3">保存</Button>
-          <div class="config-note">保存后重启生效。</div>
+          <Button
+            type="primary"
+            :loading="saving"
+            @click="saveS3"
+          >
+            保存
+          </Button>
+          <div class="config-note">
+            保存后重启生效。
+          </div>
         </Card>
       </Col>
 
       <!-- Python AI 引擎配置 -->
-      <Col :xs="24" :sm="24">
+      <Col
+        :xs="24"
+        :sm="24"
+      >
         <Card title="Python AI 引擎配置">
           <Row :gutter="16">
-            <Col :xs="24" :sm="12">
-              <Form :model="pythonConfig" layout="vertical">
+            <Col
+              :xs="24"
+              :sm="12"
+            >
+              <Form
+                :model="pythonConfig"
+                layout="vertical"
+              >
                 <FormItem label="LLM Provider">
-                  <Select v-model:value="pythonConfig.llm_provider" style="width: 100%">
-                    <Select.Option value="openai">OpenAI</Select.Option>
-                    <Select.Option value="anthropic">Anthropic</Select.Option>
-                    <Select.Option value="deepseek">DeepSeek</Select.Option>
+                  <Select
+                    v-model:value="pythonConfig.llm_provider"
+                    style="width: 100%"
+                  >
+                    <Select.Option value="openai">
+                      OpenAI
+                    </Select.Option>
+                    <Select.Option value="anthropic">
+                      Anthropic
+                    </Select.Option>
+                    <Select.Option value="deepseek">
+                      DeepSeek
+                    </Select.Option>
                   </Select>
                 </FormItem>
                 <FormItem label="默认模型">
-                  <Input v-model:value="pythonConfig.llm_model" placeholder="deepseek-v4-flash" />
+                  <Input
+                    v-model:value="pythonConfig.llm_model"
+                    placeholder="deepseek-v4-flash"
+                  />
                 </FormItem>
                 <FormItem label="LLM API Key（加密入库）">
                   <InputPassword v-model:value="pythonConfig.llm_api_key" />
                 </FormItem>
                 <FormItem label="LLM Base URL">
-                  <Input v-model:value="pythonConfig.llm_base_url" placeholder="https://api.deepseek.com" />
+                  <Input
+                    v-model:value="pythonConfig.llm_base_url"
+                    placeholder="https://api.deepseek.com"
+                  />
                 </FormItem>
               </Form>
             </Col>
-            <Col :xs="24" :sm="12">
-              <Form :model="pythonConfig" layout="vertical">
+            <Col
+              :xs="24"
+              :sm="12"
+            >
+              <Form
+                :model="pythonConfig"
+                layout="vertical"
+              >
                 <FormItem label="Embedding 模型">
-                  <Input v-model:value="pythonConfig.embedding_model" placeholder="text-embedding-3-small" />
+                  <Input
+                    v-model:value="pythonConfig.embedding_model"
+                    placeholder="text-embedding-3-small"
+                  />
                 </FormItem>
                 <FormItem label="Agent 最大轮数">
-                  <InputNumber v-model:value="pythonConfig.max_turns" :min="1" :max="100" style="width: 100%" />
+                  <InputNumber
+                    v-model:value="pythonConfig.max_turns"
+                    :min="1"
+                    :max="100"
+                    style="width: 100%"
+                  />
                 </FormItem>
                 <FormItem label="队列并发数">
-                  <InputNumber v-model:value="pythonConfig.queue_worker_concurrency" :min="1" :max="100" style="width: 100%" />
+                  <InputNumber
+                    v-model:value="pythonConfig.queue_worker_concurrency"
+                    :min="1"
+                    :max="100"
+                    style="width: 100%"
+                  />
                 </FormItem>
                 <FormItem label="L1 缓存容量">
-                  <InputNumber v-model:value="pythonConfig.cache_l1_capacity" :min="128" :max="100000" style="width: 100%" />
+                  <InputNumber
+                    v-model:value="pythonConfig.cache_l1_capacity"
+                    :min="128"
+                    :max="100000"
+                    style="width: 100%"
+                  />
                 </FormItem>
               </Form>
             </Col>
           </Row>
-          <Button type="primary" :loading="saving" @click="savePython">保存</Button>
-          <div class="config-note">引擎启动时经内部端点拉取，API Key 加密入库。</div>
+          <Button
+            type="primary"
+            :loading="saving"
+            @click="savePython"
+          >
+            保存
+          </Button>
+          <div class="config-note">
+            引擎启动时经内部端点拉取，API Key 加密入库。
+          </div>
         </Card>
       </Col>
     </Row>
 
     <!-- Nginx 配置 -->
-    <Card title="Nginx 调优配置" class="config-card">
+    <Card
+      title="Nginx 调优配置"
+      class="config-card"
+    >
       <template #extra>
-        <Button type="primary" ghost @click="copyNginx">复制配置</Button>
+        <Button
+          type="primary"
+          ghost
+          @click="copyNginx"
+        >
+          复制配置
+        </Button>
       </template>
       <pre class="code-block">{{ nginxConfig }}</pre>
     </Card>
 
     <!-- 内核调优 -->
-    <Card title="内核调优配置" class="config-card">
+    <Card
+      title="内核调优配置"
+      class="config-card"
+    >
       <template #extra>
-        <Button type="primary" ghost @click="copyKernel">复制配置</Button>
+        <Button
+          type="primary"
+          ghost
+          @click="copyKernel"
+        >
+          复制配置
+        </Button>
       </template>
       <pre class="code-block">{{ kernelConfig }}</pre>
     </Card>

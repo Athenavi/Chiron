@@ -25,13 +25,20 @@ def configure_tracing(
 
     try:
         import os
+
         from opentelemetry import trace
+        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
+            OTLPSpanExporter
+        from opentelemetry.sdk.resources import Resource
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
-        from opentelemetry.sdk.resources import Resource
-        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 
-        use_insecure = insecure if insecure is not None else os.getenv("OTEL_EXPORTER_OTLP_INSECURE", "true").lower() in ("1", "true", "yes")
+        use_insecure = (
+            insecure
+            if insecure is not None
+            else os.getenv("OTEL_EXPORTER_OTLP_INSECURE", "true").lower()
+            in ("1", "true", "yes")
+        )
         resource = Resource.create({"service.name": service_name})
         provider = TracerProvider(resource=resource)
         exporter = OTLPSpanExporter(endpoint=otlp_endpoint, insecure=use_insecure)

@@ -7,13 +7,13 @@
 - Scope: 记忆查询范围
 - 事件类型: MemoryConflict 等
 """
+
 from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Literal
-
 
 # ── L1: 会话元数据 ─────────────────────────────────────────────────────
 
@@ -25,6 +25,7 @@ class SessionMeta:
     存储会话级别的簿记数据：session_id、入口渠道、模式、回合数、token 用量等。
     与对话内容无关，纯粹为路由、计费、审计、降级标记服务。
     """
+
     session_id: str
     tenant_id: str
     user_id: str
@@ -55,6 +56,7 @@ class SessionMeta:
 @dataclass
 class SessionContext:
     """会话上下文（on_session_start 返回）。"""
+
     meta: SessionMeta
     profile_cached: bool  # L2 档案卡是否已缓存
     summaries_prefetched: int  # 预取的 L3 摘要数量
@@ -66,6 +68,7 @@ class SessionContext:
 @dataclass
 class Scope:
     """记忆查询范围（tenant + user + session）。"""
+
     tenant_id: str
     user_id: str
     session_id: str
@@ -73,6 +76,7 @@ class Scope:
 
 class MemoryType(str, Enum):
     """记忆类型引用（Milvus memory_type 取值）。"""
+
     PROFILE = "profile"
     SUMMARY = "summary"
     TOPIC = "topic"
@@ -85,6 +89,7 @@ class MemoryType(str, Enum):
 
 class SlotType(str, Enum):
     """L2 档案卡槽位类型。"""
+
     IDENTITY = "identity"  # 身份属性
     PREFERENCE = "preference"  # 偏好
     DECISION = "decision"  # 关键决策
@@ -93,6 +98,7 @@ class SlotType(str, Enum):
 
 class SourceType(str, Enum):
     """记忆来源类型。"""
+
     USER_CONFIRMED = "user_confirmed"  # 用户显式确认
     DERIVED = "derived"  # Agent 提炼
     TOOL_WRITTEN = "tool_written"  # 工具写入
@@ -111,6 +117,7 @@ SLOT_LABELS: dict[str, str] = {
 @dataclass
 class ProfileItem:
     """L2 档案卡单个条目。"""
+
     slot: SlotType
     item_key: str
     item_value: Any
@@ -125,7 +132,9 @@ class ProfileItem:
 
     def to_dict(self) -> dict[str, Any]:
         slot_val = self.slot.value if isinstance(self.slot, SlotType) else self.slot
-        source_val = self.source.value if isinstance(self.source, SourceType) else self.source
+        source_val = (
+            self.source.value if isinstance(self.source, SourceType) else self.source
+        )
         return {
             "id": self.id or f"{slot_val}:{self.item_key}",
             "slot": slot_val,
@@ -144,6 +153,7 @@ class ProfileItem:
 @dataclass
 class MemoryEntry:
     """L2 用户记忆条目（= user_memory_entries 行模型，profile.py 持久层使用）。"""
+
     id: str
     tenant_id: str
     user_id: str
@@ -163,6 +173,7 @@ class MemoryEntry:
 @dataclass
 class ProfileUpdateResult:
     """L2 档案卡更新结果。"""
+
     success: bool
     item: ProfileItem | None
     conflict: ConflictRef | None = None
@@ -171,6 +182,7 @@ class ProfileUpdateResult:
 @dataclass
 class ConflictRef:
     """冲突引用（当 L2 更新时与 user_confirmed 冲突）。"""
+
     conflict_id: str
     slot: SlotType
     item_key: str
@@ -198,6 +210,7 @@ class ConflictRef:
 @dataclass
 class SummaryEntry:
     """L3 对话摘要条目（存储用）。"""
+
     id: str
     tenant_id: str
     user_id: str
@@ -218,6 +231,7 @@ class SummaryEntry:
 @dataclass
 class RecalledItem:
     """L3 召回的单个摘要项。"""
+
     id: str
     content: str
     topics: list[str]
@@ -233,6 +247,7 @@ class RecalledItem:
 @dataclass
 class RecallResult:
     """recall 方法返回结果。"""
+
     profile_block: str  # L2 档案卡紧凑序列化（≤1.5KB）
     summary_items: list[RecalledItem]  # L3 召回的摘要（≤6KB）
 
@@ -241,7 +256,10 @@ class RecallResult:
         """是否有有效内容（L2 档案卡或 L3 摘要）。"""
         # 注意：profile_block 中的 "暂无用户档案信息" 是无档案时的占位文本，
         # 不应视为有效内容。
-        has_profile = bool(self.profile_block.strip()) and "暂无用户档案信息" not in self.profile_block
+        has_profile = (
+            bool(self.profile_block.strip())
+            and "暂无用户档案信息" not in self.profile_block
+        )
         return has_profile or len(self.summary_items) > 0
 
 
@@ -251,6 +269,7 @@ class RecallResult:
 @dataclass
 class MemoryConflict:
     """记忆冲突事件（SSE 推送）。"""
+
     conflict_id: str
     slot: SlotType
     item_key: str
@@ -268,6 +287,7 @@ class MemoryConflict:
 @dataclass
 class MemoryRef:
     """记忆引用（用于 forget 操作）。"""
+
     memory_type: MemoryType
     # 如果 memory_type == "profile"
     slot: SlotType | None = None
@@ -279,6 +299,7 @@ class MemoryRef:
 @dataclass
 class TokenUsage:
     """Token 使用统计。"""
+
     prompt_tokens: int
     completion_tokens: int
     total_tokens: int

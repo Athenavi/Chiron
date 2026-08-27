@@ -166,14 +166,30 @@ const userInitial = computed(() => authStore.user?.name?.charAt(0)?.toUpperCase(
     >
       <div class="sider-brand">
         <span class="sider-logo">MC</span>
-        <span v-if="!collapsed" class="sider-name">Chiron Admin</span>
+        <span
+          v-if="!collapsed"
+          class="sider-name"
+        >Chiron Admin</span>
       </div>
       <div class="sider-menu">
-        <Menu mode="inline" :selected-keys="selectedKeys" :inline-collapsed="collapsed" @click="handleMenuClick">
-          <template v-for="g in menuGroups" :key="g.key">
+        <Menu
+          mode="inline"
+          :selected-keys="selectedKeys"
+          :inline-collapsed="collapsed"
+          @click="handleMenuClick"
+        >
+          <template
+            v-for="g in menuGroups"
+            :key="g.key"
+          >
             <MenuItemGroup :title="collapsed ? '' : g.label">
-              <MenuItem v-for="m in g.children" :key="m.key">
-                <template #icon><component :is="m.icon" /></template>
+              <MenuItem
+                v-for="m in g.children"
+                :key="m.key"
+              >
+                <template #icon>
+                  <component :is="m.icon" />
+                </template>
                 {{ m.label }}
               </MenuItem>
             </MenuItemGroup>
@@ -193,14 +209,29 @@ const userInitial = computed(() => authStore.user?.name?.charAt(0)?.toUpperCase(
     >
       <div class="sider-brand">
         <span class="sider-logo">MC</span>
-        <span v-if="drawerOpen" class="sider-name">Chiron Admin</span>
+        <span
+          v-if="drawerOpen"
+          class="sider-name"
+        >Chiron Admin</span>
       </div>
       <div class="sider-menu">
-        <Menu mode="inline" :selected-keys="selectedKeys" @click="handleMenuClick">
-          <template v-for="g in menuGroups" :key="g.key">
+        <Menu
+          mode="inline"
+          :selected-keys="selectedKeys"
+          @click="handleMenuClick"
+        >
+          <template
+            v-for="g in menuGroups"
+            :key="g.key"
+          >
             <MenuItemGroup :title="g.label">
-              <MenuItem v-for="m in g.children" :key="m.key">
-                <template #icon><component :is="m.icon" /></template>
+              <MenuItem
+                v-for="m in g.children"
+                :key="m.key"
+              >
+                <template #icon>
+                  <component :is="m.icon" />
+                </template>
                 {{ m.label }}
               </MenuItem>
             </MenuItemGroup>
@@ -208,7 +239,11 @@ const userInitial = computed(() => authStore.user?.name?.charAt(0)?.toUpperCase(
         </Menu>
       </div>
     </LayoutSider>
-    <div v-if="isMobile && drawerOpen" class="admin-drawer-mask" @click="drawerOpen = false" />
+    <div
+      v-if="isMobile && drawerOpen"
+      class="admin-drawer-mask"
+      @click="drawerOpen = false"
+    />
 
     <Layout class="admin-main">
       <LayoutHeader class="admin-header">
@@ -233,14 +268,33 @@ const userInitial = computed(() => authStore.user?.name?.charAt(0)?.toUpperCase(
           </Breadcrumb>
         </div>
         <div class="header-actions">
-          <Badge :count="0" :overflow-count="99">
-            <Button type="text" class="header-btn" title="通知" aria-label="通知">
-              <template #icon><BellOutlined /></template>
+          <Badge
+            :count="0"
+            :overflow-count="99"
+          >
+            <Button
+              type="text"
+              class="header-btn"
+              title="通知"
+              aria-label="通知"
+            >
+              <template #icon>
+                <BellOutlined />
+              </template>
             </Button>
           </Badge>
-          <Dropdown :menu="{ items: userMenuItems, onClick: handleUserAction }" placement="bottomRight">
-            <div class="header-user" title="用户菜单">
-              <Avatar :size="30" :style="{ backgroundColor: 'var(--primary)', color: '#fff' }">
+          <Dropdown
+            :menu="{ items: userMenuItems, onClick: handleUserAction }"
+            placement="bottomRight"
+          >
+            <div
+              class="header-user"
+              title="用户菜单"
+            >
+              <Avatar
+                :size="30"
+                :style="{ backgroundColor: 'var(--primary)', color: '#fff' }"
+              >
                 {{ userInitial }}
               </Avatar>
               <span class="header-user-name">{{ authStore.user?.name || 'Admin' }}</span>
@@ -250,7 +304,10 @@ const userInitial = computed(() => authStore.user?.name?.charAt(0)?.toUpperCase(
       </LayoutHeader>
       <LayoutContent class="admin-content">
         <router-view v-slot="{ Component }">
-          <Transition name="fade" mode="out-in">
+          <Transition
+            name="fade"
+            mode="out-in"
+          >
             <component :is="Component" />
           </Transition>
         </router-view>

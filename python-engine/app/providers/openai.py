@@ -6,13 +6,8 @@ from typing import AsyncIterator
 
 from openai import AsyncOpenAI
 
-from app.gateway.provider import (
-    ChatMessage,
-    ChatResponse,
-    EmbeddingResponse,
-    LLMProvider,
-    ToolCall,
-)
+from app.gateway.provider import (ChatMessage, ChatResponse, EmbeddingResponse,
+                                  LLMProvider, ToolCall)
 
 logger = logging.getLogger(__name__)
 
@@ -57,9 +52,11 @@ class OpenAIProvider(LLMProvider):
             delta = chunk.choices[0].delta
 
             # DeepSeek thinking mode：获取 reasoning_content（API 发送的是增量文本）
-            if hasattr(delta, 'reasoning_content') and delta.reasoning_content:
+            if hasattr(delta, "reasoning_content") and delta.reasoning_content:
                 reasoning_content += delta.reasoning_content  # 累积完整思考文本
-                yield ChatResponse(reasoning_content=delta.reasoning_content)  # 传递增量
+                yield ChatResponse(
+                    reasoning_content=delta.reasoning_content
+                )  # 传递增量
 
             if delta.content:
                 yield ChatResponse(content=delta.content)
@@ -84,7 +81,8 @@ class OpenAIProvider(LLMProvider):
                     output_tokens = chunk.usage.completion_tokens
                 parsed = [
                     ToolCall(id=tc["id"], name=tc["name"], arguments=tc["arguments"])
-                    for tc in tool_calls if tc["id"]
+                    for tc in tool_calls
+                    if tc["id"]
                 ]
                 yield ChatResponse(
                     tool_calls=parsed,
@@ -121,14 +119,18 @@ class OpenAIProvider(LLMProvider):
         if choice.message.tool_calls:
             for tc in choice.message.tool_calls:
                 tool_calls.append(
-                    ToolCall(id=tc.id, name=tc.function.name, arguments=tc.function.arguments)
+                    ToolCall(
+                        id=tc.id, name=tc.function.name, arguments=tc.function.arguments
+                    )
                 )
 
         usage = resp.usage
         return ChatResponse(
             content=content,
             tool_calls=tool_calls,
-            finish_reason="tool_calls" if tool_calls else (choice.finish_reason or "stop"),
+            finish_reason=(
+                "tool_calls" if tool_calls else (choice.finish_reason or "stop")
+            ),
             input_tokens=usage.prompt_tokens if usage else 0,
             output_tokens=usage.completion_tokens if usage else 0,
         )
@@ -156,7 +158,7 @@ class OpenAIProvider(LLMProvider):
     ) -> dict:
         kwargs: dict = {
             "model": model,
-            "messages": [m.to_dict() if hasattr(m, 'to_dict') else m for m in messages],
+            "messages": [m.to_dict() if hasattr(m, "to_dict") else m for m in messages],
             "max_tokens": max_tokens,
             "temperature": temperature,
         }
@@ -164,12 +166,22 @@ class OpenAIProvider(LLMProvider):
         msgs = kwargs["messages"]
         for i, m in enumerate(msgs):
             if m.get("role") == "tool":
-                prev = msgs[i-1] if i > 0 else None
+                prev = msgs[i - 1] if i > 0 else None
                 if prev:
                     has_tc = bool(prev.get("tool_calls"))
-                    logger.info("Tool msg #%d: prev role=%s has_tool_calls=%s tool_call_id=%s",
-                                i, prev.get("role"), has_tc, m.get("tool_call_id", ""))
-        logger.info("LLM call: model=%s msgs=%d roles=%s", model, len(msgs), [m.get("role") for m in msgs])
+                    logger.info(
+                        "Tool msg #%d: prev role=%s has_tool_calls=%s tool_call_id=%s",
+                        i,
+                        prev.get("role"),
+                        has_tc,
+                        m.get("tool_call_id", ""),
+                    )
+        logger.info(
+            "LLM call: model=%s msgs=%d roles=%s",
+            model,
+            len(msgs),
+            [m.get("role") for m in msgs],
+        )
         if tools:
             # 统一转为 OpenAI function 格式
             converted = []

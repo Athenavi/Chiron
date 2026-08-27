@@ -174,11 +174,18 @@ onMounted(loadTenants)
       <h1>🏢 租户管理</h1>
       <Space>
         <Button @click="loadTenants">
-          <template #icon><ReloadOutlined /></template>
+          <template #icon>
+            <ReloadOutlined />
+          </template>
           刷新
         </Button>
-        <Button type="primary" @click="openCreate">
-          <template #icon><PlusOutlined /></template>
+        <Button
+          type="primary"
+          @click="openCreate"
+        >
+          <template #icon>
+            <PlusOutlined />
+          </template>
           新建租户
         </Button>
       </Space>
@@ -194,12 +201,17 @@ onMounted(loadTenants)
           :scroll="{ x: 720 }"
         >
           <template #emptyText>
-            <EmptyState description="暂无租户" hint="点击右上角「新建租户」创建第一个租户" />
+            <EmptyState
+              description="暂无租户"
+              hint="点击右上角「新建租户」创建第一个租户"
+            />
           </template>
 
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'status'">
-              <Tag :color="statusColor(record.status)">{{ statusText(record.status) }}</Tag>
+              <Tag :color="statusColor(record.status)">
+                {{ statusText(record.status) }}
+              </Tag>
             </template>
 
             <template v-else-if="column.key === 'created_at'">
@@ -207,13 +219,26 @@ onMounted(loadTenants)
             </template>
 
             <template v-else-if="column.key === 'actions'">
-              <Space :size="4" wrap>
-                <Button size="small" @click="openUsage(record)">
-                  <template #icon><BarChartOutlined /></template>
+              <Space
+                :size="4"
+                wrap
+              >
+                <Button
+                  size="small"
+                  @click="openUsage(record)"
+                >
+                  <template #icon>
+                    <BarChartOutlined />
+                  </template>
                   用量
                 </Button>
-                <Button size="small" @click="openEdit(record)">
-                  <template #icon><EditOutlined /></template>
+                <Button
+                  size="small"
+                  @click="openEdit(record)"
+                >
+                  <template #icon>
+                    <EditOutlined />
+                  </template>
                   编辑
                 </Button>
                 <Popconfirm
@@ -240,8 +265,13 @@ onMounted(loadTenants)
                   cancel-text="取消"
                   @confirm="removeTenant(record)"
                 >
-                  <Button size="small" danger>
-                    <template #icon><DeleteOutlined /></template>
+                  <Button
+                    size="small"
+                    danger
+                  >
+                    <template #icon>
+                      <DeleteOutlined />
+                    </template>
                     删除
                   </Button>
                 </Popconfirm>
@@ -262,13 +292,27 @@ onMounted(loadTenants)
       @ok="submitForm"
     >
       <Form layout="vertical">
-        <Form.Item label="租户名称" required>
-          <Input v-model:value="form.name" placeholder="例如: ACME Corporation" @press-enter="submitForm" />
+        <Form.Item
+          label="租户名称"
+          required
+        >
+          <Input
+            v-model:value="form.name"
+            placeholder="例如: ACME Corporation"
+            @press-enter="submitForm"
+          />
         </Form.Item>
-        <Form.Item v-if="editingId" label="状态">
+        <Form.Item
+          v-if="editingId"
+          label="状态"
+        >
           <Select v-model:value="form.status">
-            <Select.Option value="active">活跃</Select.Option>
-            <Select.Option value="suspended">已挂起</Select.Option>
+            <Select.Option value="active">
+              活跃
+            </Select.Option>
+            <Select.Option value="suspended">
+              已挂起
+            </Select.Option>
           </Select>
         </Form.Item>
       </Form>
@@ -282,12 +326,23 @@ onMounted(loadTenants)
       :footer="null"
     >
       <Spin :spinning="usageLoading">
-        <Descriptions :column="1" bordered size="small">
-          <Descriptions.Item v-for="item in usageItems" :key="item.key" :label="item.label">
+        <Descriptions
+          :column="1"
+          bordered
+          size="small"
+        >
+          <Descriptions.Item
+            v-for="item in usageItems"
+            :key="item.key"
+            :label="item.label"
+          >
             {{ usageValue(item.key) }}
           </Descriptions.Item>
         </Descriptions>
-        <div v-if="!usageLoading && !usage" class="usage-empty">
+        <div
+          v-if="!usageLoading && !usage"
+          class="usage-empty"
+        >
           <EmptyState description="暂无用量数据" />
         </div>
       </Spin>

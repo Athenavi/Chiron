@@ -221,9 +221,13 @@ onMounted(async () => {
     <div class="page-header">
       <h1>🗄️ 数据库管理</h1>
       <Space>
-        <Button @click="loadStatus">刷新状态</Button>
+        <Button @click="loadStatus">
+          刷新状态
+        </Button>
         <Button @click="loadBackups">
-          <template #icon><ReloadOutlined /></template>
+          <template #icon>
+            <ReloadOutlined />
+          </template>
           刷新备份
         </Button>
       </Space>
@@ -231,8 +235,16 @@ onMounted(async () => {
 
     <Spin :spinning="initialLoading">
       <!-- 状态卡 -->
-      <Card title="数据库状态" style="margin-bottom: 16px" :loading="statusLoading">
-        <Descriptions :column="2" bordered size="small">
+      <Card
+        title="数据库状态"
+        style="margin-bottom: 16px"
+        :loading="statusLoading"
+      >
+        <Descriptions
+          :column="2"
+          bordered
+          size="small"
+        >
           <Descriptions.Item label="版本">
             <Space>
               <DatabaseOutlined />
@@ -248,7 +260,10 @@ onMounted(async () => {
       </Card>
 
       <!-- 配置表 -->
-      <Card title="数据库配置" style="margin-bottom: 16px">
+      <Card
+        title="数据库配置"
+        style="margin-bottom: 16px"
+      >
         <Table
           :columns="configColumns"
           :data-source="configRows"
@@ -270,8 +285,14 @@ onMounted(async () => {
           <Space>💾 备份列表</Space>
         </template>
         <template #extra>
-          <Button type="primary" :loading="creatingBackup" @click="createBackup">
-            <template #icon><PlusOutlined /></template>
+          <Button
+            type="primary"
+            :loading="creatingBackup"
+            @click="createBackup"
+          >
+            <template #icon>
+              <PlusOutlined />
+            </template>
             创建备份
           </Button>
         </template>
@@ -284,7 +305,10 @@ onMounted(async () => {
           :scroll="{ x: 640 }"
         >
           <template #emptyText>
-            <EmptyState description="暂无备份" hint="点击右上角「创建备份」生成一次备份" />
+            <EmptyState
+              description="暂无备份"
+              hint="点击右上角「创建备份」生成一次备份"
+            />
           </template>
 
           <template #bodyCell="{ column, record }">
@@ -301,7 +325,11 @@ onMounted(async () => {
                 cancel-text="取消"
                 @confirm="restoreBackup(record)"
               >
-                <Button size="small" danger :loading="restoringName === record.name">
+                <Button
+                  size="small"
+                  danger
+                  :loading="restoringName === record.name"
+                >
                   恢复
                 </Button>
               </Popconfirm>
@@ -311,7 +339,10 @@ onMounted(async () => {
       </Card>
 
       <!-- SQL 查询器 -->
-      <Card title="SQL 查询器（只读）" style="margin-bottom: 16px">
+      <Card
+        title="SQL 查询器（只读）"
+        style="margin-bottom: 16px"
+      >
         <Alert
           type="info"
           show-icon
@@ -325,17 +356,36 @@ onMounted(async () => {
           style="font-family: monospace; margin-bottom: 12px"
         />
         <Space style="margin-bottom: 16px">
-          <Button type="primary" :loading="querying" @click="executeQuery">
-            <template #icon><SearchOutlined /></template>
+          <Button
+            type="primary"
+            :loading="querying"
+            @click="executeQuery"
+          >
+            <template #icon>
+              <SearchOutlined />
+            </template>
             执行查询
           </Button>
-          <Button @click="queryResult = null; queryText = ''">清空</Button>
+          <Button @click="queryResult = null; queryText = ''">
+            清空
+          </Button>
         </Space>
 
         <template v-if="queryResult">
-          <Space style="margin-bottom: 8px" wrap>
-            <Statistic title="返回行数" :value="queryResult.count ?? (queryResult.rows || []).length" />
-            <Tag v-if="queryResult.truncated" color="orange">结果已截断</Tag>
+          <Space
+            style="margin-bottom: 8px"
+            wrap
+          >
+            <Statistic
+              title="返回行数"
+              :value="queryResult.count ?? (queryResult.rows || []).length"
+            />
+            <Tag
+              v-if="queryResult.truncated"
+              color="orange"
+            >
+              结果已截断
+            </Tag>
           </Space>
           <Table
             :columns="queryColumns"
@@ -359,7 +409,10 @@ onMounted(async () => {
       </Card>
 
       <!-- 优化区 -->
-      <Card title="性能优化" style="margin-bottom: 16px">
+      <Card
+        title="性能优化"
+        style="margin-bottom: 16px"
+      >
         <Alert
           type="warning"
           show-icon
@@ -373,12 +426,22 @@ onMounted(async () => {
             style="width: 240px"
             @press-enter="runOptimize('analyze')"
           />
-          <Button :loading="optimizing" @click="runOptimize('analyze')">
-            <template #icon><ThunderboltOutlined /></template>
+          <Button
+            :loading="optimizing"
+            @click="runOptimize('analyze')"
+          >
+            <template #icon>
+              <ThunderboltOutlined />
+            </template>
             ANALYZE 更新统计信息
           </Button>
-          <Button :loading="optimizing" @click="runOptimize('vacuum')">
-            <template #icon><ThunderboltOutlined /></template>
+          <Button
+            :loading="optimizing"
+            @click="runOptimize('vacuum')"
+          >
+            <template #icon>
+              <ThunderboltOutlined />
+            </template>
             VACUUM 回收存储空间
           </Button>
         </Space>

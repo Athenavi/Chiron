@@ -10,6 +10,7 @@
 - ToolGuard    工具栅栏：每次工具调用前三态（block 拒绝 / sanitize 替换 / confirm 确认）
 - OutputGuard  输出栅栏：流式 text/thinking 逐 chunk 脱敏（宿主路径/secret 替换）+ 计数阈值
 """
+
 from __future__ import annotations
 
 import re
@@ -58,23 +59,36 @@ _SECRET_RES: list[re.Pattern] = [re.compile(p) for p in SECRET_PARAM_PATTERNS]
 
 # 工具参数中禁止的宿主逃逸模式（绝对路径/盘符/父目录跳转）
 TOOL_ARG_ESCAPE_PATTERNS: list[str] = [
-    r"[A-Za-z]:[\\/]",                          # Windows 盘符绝对路径
-    r"(^|[^A-Za-z0-9_.])(\.\.)[\\/]",           # 父目录跳转
+    r"[A-Za-z]:[\\/]",  # Windows 盘符绝对路径
+    r"(^|[^A-Za-z0-9_.])(\.\.)[\\/]",  # 父目录跳转
 ]
 _ARG_ESCAPE_RES: list[re.Pattern] = [re.compile(p) for p in TOOL_ARG_ESCAPE_PATTERNS]
 
 # 需要用户确认的危险工具
-DANGEROUS_TOOLS: frozenset[str] = frozenset({
-    "shell_exec", "execute_command", "persistent_shell", "execute_python",
-    "run_code", "browser_navigate", "browser_click", "browser_type",
-    "browser_screenshot", "browser_close", "browser_refresh",
-    "web_fetch", "web_search", "skill_install",
-})
+DANGEROUS_TOOLS: frozenset[str] = frozenset(
+    {
+        "shell_exec",
+        "execute_command",
+        "persistent_shell",
+        "execute_python",
+        "run_code",
+        "browser_navigate",
+        "browser_click",
+        "browser_type",
+        "browser_screenshot",
+        "browser_close",
+        "browser_refresh",
+        "web_fetch",
+        "web_search",
+        "skill_install",
+    }
+)
 
 
 @dataclass
 class ToolVerdict:
     """工具调用三态裁决。"""
+
     action: str  # "block" | "sanitize" | "confirm" | "allow"
     reason: str = ""
     sanitized_args: dict[str, Any] | None = None
@@ -117,7 +131,11 @@ class ToolGuard:
 
         # 3. 危险工具 → 需要用户确认
         if tool_name in DANGEROUS_TOOLS:
-            return ToolVerdict("confirm", reason=f"tool '{tool_name}' requires user approval", risk_level="high")
+            return ToolVerdict(
+                "confirm",
+                reason=f"tool '{tool_name}' requires user approval",
+                risk_level="high",
+            )
 
         return ToolVerdict("allow", risk_level="low")
 
@@ -126,7 +144,7 @@ class ToolGuard:
 
 # 宿主路径/敏感信息模式（出现即替换）
 HOST_PATH_PATTERNS: list[str] = [
-    r"[A-Za-z]:[\\/](?:[^\\/\"'\s<>]+[\\/])*",   # Windows 绝对路径（C:\a\b\...）
+    r"[A-Za-z]:[\\/](?:[^\\/\"'\s<>]+[\\/])*",  # Windows 绝对路径（C:\a\b\...）
     r"python-engine[\\/]",
 ]
 _HOST_PATH_RES: list[re.Pattern] = [re.compile(p) for p in HOST_PATH_PATTERNS]
@@ -168,7 +186,9 @@ class OutputGuard:
         for pat in _OUT_SECRET_RES:
             text = pat.sub(SECRET_PLACEHOLDER, text)
         # 计数阈值（近似：出现占位符即算一次命中）
-        for _ in range(text.count(HOST_PATH_PLACEHOLDER) + text.count(SECRET_PLACEHOLDER)):
+        for _ in range(
+            text.count(HOST_PATH_PLACEHOLDER) + text.count(SECRET_PLACEHOLDER)
+        ):
             self.hits.append("leak")
         if len(self.hits) >= self.max_hits:
             self._blocked = True

@@ -209,7 +209,9 @@ onMounted(fetchPools)
 <template>
   <div class="cost-view">
     <div class="page-header">
-      <h2 class="page-title">成本中心与资源池化</h2>
+      <h2 class="page-title">
+        成本中心与资源池化
+      </h2>
       <a-space class="filter-bar">
         <a-input
           v-model:value="currentTenantID"
@@ -218,9 +220,21 @@ onMounted(fetchPools)
           style="width: 300px"
           @press-enter="() => { fetchPools(); fetchUsage() }"
         />
-        <a-button @click="() => { fetchPools(); fetchUsage() }">查询</a-button>
-        <a-button @click="fetchUsage" :disabled="!currentTenantID">刷新用量</a-button>
-        <a-button type="primary" @click="openCreatePool">新建配额池</a-button>
+        <a-button @click="() => { fetchPools(); fetchUsage() }">
+          查询
+        </a-button>
+        <a-button
+          :disabled="!currentTenantID"
+          @click="fetchUsage"
+        >
+          刷新用量
+        </a-button>
+        <a-button
+          type="primary"
+          @click="openCreatePool"
+        >
+          新建配额池
+        </a-button>
       </a-space>
     </div>
 
@@ -241,13 +255,34 @@ onMounted(fetchPools)
       size="small"
     >
       <template #emptyText>
-        <div class="empty-block"><span class="empty-icon">📭</span><span class="empty-text">暂无数据</span></div>
+        <div class="empty-block">
+          <span class="empty-icon">📭</span><span class="empty-text">暂无数据</span>
+        </div>
       </template>
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'action'">
-          <a-button type="link" size="small" @click="openAllocDrawer(record as QuotaPoolWithAllocated)">分配</a-button>
-          <a-button type="link" size="small" @click="openEditPool(record as QuotaPoolWithAllocated)">编辑</a-button>
-          <a-button type="link" size="small" danger @click="confirmDeletePool(record as QuotaPoolWithAllocated)">删除</a-button>
+          <a-button
+            type="link"
+            size="small"
+            @click="openAllocDrawer(record as QuotaPoolWithAllocated)"
+          >
+            分配
+          </a-button>
+          <a-button
+            type="link"
+            size="small"
+            @click="openEditPool(record as QuotaPoolWithAllocated)"
+          >
+            编辑
+          </a-button>
+          <a-button
+            type="link"
+            size="small"
+            danger
+            @click="confirmDeletePool(record as QuotaPoolWithAllocated)"
+          >
+            删除
+          </a-button>
         </template>
       </template>
     </a-table>
@@ -260,23 +295,43 @@ onMounted(fetchPools)
     >
       <a-form layout="vertical">
         <a-form-item label="租户 ID（UUID）">
-          <a-input v-model:value="poolForm.tenant_id" :disabled="poolModalMode === 'edit'" placeholder="租户 UUID" />
+          <a-input
+            v-model:value="poolForm.tenant_id"
+            :disabled="poolModalMode === 'edit'"
+            placeholder="租户 UUID"
+          />
         </a-form-item>
         <a-form-item label="资源类型">
           <a-select v-model:value="poolForm.resource_type">
-            <a-select-option value="token">token（令牌数）</a-select-option>
-            <a-select-option value="storage_mb">storage_mb（存储 MB）</a-select-option>
-            <a-select-option value="concurrency">concurrency（并发数）</a-select-option>
-            <a-select-option value="credits">credits（积分）</a-select-option>
+            <a-select-option value="token">
+              token（令牌数）
+            </a-select-option>
+            <a-select-option value="storage_mb">
+              storage_mb（存储 MB）
+            </a-select-option>
+            <a-select-option value="concurrency">
+              concurrency（并发数）
+            </a-select-option>
+            <a-select-option value="credits">
+              credits（积分）
+            </a-select-option>
           </a-select>
         </a-form-item>
         <a-form-item label="总量（0 = 无限制）">
-          <a-input-number v-model:value="poolForm.total_amount" :min="0" style="width: 100%" />
+          <a-input-number
+            v-model:value="poolForm.total_amount"
+            :min="0"
+            style="width: 100%"
+          />
         </a-form-item>
         <a-form-item label="周期">
           <a-radio-group v-model:value="poolForm.period">
-            <a-radio value="daily">日</a-radio>
-            <a-radio value="monthly">月</a-radio>
+            <a-radio value="daily">
+              日
+            </a-radio>
+            <a-radio value="monthly">
+              月
+            </a-radio>
           </a-radio-group>
         </a-form-item>
       </a-form>
@@ -289,23 +344,50 @@ onMounted(fetchPools)
       placement="right"
     >
       <template v-if="currentPool">
-        <a-descriptions :column="2" size="small" bordered style="margin-bottom: 16px">
-          <a-descriptions-item label="总量">{{ fmtAmount(currentPool.total_amount, currentPool.resource_type) }}</a-descriptions-item>
-          <a-descriptions-item label="已分配">{{ fmtAmount(currentPool.allocated, currentPool.resource_type) }}</a-descriptions-item>
+        <a-descriptions
+          :column="2"
+          size="small"
+          bordered
+          style="margin-bottom: 16px"
+        >
+          <a-descriptions-item label="总量">
+            {{ fmtAmount(currentPool.total_amount, currentPool.resource_type) }}
+          </a-descriptions-item>
+          <a-descriptions-item label="已分配">
+            {{ fmtAmount(currentPool.allocated, currentPool.resource_type) }}
+          </a-descriptions-item>
         </a-descriptions>
 
         <div class="alloc-form">
-          <a-select v-model:value="allocForm.target_type" style="width: 100px">
-            <a-select-option value="group">群组</a-select-option>
-            <a-select-option value="user">用户</a-select-option>
+          <a-select
+            v-model:value="allocForm.target_type"
+            style="width: 100px"
+          >
+            <a-select-option value="group">
+              群组
+            </a-select-option>
+            <a-select-option value="user">
+              用户
+            </a-select-option>
           </a-select>
           <a-input
             v-model:value="allocForm.target_id"
             placeholder="目标 ID（UUID）"
             style="flex: 1"
           />
-          <a-input-number v-model:value="allocForm.amount" :min="0" placeholder="配额" style="width: 140px" />
-          <a-button type="primary" :loading="allocSaving" @click="addAllocation">添加</a-button>
+          <a-input-number
+            v-model:value="allocForm.amount"
+            :min="0"
+            placeholder="配额"
+            style="width: 140px"
+          />
+          <a-button
+            type="primary"
+            :loading="allocSaving"
+            @click="addAllocation"
+          >
+            添加
+          </a-button>
         </div>
 
         <a-table
@@ -318,11 +400,20 @@ onMounted(fetchPools)
           style="margin-top: 16px"
         >
           <template #emptyText>
-            <div class="empty-block"><span class="empty-icon">📭</span><span class="empty-text">暂无数据</span></div>
+            <div class="empty-block">
+              <span class="empty-icon">📭</span><span class="empty-text">暂无数据</span>
+            </div>
           </template>
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'action'">
-              <a-button type="link" size="small" danger @click="removeAllocation(record.id)">删除</a-button>
+              <a-button
+                type="link"
+                size="small"
+                danger
+                @click="removeAllocation(record.id)"
+              >
+                删除
+              </a-button>
             </template>
           </template>
         </a-table>

@@ -160,23 +160,44 @@ function formatDate(iso: string): string {
   <div class="kb-page">
     <div class="page-head">
       <div class="page-head-text">
-        <h1 class="page-title">知识库</h1>
-        <p class="page-sub">集中管理文档，支持全文检索与 RAG 问答</p>
+        <h1 class="page-title">
+          知识库
+        </h1>
+        <p class="page-sub">
+          集中管理文档，支持全文检索与 RAG 问答
+        </p>
       </div>
-      <Button type="primary" @click="showCreateModal = true">
-        <template #icon><PlusOutlined /></template>
+      <Button
+        type="primary"
+        @click="showCreateModal = true"
+      >
+        <template #icon>
+          <PlusOutlined />
+        </template>
         创建知识库
       </Button>
     </div>
 
     <div class="list-toolbar">
-      <Input v-model:value="searchQuery" placeholder="搜索知识库（名称 / 描述）" allow-clear class="search-input">
-        <template #prefix><SearchOutlined /></template>
+      <Input
+        v-model:value="searchQuery"
+        placeholder="搜索知识库（名称 / 描述）"
+        allow-clear
+        class="search-input"
+      >
+        <template #prefix>
+          <SearchOutlined />
+        </template>
       </Input>
     </div>
 
     <!-- 加载骨架（替代 Spin 空白） -->
-    <PageSkeleton v-if="loading" variant="cards" :columns="3" :header="false" />
+    <PageSkeleton
+      v-if="loading"
+      variant="cards"
+      :columns="3"
+      :header="false"
+    />
 
     <!-- 空状态：统一 EmptyState 组件，带引导 CTA -->
     <EmptyState
@@ -186,104 +207,173 @@ function formatDate(iso: string): string {
       description="暂无知识库"
       hint="创建第一个知识库，开始文档检索与 RAG 问答"
     >
-      <Button type="primary" @click="showCreateModal = true">
-        <template #icon><PlusOutlined /></template>
+      <Button
+        type="primary"
+        @click="showCreateModal = true"
+      >
+        <template #icon>
+          <PlusOutlined />
+        </template>
         创建知识库
       </Button>
     </EmptyState>
 
-    <div v-else class="kb-sections">
-        <div v-if="privateKbs.length > 0" class="kb-section">
-          <h2 class="section-title">我的知识库</h2>
-          <div class="kb-grid">
-            <div
-              v-for="kb in privateKbs"
-              :key="kb.id"
-              class="kb-card"
-              @click="openKnowledgeBase(kb)"
-            >
-              <div class="card-top">
-                <span class="card-icon"><BookOutlined /></span>
-                <div class="card-titles">
-                  <span class="kb-name">{{ kb.name }}</span>
-                  <span class="kb-desc">{{ kb.description || '暂无描述' }}</span>
-                </div>
-                <Tag :color="kb.type === 'rag' ? 'success' : 'blue'" class="type-tag">{{ kb.type.toUpperCase() }}</Tag>
-                <Tag v-if="kb.visibility === 'tenant'" color="green" class="type-tag">团队共享</Tag>
+    <div
+      v-else
+      class="kb-sections"
+    >
+      <div
+        v-if="privateKbs.length > 0"
+        class="kb-section"
+      >
+        <h2 class="section-title">
+          我的知识库
+        </h2>
+        <div class="kb-grid">
+          <div
+            v-for="kb in privateKbs"
+            :key="kb.id"
+            class="kb-card"
+            @click="openKnowledgeBase(kb)"
+          >
+            <div class="card-top">
+              <span class="card-icon"><BookOutlined /></span>
+              <div class="card-titles">
+                <span class="kb-name">{{ kb.name }}</span>
+                <span class="kb-desc">{{ kb.description || '暂无描述' }}</span>
               </div>
-              <div class="kb-stats">
-                <span class="stat"><FileTextOutlined /> {{ kb.document_count }} 文档</span>
-                <span class="stat"><DatabaseOutlined /> {{ formatSize(kb.total_size_bytes) }}</span>
-                <Tag :color="kb.status === 'active' ? 'green' : kb.status === 'building' ? 'processing' : 'default'">{{ kb.status }}</Tag>
-              </div>
-              <div class="kb-footer">
-                <span class="kb-time">更新于 {{ formatDate(kb.updated_at) }}</span>
-                <div class="footer-actions">
+              <Tag
+                :color="kb.type === 'rag' ? 'success' : 'blue'"
+                class="type-tag"
+              >
+                {{ kb.type.toUpperCase() }}
+              </Tag>
+              <Tag
+                v-if="kb.visibility === 'tenant'"
+                color="green"
+                class="type-tag"
+              >
+                团队共享
+              </Tag>
+            </div>
+            <div class="kb-stats">
+              <span class="stat"><FileTextOutlined /> {{ kb.document_count }} 文档</span>
+              <span class="stat"><DatabaseOutlined /> {{ formatSize(kb.total_size_bytes) }}</span>
+              <Tag :color="kb.status === 'active' ? 'green' : kb.status === 'building' ? 'processing' : 'default'">
+                {{ kb.status }}
+              </Tag>
+            </div>
+            <div class="kb-footer">
+              <span class="kb-time">更新于 {{ formatDate(kb.updated_at) }}</span>
+              <div class="footer-actions">
+                <Button
+                  v-if="kb.visibility !== 'public'"
+                  type="text"
+                  size="small"
+                  :title="kb.visibility === 'tenant' ? '设为私有' : '共享给团队'"
+                  :loading="visibilityTogglingId === kb.id"
+                  @click.stop="toggleVisibility(kb)"
+                >
+                  <template #icon>
+                    <LockOutlined v-if="kb.visibility === 'tenant'" />
+                    <TeamOutlined v-else />
+                  </template>
+                </Button>
+                <Button
+                  type="text"
+                  size="small"
+                  title="编辑"
+                  @click.stop="openEdit(kb)"
+                >
+                  <template #icon>
+                    <EditOutlined />
+                  </template>
+                </Button>
+                <Popconfirm
+                  title="确认删除此知识库？"
+                  @confirm="deleteKnowledgeBase(kb.id)"
+                >
                   <Button
-                    v-if="kb.visibility !== 'public'"
                     type="text"
+                    danger
                     size="small"
-                    :title="kb.visibility === 'tenant' ? '设为私有' : '共享给团队'"
-                    :loading="visibilityTogglingId === kb.id"
-                    @click.stop="toggleVisibility(kb)"
+                    title="删除"
+                    @click.stop
                   >
                     <template #icon>
-                      <LockOutlined v-if="kb.visibility === 'tenant'" />
-                      <TeamOutlined v-else />
+                      <DeleteOutlined />
                     </template>
                   </Button>
-                  <Button type="text" size="small" title="编辑" @click.stop="openEdit(kb)">
-                    <template #icon><EditOutlined /></template>
-                  </Button>
-                  <Popconfirm title="确认删除此知识库？" @confirm="deleteKnowledgeBase(kb.id)">
-                    <Button type="text" danger size="small" title="删除" @click.stop>
-                      <template #icon><DeleteOutlined /></template>
-                    </Button>
-                  </Popconfirm>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div v-if="publicKbs.length > 0" class="kb-section">
-          <h2 class="section-title">公共知识库</h2>
-          <div class="kb-grid">
-            <div
-              v-for="kb in publicKbs"
-              :key="kb.id"
-              class="kb-card public"
-              @click="openKnowledgeBase(kb)"
-            >
-              <div class="card-top">
-                <span class="card-icon"><BookOutlined /></span>
-                <div class="card-titles">
-                  <span class="kb-name">{{ kb.name }}</span>
-                  <span class="kb-desc">{{ kb.description || '暂无描述' }}</span>
-                </div>
-                <Tag color="warning">公共</Tag>
-              </div>
-              <div class="kb-stats">
-                <span class="stat"><FileTextOutlined /> {{ kb.document_count }} 文档</span>
-                <span class="stat"><DatabaseOutlined /> {{ formatSize(kb.total_size_bytes) }}</span>
-              </div>
-              <div class="kb-footer">
-                <span class="kb-time">更新于 {{ formatDate(kb.updated_at) }}</span>
-                <div class="footer-actions">
-                  <Button type="text" size="small" title="编辑" @click.stop="openEdit(kb)">
-                    <template #icon><EditOutlined /></template>
-                  </Button>
-                  <Popconfirm title="确认删除此知识库？" @confirm="deleteKnowledgeBase(kb.id)">
-                    <Button type="text" danger size="small" title="删除" @click.stop>
-                      <template #icon><DeleteOutlined /></template>
-                    </Button>
-                  </Popconfirm>
-                </div>
+                </Popconfirm>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      <div
+        v-if="publicKbs.length > 0"
+        class="kb-section"
+      >
+        <h2 class="section-title">
+          公共知识库
+        </h2>
+        <div class="kb-grid">
+          <div
+            v-for="kb in publicKbs"
+            :key="kb.id"
+            class="kb-card public"
+            @click="openKnowledgeBase(kb)"
+          >
+            <div class="card-top">
+              <span class="card-icon"><BookOutlined /></span>
+              <div class="card-titles">
+                <span class="kb-name">{{ kb.name }}</span>
+                <span class="kb-desc">{{ kb.description || '暂无描述' }}</span>
+              </div>
+              <Tag color="warning">
+                公共
+              </Tag>
+            </div>
+            <div class="kb-stats">
+              <span class="stat"><FileTextOutlined /> {{ kb.document_count }} 文档</span>
+              <span class="stat"><DatabaseOutlined /> {{ formatSize(kb.total_size_bytes) }}</span>
+            </div>
+            <div class="kb-footer">
+              <span class="kb-time">更新于 {{ formatDate(kb.updated_at) }}</span>
+              <div class="footer-actions">
+                <Button
+                  type="text"
+                  size="small"
+                  title="编辑"
+                  @click.stop="openEdit(kb)"
+                >
+                  <template #icon>
+                    <EditOutlined />
+                  </template>
+                </Button>
+                <Popconfirm
+                  title="确认删除此知识库？"
+                  @confirm="deleteKnowledgeBase(kb.id)"
+                >
+                  <Button
+                    type="text"
+                    danger
+                    size="small"
+                    title="删除"
+                    @click.stop
+                  >
+                    <template #icon>
+                      <DeleteOutlined />
+                    </template>
+                  </Button>
+                </Popconfirm>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- 创建 Modal -->
     <Modal
@@ -298,24 +388,40 @@ function formatDate(iso: string): string {
       <div class="editor-form">
         <div class="form-row">
           <label class="form-label">名称 *</label>
-          <Input v-model:value="createForm.name" placeholder="知识库名称" :maxlength="60" />
+          <Input
+            v-model:value="createForm.name"
+            placeholder="知识库名称"
+            :maxlength="60"
+          />
         </div>
         <div class="form-row">
           <label class="form-label">描述</label>
-          <Input.TextArea v-model:value="createForm.description" :rows="2" placeholder="一句话描述内容范围" />
+          <Input.TextArea
+            v-model:value="createForm.description"
+            :rows="2"
+            placeholder="一句话描述内容范围"
+          />
         </div>
         <div class="form-row">
           <label class="form-label">类型</label>
           <Radio.Group v-model:value="createForm.type">
-            <Radio value="wiki">Wiki（全文检索）</Radio>
-            <Radio value="rag">RAG（向量问答）</Radio>
+            <Radio value="wiki">
+              Wiki（全文检索）
+            </Radio>
+            <Radio value="rag">
+              RAG（向量问答）
+            </Radio>
           </Radio.Group>
         </div>
         <div class="form-row">
           <label class="form-label">可见性</label>
           <Radio.Group v-model:value="createForm.visibility">
-            <Radio value="private">私有</Radio>
-            <Radio value="public">公开</Radio>
+            <Radio value="private">
+              私有
+            </Radio>
+            <Radio value="public">
+              公开
+            </Radio>
           </Radio.Group>
         </div>
       </div>
@@ -334,24 +440,38 @@ function formatDate(iso: string): string {
       <div class="editor-form">
         <div class="form-row">
           <label class="form-label">名称 *</label>
-          <Input v-model:value="editForm.name" :maxlength="60" />
+          <Input
+            v-model:value="editForm.name"
+            :maxlength="60"
+          />
         </div>
         <div class="form-row">
           <label class="form-label">描述</label>
-          <Input.TextArea v-model:value="editForm.description" :rows="2" />
+          <Input.TextArea
+            v-model:value="editForm.description"
+            :rows="2"
+          />
         </div>
         <div class="form-row">
           <label class="form-label">类型</label>
           <Radio.Group v-model:value="editForm.type">
-            <Radio value="wiki">Wiki</Radio>
-            <Radio value="rag">RAG</Radio>
+            <Radio value="wiki">
+              Wiki
+            </Radio>
+            <Radio value="rag">
+              RAG
+            </Radio>
           </Radio.Group>
         </div>
         <div class="form-row">
           <label class="form-label">可见性</label>
           <Radio.Group v-model:value="editForm.visibility">
-            <Radio value="private">私有</Radio>
-            <Radio value="public">公开</Radio>
+            <Radio value="private">
+              私有
+            </Radio>
+            <Radio value="public">
+              公开
+            </Radio>
           </Radio.Group>
         </div>
       </div>

@@ -63,18 +63,27 @@ onMounted(fetchPrivacy)
 <template>
   <div class="privacy-view">
     <div class="page-header">
-      <h2 class="page-title">隐私模式管控</h2>
+      <h2 class="page-title">
+        隐私模式管控
+      </h2>
     </div>
 
     <a-spin :spinning="loading">
-      <a-card title="租户隐私策略" style="max-width: 720px">
+      <a-card
+        title="租户隐私策略"
+        style="max-width: 720px"
+      >
         <a-form layout="vertical">
           <a-form-item label="隐私模式">
             <a-switch v-model:checked="form.privacy_mode" />
             <span class="hint">开启后转发 Python 引擎时注入 X-Privacy-Mode: no_retention，不落库历史</span>
           </a-form-item>
           <a-form-item label="数据留存天数（0 = 永久）">
-            <a-input-number v-model:value="form.data_retention_days" :min="0" style="width: 200px" />
+            <a-input-number
+              v-model:value="form.data_retention_days"
+              :min="0"
+              style="width: 200px"
+            />
           </a-form-item>
           <a-form-item label="允许训练">
             <a-switch v-model:checked="form.training_allowed" />
@@ -85,11 +94,17 @@ onMounted(fetchPrivacy)
               v-model:value="form.redaction_rules"
               :rows="8"
               class="code-editor"
-              placeholder='{"phone": "regex", "email": "regex"}'
+              placeholder="{&quot;phone&quot;: &quot;regex&quot;, &quot;email&quot;: &quot;regex&quot;}"
             />
           </a-form-item>
           <a-form-item>
-            <a-button type="primary" :loading="saving" @click="save">保存</a-button>
+            <a-button
+              type="primary"
+              :loading="saving"
+              @click="save"
+            >
+              保存
+            </a-button>
           </a-form-item>
         </a-form>
       </a-card>

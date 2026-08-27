@@ -10,6 +10,7 @@ Sources:
   6. Git context (current branch, status, recent commits)
   7. Tool descriptions
 """
+
 from __future__ import annotations
 
 import logging
@@ -36,6 +37,7 @@ def bind_memory_service(svc) -> None:
 
 def get_memory_service():
     return _memory_service
+
 
 # ---------------------------------------------------------------------------
 # Default system prompt template
@@ -95,7 +97,7 @@ class PromptEngine:
         ── 记忆：相关历史 ──        ← L3 top_k=5 按 final_score 排序（≤6KB）
         [L4 原始窗口消息（前缀稳定）]
         [本轮用户输入]
-        
+
         If the task already carries a non-empty ``system_prompt`` it is used as
         the base persona; otherwise the default template is used.
         """
@@ -115,7 +117,9 @@ class PromptEngine:
             if tools_section:
                 parts.append(f"\n## Available Tools\n\n{tools_section}")
             if project_context_section:
-                parts.append(f"\n## Project Context (CLAUDE.md)\n\n{project_context_section}")
+                parts.append(
+                    f"\n## Project Context (CLAUDE.md)\n\n{project_context_section}"
+                )
             # 记忆区块在系统提示之后、其他上下文之前
             if memory_section:
                 parts.append(memory_section)
@@ -215,10 +219,12 @@ class PromptEngine:
         if svc is not None and user_id:
             try:
                 from app.memory.layers import Scope
+
                 tenant_id = "default"
                 # 尝试从工具上下文获取 tenant_id
                 try:
                     from app.tools.context import get_tenant_id
+
                     tid = get_tenant_id()
                     if tid:
                         tenant_id = tid
@@ -239,9 +245,19 @@ class PromptEngine:
                     if result.summary_items:
                         lines = []
                         for s in result.summary_items[:5]:
-                            score = s.score if hasattr(s, 'score') else s.get("score", 0)
-                            content = (s.content if hasattr(s, 'content') else s.get("content", ""))[:300]
-                            topics = s.topics if hasattr(s, 'topics') else s.get("topics", [])
+                            score = (
+                                s.score if hasattr(s, "score") else s.get("score", 0)
+                            )
+                            content = (
+                                s.content
+                                if hasattr(s, "content")
+                                else s.get("content", "")
+                            )[:300]
+                            topics = (
+                                s.topics
+                                if hasattr(s, "topics")
+                                else s.get("topics", [])
+                            )
                             t_str = f" [{', '.join(topics[:3])}]" if topics else ""
                             lines.append(f"- (score {score:.2f}){t_str} {content}")
                         parts.append(f"── 记忆：相关历史 ──\n" + "\n".join(lines))

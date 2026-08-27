@@ -22,19 +22,25 @@ def _track_bg_task(task: asyncio.Task) -> None:
 
 async def wait_background_tasks(timeout: float = 10.0) -> None:
     """Wait for all background tasks to complete with a timeout.
-    
+
     Called during application shutdown to ensure pending tasks are not lost.
     """
     if not _bg_tasks:
         return
-    logger.info("Waiting for %d background tasks to complete (timeout=%.1fs)", len(_bg_tasks), timeout)
+    logger.info(
+        "Waiting for %d background tasks to complete (timeout=%.1fs)",
+        len(_bg_tasks),
+        timeout,
+    )
     done, pending = await asyncio.wait(
         list(_bg_tasks),
         timeout=timeout,
         return_when=asyncio.ALL_COMPLETED,
     )
     if pending:
-        logger.warning("%d background tasks did not complete within %.1fs", len(pending), timeout)
+        logger.warning(
+            "%d background tasks did not complete within %.1fs", len(pending), timeout
+        )
         for task in pending:
             task.cancel()
     if done:
@@ -130,8 +136,7 @@ class ContextManager:
     # Compression
     # ------------------------------------------------------------------
 
-    async def compress(self, messages: list, gateway=None,
-                       memory_service=None) -> list:
+    async def compress(self, messages: list, gateway=None, memory_service=None) -> list:
         """Compress messages if approaching the token limit.
 
         降级链实现：
@@ -199,7 +204,9 @@ class ContextManager:
                     if attempt == 0:
                         logger.info("Retrying LLM summarisation...")
                     else:
-                        logger.error("LLM summarisation failed after retry, using fallback")
+                        logger.error(
+                            "LLM summarisation failed after retry, using fallback"
+                        )
 
         # LLM 失败或未配置 → 降级到提取式摘要
         if not summary_text:
@@ -229,7 +236,8 @@ class ContextManager:
         if new_tokens > self.max_tokens:
             logger.warning(
                 "Compression still over budget (%d > %d), using trim_to_fit",
-                new_tokens, self.max_tokens,
+                new_tokens,
+                self.max_tokens,
             )
             compressed = self.trim_to_fit(compressed)
             degraded = True
@@ -249,7 +257,11 @@ class ContextManager:
             "Compression result: %d → %d tokens (%.1f%% reduction, degraded=%s, llm_failed=%s)",
             total_tokens,
             self.count_message_tokens(compressed),
-            (1 - self.count_message_tokens(compressed) / total_tokens) * 100 if total_tokens else 0,
+            (
+                (1 - self.count_message_tokens(compressed) / total_tokens) * 100
+                if total_tokens
+                else 0
+            ),
             degraded,
             llm_failed,
         )
@@ -296,14 +308,19 @@ class ContextManager:
                 "content": "\n".join(
                     f"[{m.get('role', 'user')}]: {m.get('content', '')}"
                     for m in messages
-                    if isinstance(m.get('content'), str)
+                    if isinstance(m.get("content"), str)
                 ),
             },
         ]
         # Try the gateway's non-streaming chat interface
         from app.config import settings
-        resp = await gateway.chat(messages=summary_prompt, model=settings.default_model, max_tokens=1024)
-        return getattr(resp, "content", "") or "(summary generation produced no content)"
+
+        resp = await gateway.chat(
+            messages=summary_prompt, model=settings.default_model, max_tokens=1024
+        )
+        return (
+            getattr(resp, "content", "") or "(summary generation produced no content)"
+        )
 
     # ------------------------------------------------------------------
     # Trimming
@@ -385,7 +402,8 @@ class ContextManager:
 
     @staticmethod
     async def _submit_degraded_content(
-        messages: list, memory_service,
+        messages: list,
+        memory_service,
     ) -> None:
         """将降级模式下被压缩的内容提交到后台巩固队列。
 
@@ -396,18 +414,20 @@ class ContextManager:
         try:
             # 构造摘要内容并提交
             convo_msgs = [
-                m for m in messages
+                m
+                for m in messages
                 if m.get("role") in ("user", "assistant") and m.get("content")
             ]
             if convo_msgs:
                 # 从第一条消息获取 scope 信息
                 scope = None
                 for msg in convo_msgs:
-                    if hasattr(msg, 'get'):
+                    if hasattr(msg, "get"):
                         tenant_id = msg.get("tenant_id", "default")
                         user_id = msg.get("user_id", "unknown")
                         if tenant_id and user_id:
                             from app.memory.layers import Scope
+
                             scope = Scope(
                                 tenant_id=tenant_id,
                                 user_id=user_id,
@@ -417,6 +437,7 @@ class ContextManager:
 
                 if scope is None:
                     from app.memory.layers import Scope
+
                     scope = Scope(
                         tenant_id="default",
                         user_id="unknown",
@@ -434,8 +455,8 @@ class ContextManager:
                     topics=["degraded_compaction"],
                 )
                 logger.info(
-                    "Submitted degraded content to L3 consolidation "
-                    "(%d messages)", len(convo_msgs),
+                    "Submitted degraded content to L3 consolidation " "(%d messages)",
+                    len(convo_msgs),
                 )
         except Exception as exc:
             logger.warning("Failed to submit degraded content to L3: %s", exc)

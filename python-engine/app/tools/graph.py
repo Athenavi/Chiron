@@ -6,6 +6,7 @@
 - graph_templates：列出/查询内置模板
 - workflow_run：自然语言快捷工作流（简化三节点线性图）
 """
+
 from __future__ import annotations
 
 from collections import defaultdict, deque
@@ -13,7 +14,7 @@ from typing import Any
 
 from app.gateway.router import GatewayRouter
 from app.tools.registry import registry
-from app.workflow.engine import run_workflow, WorkflowInstance
+from app.workflow.engine import WorkflowInstance, run_workflow
 
 _gateway: GatewayRouter | None = None
 
@@ -30,8 +31,21 @@ _TEMPLATES: list[dict[str, Any]] = [
         "description": "搜索网页并生成摘要",
         "nodes": [
             {"id": "input_1", "label": "Query", "node_type": "input"},
-            {"id": "web_search", "label": "Search Web", "node_type": "tool", "config": {"tool_name": "web_fetch", "params": {"url": "https://example.com"}}},
-            {"id": "llm_summarize", "label": "Summarize", "node_type": "llm", "config": {"prompt": "Summarize the following content:"}},
+            {
+                "id": "web_search",
+                "label": "Search Web",
+                "node_type": "tool",
+                "config": {
+                    "tool_name": "web_fetch",
+                    "params": {"url": "https://example.com"},
+                },
+            },
+            {
+                "id": "llm_summarize",
+                "label": "Summarize",
+                "node_type": "llm",
+                "config": {"prompt": "Summarize the following content:"},
+            },
             {"id": "output_1", "label": "Result", "node_type": "output"},
         ],
         "edges": [
@@ -45,7 +59,12 @@ _TEMPLATES: list[dict[str, Any]] = [
         "description": "根据输入生成内容",
         "nodes": [
             {"id": "input_1", "label": "Prompt", "node_type": "input"},
-            {"id": "llm_generate", "label": "Generate", "node_type": "llm", "config": {"prompt": "Generate content based on input:"}},
+            {
+                "id": "llm_generate",
+                "label": "Generate",
+                "node_type": "llm",
+                "config": {"prompt": "Generate content based on input:"},
+            },
             {"id": "output_1", "label": "Result", "node_type": "output"},
         ],
         "edges": [
@@ -58,10 +77,30 @@ _TEMPLATES: list[dict[str, Any]] = [
         "description": "根据条件分支执行不同路径",
         "nodes": [
             {"id": "input_1", "label": "Input", "node_type": "input"},
-            {"id": "llm_analyze", "label": "Analyze", "node_type": "llm", "config": {"prompt": "Analyze input and decide:"}},
-            {"id": "condition_1", "label": "Decision", "node_type": "condition", "config": {"expression": "success", "input": "$llm_analyze"}},
-            {"id": "llm_success", "label": "Success Path", "node_type": "llm", "config": {"prompt": "Handle success case:"}},
-            {"id": "llm_failure", "label": "Failure Path", "node_type": "llm", "config": {"prompt": "Handle failure case:"}},
+            {
+                "id": "llm_analyze",
+                "label": "Analyze",
+                "node_type": "llm",
+                "config": {"prompt": "Analyze input and decide:"},
+            },
+            {
+                "id": "condition_1",
+                "label": "Decision",
+                "node_type": "condition",
+                "config": {"expression": "success", "input": "$llm_analyze"},
+            },
+            {
+                "id": "llm_success",
+                "label": "Success Path",
+                "node_type": "llm",
+                "config": {"prompt": "Handle success case:"},
+            },
+            {
+                "id": "llm_failure",
+                "label": "Failure Path",
+                "node_type": "llm",
+                "config": {"prompt": "Handle failure case:"},
+            },
             {"id": "output_1", "label": "Result", "node_type": "output"},
         ],
         "edges": [
@@ -77,7 +116,9 @@ _TEMPLATES: list[dict[str, Any]] = [
 
 
 # ── 图编译（轻量校验）───────────────────────────────────────
-def _compile_graph(nodes: list[dict], edges: list[dict], entry_point: str = "") -> dict[str, Any]:
+def _compile_graph(
+    nodes: list[dict], edges: list[dict], entry_point: str = ""
+) -> dict[str, Any]:
     if not nodes:
         raise ValueError("graph has no nodes")
 
@@ -115,11 +156,18 @@ def _compile_graph(nodes: list[dict], edges: list[dict], entry_point: str = "") 
     if len(topo) != len(nodes):
         raise ValueError("graph contains a cycle")
 
-    return {"entry_point": entry_point, "topological_order": topo, "node_count": len(nodes), "edge_count": len(edges)}
+    return {
+        "entry_point": entry_point,
+        "topological_order": topo,
+        "node_count": len(nodes),
+        "edge_count": len(edges),
+    }
 
 
 # ── 工具实现 ─────────────────────────────────────────────────
-async def graph_create(name: str, nodes: list[dict], edges: list[dict], entry_point: str = "") -> dict[str, Any]:
+async def graph_create(
+    name: str, nodes: list[dict], edges: list[dict], entry_point: str = ""
+) -> dict[str, Any]:
     if not name:
         return {"error": "name is required"}
     try:
@@ -135,7 +183,12 @@ async def graph_create(name: str, nodes: list[dict], edges: list[dict], entry_po
     }
 
 
-async def graph_run(name: str, nodes: list[dict], edges: list[dict], initial_state: dict[str, Any] | None = None) -> dict[str, Any]:
+async def graph_run(
+    name: str,
+    nodes: list[dict],
+    edges: list[dict],
+    initial_state: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     if not name:
         return {"error": "name is required"}
     if _gateway is None:
@@ -145,20 +198,46 @@ async def graph_run(name: str, nodes: list[dict], edges: list[dict], initial_sta
     except Exception as e:
         return {"error": str(e)}
 
-    graph_json = {"name": name, "nodes": nodes, "edges": edges, "entry_point": nodes[0]["id"]}
+    graph_json = {
+        "name": name,
+        "nodes": nodes,
+        "edges": edges,
+        "entry_point": nodes[0]["id"],
+    }
     instance: WorkflowInstance = await run_workflow(graph_json, _gateway, initial_state)
 
     state = {k: v for k, v in instance.state.items() if not k.startswith("__")}
-    results = {k: {"node_id": v.node_id, "status": v.status, "output": v.output, "error": v.error, "duration_ms": v.duration_ms} for k, v in instance.results.items()}
+    results = {
+        k: {
+            "node_id": v.node_id,
+            "status": v.status,
+            "output": v.output,
+            "error": v.error,
+            "duration_ms": v.duration_ms,
+        }
+        for k, v in instance.results.items()
+    }
     events = []
     for node in nodes:
         nid = node["id"]
         events.append({"type": "node_started", "node_id": nid})
         if nid in results:
             if results[nid]["status"] == "completed":
-                events.append({"type": "node_completed", "node_id": nid, "output": results[nid]["output"]})
+                events.append(
+                    {
+                        "type": "node_completed",
+                        "node_id": nid,
+                        "output": results[nid]["output"],
+                    }
+                )
             else:
-                events.append({"type": "node_error", "node_id": nid, "error": results[nid]["error"]})
+                events.append(
+                    {
+                        "type": "node_error",
+                        "node_id": nid,
+                        "error": results[nid]["error"],
+                    }
+                )
     events.append({"type": "done", "progress": 1.0})
 
     return {
@@ -172,12 +251,23 @@ async def graph_run(name: str, nodes: list[dict], edges: list[dict], initial_sta
 async def graph_templates(name: str = "") -> dict[str, Any]:
     if not name:
         lines = [f"  • {t['name']}\n    {t['description']}" for t in _TEMPLATES]
-        return {"output": "Available workflow templates:\n\n" + "\n\n".join(lines), "templates": _TEMPLATES, "count": len(_TEMPLATES)}
+        return {
+            "output": "Available workflow templates:\n\n" + "\n\n".join(lines),
+            "templates": _TEMPLATES,
+            "count": len(_TEMPLATES),
+        }
 
     for t in _TEMPLATES:
         if t["name"].lower() == name.lower():
-            nodes_str = "\n".join([f"  - {n['id']} ({n['node_type']}): {n.get('label', '')}" for n in t["nodes"]])
-            edges_str = "\n".join([f"  - {e['source_id']} → {e['target_id']}" for e in t["edges"]])
+            nodes_str = "\n".join(
+                [
+                    f"  - {n['id']} ({n['node_type']}): {n.get('label', '')}"
+                    for n in t["nodes"]
+                ]
+            )
+            edges_str = "\n".join(
+                [f"  - {e['source_id']} → {e['target_id']}" for e in t["edges"]]
+            )
             return {
                 "output": f"📋 Template: {t['name']}\nDescription: {t['description']}\nNodes:\n{nodes_str}\nEdges:\n{edges_str}",
                 "template": t,
@@ -188,7 +278,9 @@ async def graph_templates(name: str = "") -> dict[str, Any]:
     return {"error": f"template '{name}' not found (available: {names})"}
 
 
-async def workflow_run(task: str, input_data: dict[str, Any] | None = None) -> dict[str, Any]:
+async def workflow_run(
+    task: str, input_data: dict[str, Any] | None = None
+) -> dict[str, Any]:
     if not task:
         return {"error": "task is required"}
     if _gateway is None:
@@ -198,7 +290,12 @@ async def workflow_run(task: str, input_data: dict[str, Any] | None = None) -> d
         "name": f"workflow_{task[:24]}",
         "nodes": [
             {"id": "input_1", "label": "Input", "node_type": "input"},
-            {"id": "llm_1", "label": "Process Task", "node_type": "llm", "config": {"prompt": task}},
+            {
+                "id": "llm_1",
+                "label": "Process Task",
+                "node_type": "llm",
+                "config": {"prompt": task},
+            },
             {"id": "output_1", "label": "Output Result", "node_type": "output"},
         ],
         "edges": [

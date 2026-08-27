@@ -308,17 +308,29 @@ function formatSize(bytes: number): string {
 <template>
   <div class="kb-detail-container">
     <div class="kb-detail-header">
-      <Button type="text" @click="router.push('/knowledge')">
-        <template #icon><ArrowLeftOutlined /></template>
+      <Button
+        type="text"
+        @click="router.push('/knowledge')"
+      >
+        <template #icon>
+          <ArrowLeftOutlined />
+        </template>
         返回
       </Button>
       <h1>{{ kb?.name || '知识库' }}</h1>
       <Space>
-        <Button @click="askInChat" title="在对话中基于该知识库提问">
-          <template #icon><MessageOutlined /></template>
+        <Button
+          title="在对话中基于该知识库提问"
+          @click="askInChat"
+        >
+          <template #icon>
+            <MessageOutlined />
+          </template>
           就此提问
         </Button>
-        <Button @click="showQueryModal = true">查询知识库</Button>
+        <Button @click="showQueryModal = true">
+          查询知识库
+        </Button>
         <Button
           v-if="kb?.status !== 'building'"
           type="primary"
@@ -326,7 +338,9 @@ function formatSize(bytes: number): string {
           :disabled="building"
           @click="buildKnowledgeBase"
         >
-          <template #icon><PlayCircleOutlined /></template>
+          <template #icon>
+            <PlayCircleOutlined />
+          </template>
           构建索引
         </Button>
         <Button
@@ -339,7 +353,10 @@ function formatSize(bytes: number): string {
     </div>
 
     <Spin :spinning="loading">
-      <div v-if="kb" class="kb-info">
+      <div
+        v-if="kb"
+        class="kb-info"
+      >
         <Card>
           <div class="info-grid">
             <div class="info-item">
@@ -373,16 +390,31 @@ function formatSize(bytes: number): string {
               <span>{{ kb.credits_consumed }} credits</span>
             </div>
           </div>
-          <p v-if="kb.description" class="kb-description">{{ kb.description }}</p>
+          <p
+            v-if="kb.description"
+            class="kb-description"
+          >
+            {{ kb.description }}
+          </p>
         </Card>
 
         <!-- 构建进度 -->
-        <Card v-if="building" title="构建进度" style="margin-top: 16px">
-          <Progress :percent="buildProgress" status="active" />
+        <Card
+          v-if="building"
+          title="构建进度"
+          style="margin-top: 16px"
+        >
+          <Progress
+            :percent="buildProgress"
+            status="active"
+          />
         </Card>
 
         <!-- 文档列表 -->
-        <Card title="文档管理" style="margin-top: 16px">
+        <Card
+          title="文档管理"
+          style="margin-top: 16px"
+        >
           <template #extra>
             <Space>
               <Input
@@ -392,7 +424,9 @@ function formatSize(bytes: number): string {
                 size="small"
                 style="width: 180px"
               >
-                <template #prefix><SearchOutlined /></template>
+                <template #prefix>
+                  <SearchOutlined />
+                </template>
               </Input>
               <Button
                 v-if="selectedDocIds.length > 0"
@@ -401,11 +435,18 @@ function formatSize(bytes: number): string {
                 :loading="deletingDocs"
                 @click="batchDeleteDocs"
               >
-                <template #icon><DeleteOutlined /></template>
+                <template #icon>
+                  <DeleteOutlined />
+                </template>
                 批量删除（{{ selectedDocIds.length }}）
               </Button>
-              <Button size="small" @click="openMediaModal">
-                <template #icon><PictureOutlined /></template>
+              <Button
+                size="small"
+                @click="openMediaModal"
+              >
+                <template #icon>
+                  <PictureOutlined />
+                </template>
                 从媒体库选取
               </Button>
               <Upload
@@ -413,8 +454,13 @@ function formatSize(bytes: number): string {
                 :custom-request="handleUpload"
                 accept=".pdf,.md,.txt,.csv,.docx"
               >
-                <Button type="primary" size="small">
-                  <template #icon><CloudUploadOutlined /></template>
+                <Button
+                  type="primary"
+                  size="small"
+                >
+                  <template #icon>
+                    <CloudUploadOutlined />
+                  </template>
                   上传文档
                 </Button>
               </Upload>
@@ -431,7 +477,7 @@ function formatSize(bytes: number): string {
           <Table
             v-else
             :columns="docColumns"
-            :dataSource="filteredDocs"
+            :data-source="filteredDocs"
             :pagination="false"
             :row-selection="{ selectedRowKeys: selectedDocIds, onChange: (keys: any[]) => (selectedDocIds = keys) }"
             row-key="id"
@@ -449,9 +495,19 @@ function formatSize(bytes: number): string {
                 {{ text ? new Date(text).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '' }}
               </template>
               <template v-else-if="column.key === 'action'">
-                <Popconfirm title="确认删除此文档？" @confirm="deleteDoc(record.id)">
-                  <Button type="text" danger size="small" title="删除文档">
-                    <template #icon><DeleteOutlined /></template>
+                <Popconfirm
+                  title="确认删除此文档？"
+                  @confirm="deleteDoc(record.id)"
+                >
+                  <Button
+                    type="text"
+                    danger
+                    size="small"
+                    title="删除文档"
+                  >
+                    <template #icon>
+                      <DeleteOutlined />
+                    </template>
                   </Button>
                 </Popconfirm>
               </template>
@@ -462,32 +518,61 @@ function formatSize(bytes: number): string {
     </Spin>
 
     <!-- 查询弹窗 -->
-    <Modal v-model:visible="showQueryModal" title="查询知识库" :footer="null" :style="{ maxWidth: '600px' }">
+    <Modal
+      v-model:visible="showQueryModal"
+      title="查询知识库"
+      :footer="null"
+      :style="{ maxWidth: '600px' }"
+    >
       <Input.TextArea
         v-model:value="queryText"
         placeholder="输入查询内容..."
         :rows="3"
       />
       <div class="modal-footer">
-        <Button @click="showQueryModal = false">关闭</Button>
-        <Button type="primary" @click="queryKnowledgeBase">查询</Button>
+        <Button @click="showQueryModal = false">
+          关闭
+        </Button>
+        <Button
+          type="primary"
+          @click="queryKnowledgeBase"
+        >
+          查询
+        </Button>
       </div>
 
       <!-- 查询结果 -->
-      <div v-if="queryResults.length > 0" class="query-results">
+      <div
+        v-if="queryResults.length > 0"
+        class="query-results"
+      >
         <h3>查询结果</h3>
-        <div v-for="(result, index) in queryResults" :key="index" class="query-result-item">
+        <div
+          v-for="(result, index) in queryResults"
+          :key="index"
+          class="query-result-item"
+        >
           <div class="result-header">
             <Tag>相关度: {{ (result.score * 100).toFixed(1) }}%</Tag>
-            <span v-if="result.name || result.document_name" class="result-source">📄 {{ result.name || result.document_name }}</span>
+            <span
+              v-if="result.name || result.document_name"
+              class="result-source"
+            >📄 {{ result.name || result.document_name }}</span>
           </div>
-          <p class="result-content">{{ result.content }}</p>
+          <p class="result-content">
+            {{ result.content }}
+          </p>
         </div>
       </div>
     </Modal>
 
     <!-- 从媒体库选取弹窗 -->
-    <Modal v-model:visible="showMediaModal" title="从媒体库选取" :footer="null" :style="{ maxWidth: '700px' }">
+    <Modal
+      v-model:visible="showMediaModal"
+      title="从媒体库选取"
+      :footer="null"
+      :style="{ maxWidth: '700px' }"
+    >
       <!-- 搜索栏 -->
       <div class="media-search-bar">
         <Input
@@ -495,20 +580,38 @@ function formatSize(bytes: number): string {
           placeholder="搜索文件..."
           allow-clear
         >
-          <template #prefix><SearchOutlined /></template>
+          <template #prefix>
+            <SearchOutlined />
+          </template>
         </Input>
         <div class="media-actions">
           <span class="selected-count">已选择 {{ selectedMediaIds.length }} / {{ filteredMediaFiles.length }}</span>
-          <Button size="small" @click="selectAllMedia">全选</Button>
-          <Button size="small" @click="deselectAllMedia">取消全选</Button>
+          <Button
+            size="small"
+            @click="selectAllMedia"
+          >
+            全选
+          </Button>
+          <Button
+            size="small"
+            @click="deselectAllMedia"
+          >
+            取消全选
+          </Button>
         </div>
       </div>
 
       <Spin :spinning="loadingMedia">
-        <div v-if="filteredMediaFiles.length === 0 && !loadingMedia" class="media-empty">
+        <div
+          v-if="filteredMediaFiles.length === 0 && !loadingMedia"
+          class="media-empty"
+        >
           <Empty :description="mediaSearchQuery ? '没有匹配的文件' : '媒体库暂无文件'" />
         </div>
-        <div v-else class="media-list">
+        <div
+          v-else
+          class="media-list"
+        >
           <div
             v-for="item in filteredMediaFiles"
             :key="item.id"
@@ -528,7 +631,9 @@ function formatSize(bytes: number): string {
       </Spin>
 
       <div class="modal-footer">
-        <Button @click="showMediaModal = false">取消</Button>
+        <Button @click="showMediaModal = false">
+          取消
+        </Button>
         <Button
           type="primary"
           :loading="importingMedia"

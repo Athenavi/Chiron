@@ -21,13 +21,8 @@ import redis.asyncio as aioredis
 
 from app.db import get_pool
 from app.memory.conflict_manager import ConflictManager
-from app.memory.layers import (
-    ConflictRef,
-    ProfileItem,
-    ProfileUpdateResult,
-    SlotType,
-    SourceType,
-)
+from app.memory.layers import (ConflictRef, ProfileItem, ProfileUpdateResult,
+                               SlotType, SourceType)
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +44,11 @@ class ProfileCard:
     - derived 二次出现自动写入
     """
 
-    def __init__(self, redis: aioredis.Redis | None = None, conflict_manager: ConflictManager | None = None):
+    def __init__(
+        self,
+        redis: aioredis.Redis | None = None,
+        conflict_manager: ConflictManager | None = None,
+    ):
         """初始化 ProfileCard。
 
         Args:
@@ -92,7 +91,9 @@ class ProfileCard:
                         data = json.loads(cached)
                         return [ProfileItem(**item) for item in data]
                     except (json.JSONDecodeError, TypeError) as e:
-                        logger.warning("Failed to parse cached profile for user %s: %s", user_id, e)
+                        logger.warning(
+                            "Failed to parse cached profile for user %s: %s", user_id, e
+                        )
                         await self._redis.delete(cache_key)
             except Exception as e:
                 logger.warning("Redis cache read failed for user %s: %s", user_id, e)
@@ -132,8 +133,14 @@ class ProfileCard:
                 confidence=row["confidence"],
                 source=SourceType(row["source"]),
                 version=row["version"],
-                confirmed_at=row["confirmed_at"].timestamp() if row["confirmed_at"] else None,
-                last_referenced_at=row["last_referenced_at"].timestamp() if row["last_referenced_at"] else None,
+                confirmed_at=(
+                    row["confirmed_at"].timestamp() if row["confirmed_at"] else None
+                ),
+                last_referenced_at=(
+                    row["last_referenced_at"].timestamp()
+                    if row["last_referenced_at"]
+                    else None
+                ),
                 created_at=row["created_at"].timestamp(),
                 updated_at=row["updated_at"].timestamp(),
             )
@@ -180,14 +187,16 @@ class ProfileCard:
         existing = await self._get_item(tenant_id, user_id, slot, item_key)
 
         # 使用 ConflictManager 进行冲突检测
-        should_block, conflict_event = await self._conflict_manager.detect_and_handle_conflict(
-            tenant_id=tenant_id,
-            user_id=user_id,
-            slot=slot,
-            item_key=item_key,
-            new_value=item_value,
-            new_source=source,
-            existing_item=existing,
+        should_block, conflict_event = (
+            await self._conflict_manager.detect_and_handle_conflict(
+                tenant_id=tenant_id,
+                user_id=user_id,
+                slot=slot,
+                item_key=item_key,
+                new_value=item_value,
+                new_source=source,
+                existing_item=existing,
+            )
         )
 
         # 如果需要阻止写入（user_confirmed 冲突）
@@ -199,7 +208,9 @@ class ProfileCard:
                 item_key=conflict_event.item_key,
                 old_value=conflict_event.old_value,
                 new_value=conflict_event.new_value,
-                old_source=SourceType(SourceType.USER_CONFIRMED.value),  # 现有条目是 user_confirmed
+                old_source=SourceType(
+                    SourceType.USER_CONFIRMED.value
+                ),  # 现有条目是 user_confirmed
                 old_confirmed_at=existing.confirmed_at if existing else None,
             )
             return ProfileUpdateResult(
@@ -213,14 +224,27 @@ class ProfileCard:
             # 更新现有条目（version+1）
             new_version = existing.version + 1
             await self._update_item(
-                tenant_id, user_id, slot, item_key,
-                item_value, confidence, source, new_version, now,
+                tenant_id,
+                user_id,
+                slot,
+                item_key,
+                item_value,
+                confidence,
+                source,
+                new_version,
+                now,
             )
         else:
             # 插入新条目
             await self._insert_item(
-                tenant_id, user_id, slot, item_key,
-                item_value, confidence, source, now,
+                tenant_id,
+                user_id,
+                slot,
+                item_key,
+                item_value,
+                confidence,
+                source,
+                now,
             )
 
         # 失效缓存
@@ -254,7 +278,9 @@ class ProfileCard:
             DELETE FROM user_memory_profile
             WHERE tenant_id = $1 AND user_id = $2 AND slot = $3 AND item_key = $4
         """
-        result = await self._pool.execute(query, tenant_id, user_id, slot.value, item_key)
+        result = await self._pool.execute(
+            query, tenant_id, user_id, slot.value, item_key
+        )
 
         # 失效缓存
         await self._invalidate_cache(tenant_id, user_id)
@@ -315,7 +341,9 @@ class ProfileCard:
             GROUP BY tenant_id, user_id
             HAVING COUNT(*) > $2
         """
-        overloaded_users = await self._pool.fetch(overloaded_query, tenant_id, MAX_ITEMS_LIMIT)
+        overloaded_users = await self._pool.fetch(
+            overloaded_query, tenant_id, MAX_ITEMS_LIMIT
+        )
 
         total_evicted = 0
 
@@ -381,8 +409,14 @@ class ProfileCard:
             confidence=row["confidence"],
             source=SourceType(row["source"]),
             version=row["version"],
-            confirmed_at=row["confirmed_at"].timestamp() if row["confirmed_at"] else None,
-            last_referenced_at=row["last_referenced_at"].timestamp() if row["last_referenced_at"] else None,
+            confirmed_at=(
+                row["confirmed_at"].timestamp() if row["confirmed_at"] else None
+            ),
+            last_referenced_at=(
+                row["last_referenced_at"].timestamp()
+                if row["last_referenced_at"]
+                else None
+            ),
             created_at=row["created_at"].timestamp(),
             updated_at=row["updated_at"].timestamp(),
         )
@@ -400,6 +434,7 @@ class ProfileCard:
     ) -> None:
         """插入新条目。"""
         from datetime import datetime
+
         now_ts = datetime.fromtimestamp(now, tz=UTC)
 
         query = """
@@ -413,9 +448,18 @@ class ProfileCard:
         """
         await self._pool.execute(
             query,
-            tenant_id, user_id, slot.value if isinstance(slot, SlotType) else slot, item_key,
-            json.dumps(item_value) if not isinstance(item_value, (str, int, float, bool)) else item_value,
-            confidence, source.value if isinstance(source, SourceType) else source, now_ts,
+            tenant_id,
+            user_id,
+            slot.value if isinstance(slot, SlotType) else slot,
+            item_key,
+            (
+                json.dumps(item_value)
+                if not isinstance(item_value, (str, int, float, bool))
+                else item_value
+            ),
+            confidence,
+            source.value if isinstance(source, SourceType) else source,
+            now_ts,
         )
 
     async def _update_item(
@@ -432,6 +476,7 @@ class ProfileCard:
     ) -> None:
         """更新现有条目。"""
         from datetime import datetime
+
         now_ts = datetime.fromtimestamp(now, tz=UTC)
 
         query = """
@@ -450,9 +495,19 @@ class ProfileCard:
         """
         await self._pool.execute(
             query,
-            tenant_id, user_id, slot.value if isinstance(slot, SlotType) else slot, item_key,
-            json.dumps(item_value) if not isinstance(item_value, (str, int, float, bool)) else item_value,
-            confidence, source.value if isinstance(source, SourceType) else source, new_version, now_ts,
+            tenant_id,
+            user_id,
+            slot.value if isinstance(slot, SlotType) else slot,
+            item_key,
+            (
+                json.dumps(item_value)
+                if not isinstance(item_value, (str, int, float, bool))
+                else item_value
+            ),
+            confidence,
+            source.value if isinstance(source, SourceType) else source,
+            new_version,
+            now_ts,
         )
 
     async def _invalidate_cache(self, tenant_id: str, user_id: str) -> None:
@@ -465,7 +520,9 @@ class ProfileCard:
     def _item_to_dict(item: ProfileItem) -> dict:
         """将 ProfileItem 转换为字典（用于缓存）。"""
         slot_val = item.slot.value if isinstance(item.slot, SlotType) else item.slot
-        source_val = item.source.value if isinstance(item.source, SourceType) else item.source
+        source_val = (
+            item.source.value if isinstance(item.source, SourceType) else item.source
+        )
         return {
             "slot": slot_val,
             "item_key": item.item_key,

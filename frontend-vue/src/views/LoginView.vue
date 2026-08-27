@@ -244,47 +244,85 @@ async function handleLogin() {
   <div class="login-container">
     <!-- 左侧品牌展示（≥960px 可见） -->
     <aside class="login-brand">
-      <div class="login-brand-badge">Chiron · 企业级 AI Agent 平台</div>
+      <div class="login-brand-badge">
+        Chiron · 企业级 AI Agent 平台
+      </div>
       <h1 class="login-brand-title">
-        让 AI Agent<br /><span>持续工作</span>
+        让 AI Agent<br><span>持续工作</span>
       </h1>
       <p class="login-brand-desc">
         自托管、多租户、全栈可控的 AI Agent 平台。对话、Agent、工作流、技能、知识库与插件一体化。
       </p>
       <div class="login-brand-features">
-        <div class="login-brand-feature">多租户数据隔离</div>
-        <div class="login-brand-feature">端到端轨迹追踪</div>
-        <div class="login-brand-feature">MCP 插件生态</div>
-        <div class="login-brand-feature">HTTPOnly 安全会话</div>
+        <div class="login-brand-feature">
+          多租户数据隔离
+        </div>
+        <div class="login-brand-feature">
+          端到端轨迹追踪
+        </div>
+        <div class="login-brand-feature">
+          MCP 插件生态
+        </div>
+        <div class="login-brand-feature">
+          HTTPOnly 安全会话
+        </div>
       </div>
     </aside>
 
     <!-- 右侧登录表单 -->
     <div class="login-card">
       <div class="login-header">
-        <div class="login-logo">MC</div>
-        <div class="login-title">欢迎回来</div>
-        <div class="login-subtitle">登录进入你的 AI 工作台</div>
+        <div class="login-logo">
+          MC
+        </div>
+        <div class="login-title">
+          欢迎回来
+        </div>
+        <div class="login-subtitle">
+          登录进入你的 AI 工作台
+        </div>
       </div>
-      <Card :bordered="false" class="login-form-card">
-        <Tabs v-model:activeKey="activeTab" centered>
-          <TabPane key="password" tab="密码登录" />
+      <Card
+        :bordered="false"
+        class="login-form-card"
+      >
+        <Tabs
+          v-model:active-key="activeTab"
+          centered
+        >
+          <TabPane
+            key="password"
+            tab="密码登录"
+          />
 
-          <TabPane v-if="smsEnabled" key="sms" tab="短信登录" />
+          <TabPane
+            v-if="smsEnabled"
+            key="sms"
+            tab="短信登录"
+          />
         </Tabs>
 
         <!-- 密码登录 -->
         <template v-if="activeTab === 'password'">
-          <Alert v-if="error" type="error" :message="error" show-icon style="margin-bottom: 16px" />
+          <Alert
+            v-if="error"
+            type="error"
+            :message="error"
+            show-icon
+            style="margin-bottom: 16px"
+          />
 
           <Form
             ref="formRef"
             :model="form"
             :rules="rules"
-            @finish="handleLogin"
             layout="vertical"
+            @finish="handleLogin"
           >
-            <FormItem label="邮箱" name="email">
+            <FormItem
+              label="邮箱"
+              name="email"
+            >
               <Input
                 v-model:value="form.email"
                 placeholder="请输入邮箱"
@@ -292,11 +330,16 @@ async function handleLogin() {
                 aria-label="邮箱"
                 autocomplete="email"
               >
-                <template #prefix><MailOutlined /></template>
+                <template #prefix>
+                  <MailOutlined />
+                </template>
               </Input>
             </FormItem>
 
-            <FormItem label="密码" name="password">
+            <FormItem
+              label="密码"
+              name="password"
+            >
               <Input
                 v-model:value="form.password"
                 placeholder="请输入密码"
@@ -305,11 +348,16 @@ async function handleLogin() {
                 aria-label="密码"
                 autocomplete="current-password"
               >
-                <template #prefix><LockOutlined /></template>
+                <template #prefix>
+                  <LockOutlined />
+                </template>
               </Input>
             </FormItem>
 
-            <FormItem v-if="needCaptcha" label="人机验证">
+            <FormItem
+              v-if="needCaptcha"
+              label="人机验证"
+            >
               <CaptchaWidget
                 ref="captchaRef"
                 :provider="captchaConfig.provider"
@@ -321,14 +369,31 @@ async function handleLogin() {
             </FormItem>
 
             <FormItem>
-              <Space direction="vertical" style="width: 100%">
-                <Button type="primary" html-type="submit" block :loading="authStore.loading" size="large">
+              <Space
+                direction="vertical"
+                style="width: 100%"
+              >
+                <Button
+                  type="primary"
+                  html-type="submit"
+                  block
+                  :loading="authStore.loading"
+                  size="large"
+                >
                   登录
                 </Button>
-                <Button type="link" block @click="router.push('/register')">
+                <Button
+                  type="link"
+                  block
+                  @click="router.push('/register')"
+                >
                   没有账号？注册
                 </Button>
-                <Button type="link" block @click="router.push('/install')">
+                <Button
+                  type="link"
+                  block
+                  @click="router.push('/install')"
+                >
                   首次部署？初始化系统
                 </Button>
               </Space>
@@ -338,7 +403,13 @@ async function handleLogin() {
 
         <!-- 短信登录 -->
         <template v-else>
-          <Alert v-if="smsError" type="error" :message="smsError" show-icon style="margin-bottom: 16px" />
+          <Alert
+            v-if="smsError"
+            type="error"
+            :message="smsError"
+            show-icon
+            style="margin-bottom: 16px"
+          />
 
           <Form
             ref="smsFormRef"
@@ -346,25 +417,35 @@ async function handleLogin() {
             :rules="smsRules"
             layout="vertical"
           >
-            <FormItem label="手机号" name="phone">
+            <FormItem
+              label="手机号"
+              name="phone"
+            >
               <Input
                 v-model:value="smsForm.phone"
                 placeholder="请输入手机号"
                 size="large"
                 :maxlength="21"
               >
-                <template #prefix><MobileOutlined /></template>
+                <template #prefix>
+                  <MobileOutlined />
+                </template>
               </Input>
             </FormItem>
 
-            <FormItem label="验证码" name="code">
+            <FormItem
+              label="验证码"
+              name="code"
+            >
               <Input
                 v-model:value="smsForm.code"
                 placeholder="6 位数字验证码"
                 size="large"
                 :maxlength="6"
               >
-                <template #prefix><SafetyOutlined /></template>
+                <template #prefix>
+                  <SafetyOutlined />
+                </template>
                 <template #suffix>
                   <Button
                     size="small"
@@ -379,7 +460,10 @@ async function handleLogin() {
               </Input>
             </FormItem>
 
-            <FormItem v-if="needCaptcha" label="人机验证">
+            <FormItem
+              v-if="needCaptcha"
+              label="人机验证"
+            >
               <CaptchaWidget
                 ref="captchaRef"
                 :provider="captchaConfig.provider"

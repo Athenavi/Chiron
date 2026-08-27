@@ -17,6 +17,7 @@
 - 删除：DELETE /v1/skills/{name} 仅删除 user 私有目录中的技能（保持现状）；
   租户共享层技能的删除由租户 owner 后续通过 scope=tenant 单独处理（本期未实现）。
 """
+
 from __future__ import annotations
 
 import json
@@ -26,7 +27,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.skill.store import SkillStore, SkillDef
+from app.skill.store import SkillDef, SkillStore
 
 router = APIRouter(tags=["skills"])
 
@@ -37,7 +38,9 @@ def _valid_scope(scope: str = "") -> str:
         return ""
     if scope == "tenant":
         return "tenant"
-    raise HTTPException(status_code=400, detail="invalid scope: must be 'tenant' or 'private'")
+    raise HTTPException(
+        status_code=400, detail="invalid scope: must be 'tenant' or 'private'"
+    )
 
 
 def _store_for(user_id: str = "", tenant_id: str = "", scope: str = "") -> SkillStore:
@@ -73,7 +76,9 @@ class SkillInstallRequest(BaseModel):
 
 
 @router.post("/v1/skills/{name}/register")
-async def register_skill(name: str, user_id: str = "", tenant_id: str = "", scope: str = "") -> dict[str, Any]:
+async def register_skill(
+    name: str, user_id: str = "", tenant_id: str = "", scope: str = ""
+) -> dict[str, Any]:
     """将能力注册中心的技能注册为本地技能（SkillStore），供对话/Agent 工具链调用。
 
     前端 SkillMarketCard 调用 POST /v1/skills/{capabilityId}/register；
@@ -90,7 +95,12 @@ async def register_skill(name: str, user_id: str = "", tenant_id: str = "", scop
 
     existing = [s for s in store.list() if s.name == name]
     if existing:
-        return {"success": True, "skill": name, "registered": True, "scope": store.write_scope}
+        return {
+            "success": True,
+            "skill": name,
+            "registered": True,
+            "scope": store.write_scope,
+        }
 
     skill = SkillDef(
         name=cap.name or name,
@@ -110,7 +120,9 @@ async def register_skill(name: str, user_id: str = "", tenant_id: str = "", scop
 
 
 @router.post("/v1/skills/install")
-async def install_skill(body: SkillInstallRequest, user_id: str = "", tenant_id: str = "", scope: str = "") -> dict[str, Any]:
+async def install_skill(
+    body: SkillInstallRequest, user_id: str = "", tenant_id: str = "", scope: str = ""
+) -> dict[str, Any]:
     """安装技能（url / file / inline）；scope=tenant 时安装进租户共享层。"""
     store = _store_for(user_id, tenant_id, _valid_scope(scope))
 
@@ -122,16 +134,20 @@ async def install_skill(body: SkillInstallRequest, user_id: str = "", tenant_id:
             data = json.loads(body.inline)
         elif body.file:
             from app.tools.core import _safe_path
+
             safe_file = _safe_path(body.file, str(store.root))
             data = json.loads(safe_file.read_text(encoding="utf-8"))
         else:
             import httpx
+
             async with httpx.AsyncClient(timeout=20) as client:
                 resp = await client.get(body.url)
                 resp.raise_for_status()
                 data = resp.json()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"failed to load skill definition: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"failed to load skill definition: {e}"
+        )
 
     exec_cfg = data.get("exec", {})
     skill_name = data.get("name", "")
@@ -150,7 +166,11 @@ async def install_skill(body: SkillInstallRequest, user_id: str = "", tenant_id:
     store.save(skill)
     payload = skill.to_dict()
     payload["source"] = store.write_scope
-    return {"skill": payload, "message": f"Skill '{skill.name}' installed", "scope": store.write_scope}
+    return {
+        "skill": payload,
+        "message": f"Skill '{skill.name}' installed",
+        "scope": store.write_scope,
+    }
 
 
 class SkillGenerateRequest(BaseModel):
@@ -159,7 +179,9 @@ class SkillGenerateRequest(BaseModel):
 
 
 @router.post("/v1/skills/generate")
-async def generate_skill(body: SkillGenerateRequest, user_id: str = "", tenant_id: str = "", scope: str = "") -> dict[str, Any]:
+async def generate_skill(
+    body: SkillGenerateRequest, user_id: str = "", tenant_id: str = "", scope: str = ""
+) -> dict[str, Any]:
     """生成技能；auto_install 时保存，scope=tenant 则保存进租户共享层。"""
     store = _store_for(user_id, tenant_id, _valid_scope(scope))
 
@@ -185,7 +207,9 @@ async def generate_skill(body: SkillGenerateRequest, user_id: str = "", tenant_i
 
 
 @router.delete("/v1/skills/{name}")
-async def delete_skill(name: str, user_id: str = "", tenant_id: str = "") -> dict[str, str]:
+async def delete_skill(
+    name: str, user_id: str = "", tenant_id: str = ""
+) -> dict[str, str]:
     """删除技能：仅删除 user 私有目录中的技能（保持现状）。
 
     租户共享层技能的删除由租户 owner 后续通过 scope=tenant 参数单独处理
@@ -207,7 +231,9 @@ class SkillToggleRequest(BaseModel):
 
 
 @router.put("/v1/skills/{name}")
-async def toggle_skill(name: str, body: SkillToggleRequest, user_id: str = "", tenant_id: str = "") -> dict[str, Any]:
+async def toggle_skill(
+    name: str, body: SkillToggleRequest, user_id: str = "", tenant_id: str = ""
+) -> dict[str, Any]:
     """启用/停用技能（停用后不进 agent 目录、不可运行）。
 
     命中的技能可能来自租户/全局共享层；回写时落在 user 私有目录形成“本地覆盖”
@@ -233,7 +259,9 @@ class SkillRunRequest(BaseModel):
 
 
 @router.post("/v1/skills/{name}/run")
-async def run_skill(name: str, body: SkillRunRequest, user_id: str = "", tenant_id: str = "") -> dict[str, Any]:
+async def run_skill(
+    name: str, body: SkillRunRequest, user_id: str = "", tenant_id: str = ""
+) -> dict[str, Any]:
     """运行技能（校验启用状态后调 skill_run）。
 
     把请求身份写入 tool context 再执行，保证 tools/skill.py 的 skill_run
@@ -251,6 +279,7 @@ async def run_skill(name: str, body: SkillRunRequest, user_id: str = "", tenant_
         raise HTTPException(status_code=400, detail=f"Skill '{name}' 已停用")
 
     import json as _json
+
     from app.tools.context import get_all, restore_context, set_tool_context
     from app.tools.skill import skill_run
 
@@ -263,13 +292,16 @@ async def run_skill(name: str, body: SkillRunRequest, user_id: str = "", tenant_
 
 
 @router.get("/v1/skills/discover")
-async def discover_skills(url: str = "", user_id: str = "", tenant_id: str = "") -> dict[str, Any]:
+async def discover_skills(
+    url: str = "", user_id: str = "", tenant_id: str = ""
+) -> dict[str, Any]:
     store = _store_for(user_id, tenant_id)
     results: list[dict[str, Any]] = []
 
     if url:
         try:
             import httpx
+
             async with httpx.AsyncClient(timeout=20) as client:
                 resp = await client.get(url)
                 resp.raise_for_status()
@@ -277,25 +309,29 @@ async def discover_skills(url: str = "", user_id: str = "", tenant_id: str = "")
                 installed_names = {s.name for s in store.list()}
                 for item in items:
                     name = item.get("name", "")
-                    results.append({
-                        "name": name,
-                        "description": item.get("description", ""),
-                        "version": item.get("version", ""),
-                        "author": item.get("author", ""),
-                        "source": item.get("source", url),
-                        "installed": name in installed_names,
-                    })
+                    results.append(
+                        {
+                            "name": name,
+                            "description": item.get("description", ""),
+                            "version": item.get("version", ""),
+                            "author": item.get("author", ""),
+                            "source": item.get("source", url),
+                            "installed": name in installed_names,
+                        }
+                    )
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"discover remote failed: {e}")
     else:
         for s in store.list():
-            results.append({
-                "name": s.name,
-                "description": s.description,
-                "version": s.version,
-                "author": s.author,
-                "source": s.source,
-                "installed": True,
-            })
+            results.append(
+                {
+                    "name": s.name,
+                    "description": s.description,
+                    "version": s.version,
+                    "author": s.author,
+                    "source": s.source,
+                    "installed": True,
+                }
+            )
 
     return {"local": results, "remote": []}

@@ -5,6 +5,7 @@ chiron 的 registry.execute 只有 (name, params)，工具无法感知 session/�
 此处用 contextvars 在 AgentRuntime.run() 内设置，工具通过 get_* 读取，
 在 async 环境中自动沿任务传播（无需改 registry 签名）。
 """
+
 from __future__ import annotations
 
 import contextvars

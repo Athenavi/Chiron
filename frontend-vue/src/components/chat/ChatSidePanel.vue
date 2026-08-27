@@ -295,20 +295,41 @@ function pickSession(id: string) {
         <span class="session-picker-name">{{ activeSession?.title || '新对话' }}</span>
         <DownOutlined class="session-picker-arrow" />
       </button>
-      <button v-else type="button" class="session-back" @click="emit('update:view', 'trajectory')">
+      <button
+        v-else
+        type="button"
+        class="session-back"
+        @click="emit('update:view', 'trajectory')"
+      >
         <LeftOutlined />
         <span class="session-picker-name">{{ activeSession?.title || '新对话' }}</span>
       </button>
-      <CloseOutlined class="toolbar-close" title="收起面板" @click="emit('close')" />
+      <CloseOutlined
+        class="toolbar-close"
+        title="收起面板"
+        @click="emit('close')"
+      />
     </div>
 
     <!-- 顶部：当前会话上下文（知识库/Agent/技能/工作流芯片，可移除；移除由父级清空 query 与 context） -->
-    <div v-if="contextChips.length" class="panel-context">
+    <div
+      v-if="contextChips.length"
+      class="panel-context"
+    >
       <span class="ctx-title">当前上下文</span>
       <div class="ctx-chips">
-        <span v-for="c in contextChips" :key="c.type" class="ctx-chip" :title="`${c.label}（点击移除）`">
+        <span
+          v-for="c in contextChips"
+          :key="c.type"
+          class="ctx-chip"
+          :title="`${c.label}（点击移除）`"
+        >
           <span class="ctx-chip-label">{{ c.label }}</span>
-          <CloseOutlined class="ctx-chip-remove" :title="`移除${c.label}`" @click="emit('remove-context', c.type)" />
+          <CloseOutlined
+            class="ctx-chip-remove"
+            :title="`移除${c.label}`"
+            @click="emit('remove-context', c.type)"
+          />
         </span>
       </div>
     </div>
@@ -333,7 +354,9 @@ function pickSession(id: string) {
           :disabled="!unifiedTaskInput.trim()"
           @click="launchUnified"
         >
-          <template #icon><ThunderboltOutlined /></template>
+          <template #icon>
+            <ThunderboltOutlined />
+          </template>
           发起
         </Button>
       </div>
@@ -343,15 +366,25 @@ function pickSession(id: string) {
         :disabled="!contextChips.length"
         title="清空知识库/Agent/技能/工作流上下文"
         @click="emit('clear-context')"
-      >清空上下文</button>
+      >
+        清空上下文
+      </button>
     </div>
 
     <!-- 主视图：当前会话轨迹（搜索 + 时间线 + 提问锚点） -->
     <template v-if="view === 'trajectory'">
       <div class="panel-search">
         <SearchOutlined class="search-icon" />
-        <input v-model="trajectoryQuery" class="search-input" placeholder="搜索提问" />
-        <CloseOutlined v-if="trajectoryQuery" class="search-clear" @click="trajectoryQuery = ''" />
+        <input
+          v-model="trajectoryQuery"
+          class="search-input"
+          placeholder="搜索提问"
+        >
+        <CloseOutlined
+          v-if="trajectoryQuery"
+          class="search-clear"
+          @click="trajectoryQuery = ''"
+        />
       </div>
 
       <div class="timeline">
@@ -376,7 +409,12 @@ function pickSession(id: string) {
             @mouseenter="hoveredIndex = i"
             @mouseleave="hoveredIndex = null"
           />
-          <div v-if="filteredIndexes.length === 0" class="timeline-empty">无提问</div>
+          <div
+            v-if="filteredIndexes.length === 0"
+            class="timeline-empty"
+          >
+            无提问
+          </div>
         </div>
       </div>
 
@@ -388,21 +426,46 @@ function pickSession(id: string) {
           :class="{ active: i === selectedIndex }"
           @click="emit('focus', i)"
         >
-          <span class="row-dot" aria-hidden />
+          <span
+            class="row-dot"
+            aria-hidden
+          />
           <span class="row-text">{{ summary(i) }}</span>
         </div>
-        <div v-if="filteredIndexes.length === 0" class="list-empty">当前会话暂无提问</div>
+        <div
+          v-if="filteredIndexes.length === 0"
+          class="list-empty"
+        >
+          当前会话暂无提问
+        </div>
       </div>
 
       <!-- 底部：最近活动（/v1/activities，30s 轮询，点击跳转） -->
       <div class="panel-activities">
         <div class="act-head">
           <span class="act-title">最近活动</span>
-          <span class="act-refresh" title="刷新" @click="loadActivities"><ReloadOutlined /></span>
+          <span
+            class="act-refresh"
+            title="刷新"
+            @click="loadActivities"
+          ><ReloadOutlined /></span>
         </div>
-        <div v-if="activitiesLoading && !recentActivities.length" class="act-empty">加载中…</div>
-        <div v-else-if="!recentActivities.length" class="act-empty">暂无活动</div>
-        <div v-else class="act-list">
+        <div
+          v-if="activitiesLoading && !recentActivities.length"
+          class="act-empty"
+        >
+          加载中…
+        </div>
+        <div
+          v-else-if="!recentActivities.length"
+          class="act-empty"
+        >
+          暂无活动
+        </div>
+        <div
+          v-else
+          class="act-list"
+        >
           <button
             v-for="a in recentActivities"
             :key="a.id"
@@ -411,7 +474,10 @@ function pickSession(id: string) {
             :title="a.title"
             @click="goActivity(a)"
           >
-            <span class="act-dot" :class="a.status || ''" />
+            <span
+              class="act-dot"
+              :class="a.status || ''"
+            />
             <span class="act-text">{{ a.title }}</span>
             <span class="act-time">{{ actTime(a.timestamp) }}</span>
           </button>
@@ -422,31 +488,63 @@ function pickSession(id: string) {
     <!-- 从视图：会话历史列表（新对话 + 搜索 + 行操作菜单 + 用户） -->
     <template v-else>
       <div class="sessions-head">
-        <Button block type="primary" size="small" @click="emit('create')">
-          <template #icon><PlusOutlined /></template>
+        <Button
+          block
+          type="primary"
+          size="small"
+          @click="emit('create')"
+        >
+          <template #icon>
+            <PlusOutlined />
+          </template>
           新对话
         </Button>
         <div class="panel-search">
           <SearchOutlined class="search-icon" />
-          <input v-model="sessionQuery" class="search-input" placeholder="搜索会话" />
-          <CloseOutlined v-if="sessionQuery" class="search-clear" @click="sessionQuery = ''" />
+          <input
+            v-model="sessionQuery"
+            class="search-input"
+            placeholder="搜索会话"
+          >
+          <CloseOutlined
+            v-if="sessionQuery"
+            class="search-clear"
+            @click="sessionQuery = ''"
+          />
         </div>
         <!-- P3-D: 标签筛选 chips -->
-        <div v-if="usedTags.length" class="tag-filter">
+        <div
+          v-if="usedTags.length"
+          class="tag-filter"
+        >
           <button
-            v-for="tag in usedTags" :key="tag"
-            class="tag-chip" :class="{ active: activeTag === tag }"
+            v-for="tag in usedTags"
+            :key="tag"
+            class="tag-chip"
+            :class="{ active: activeTag === tag }"
             type="button"
             @click="toggleTag(tag)"
-          >{{ tag }}</button>
+          >
+            {{ tag }}
+          </button>
         </div>
       </div>
 
       <div class="session-list">
-        <div v-if="filteredSessions.length === 0" class="list-empty">暂无对话</div>
+        <div
+          v-if="filteredSessions.length === 0"
+          class="list-empty"
+        >
+          暂无对话
+        </div>
         <!-- P2-B: 按时间分组渲染（置顶/今天/昨天/7天内/更早） -->
-        <template v-for="group in groupedSessions" :key="group.label">
-          <div class="session-group-label">{{ group.label }}</div>
+        <template
+          v-for="group in groupedSessions"
+          :key="group.label"
+        >
+          <div class="session-group-label">
+            {{ group.label }}
+          </div>
           <div
             v-for="s in group.sessions"
             :key="s.id"
@@ -456,9 +554,15 @@ function pickSession(id: string) {
           >
             <div class="session-info">
               <div class="session-title-line">
-                <PushpinOutlined v-if="s.pinned" class="pin-icon" />
+                <PushpinOutlined
+                  v-if="s.pinned"
+                  class="pin-icon"
+                />
                 <span class="session-title">{{ s.title || '新对话' }}</span>
-                <span v-if="s.tag" class="session-tag">{{ s.tag }}</span>
+                <span
+                  v-if="s.tag"
+                  class="session-tag"
+                >{{ s.tag }}</span>
               </div>
               <span class="session-time">{{ formatRelativeTime(s.updated_at || s.created_at) }}</span>
             </div>
@@ -468,39 +572,63 @@ function pickSession(id: string) {
               @open-change="(v: boolean) => onMenuOpenChange(v, s.id)"
             >
               <Button
-                type="text" size="small" class="session-more-btn"
+                type="text"
+                size="small"
+                class="session-more-btn"
                 :aria-label="`会话操作：${s.title || '新对话'}`"
                 @click.stop
               >
-                <template #icon><EllipsisOutlined /></template>
+                <template #icon>
+                  <EllipsisOutlined />
+                </template>
               </Button>
               <template #overlay>
                 <Menu class="session-menu">
-                  <MenuItem key="rename" @click="emit('rename', s.id, s.title || '')">
+                  <MenuItem
+                    key="rename"
+                    @click="emit('rename', s.id, s.title || '')"
+                  >
                     <EditOutlined class="menu-icon" />重命名
                   </MenuItem>
-                  <MenuItem key="pin" @click="emit('pin', s.id, !s.pinned)">
+                  <MenuItem
+                    key="pin"
+                    @click="emit('pin', s.id, !s.pinned)"
+                  >
                     <PushpinOutlined class="menu-icon" />{{ s.pinned ? '取消置顶' : '置顶' }}
                   </MenuItem>
                   <!-- P3-D: 标签设置（用 MenuDivider 分组，避免 SubMenu 在 Dropdown overlay 中丢失上下文） -->
                   <MenuDivider />
-                  <MenuItem v-for="t in TAGS" :key="'tag-'+t" @click="emit('tag', s.id, t)">
+                  <MenuItem
+                    v-for="t in TAGS"
+                    :key="'tag-'+t"
+                    @click="emit('tag', s.id, t)"
+                  >
                     <TagOutlined class="menu-icon" />标签：{{ t }}
                   </MenuItem>
-                  <MenuItem key="tag-clear" @click="emit('tag', s.id, '')">
+                  <MenuItem
+                    key="tag-clear"
+                    @click="emit('tag', s.id, '')"
+                  >
                     <CloseOutlined class="menu-icon" />清除标签
                   </MenuItem>
                   <MenuDivider />
-                <MenuItem key="share" @click="emit('share', s.id)">
-                  <ShareAltOutlined class="menu-icon" />分享
-                </MenuItem>
-                <MenuDivider />
-                <MenuItem key="delete" danger @click="emit('delete', s.id)">
-                  <DeleteOutlined class="menu-icon" />删除
-                </MenuItem>
-              </Menu>
-            </template>
-          </Dropdown>
+                  <MenuItem
+                    key="share"
+                    @click="emit('share', s.id)"
+                  >
+                    <ShareAltOutlined class="menu-icon" />分享
+                  </MenuItem>
+                  <MenuDivider />
+                  <MenuItem
+                    key="delete"
+                    danger
+                    @click="emit('delete', s.id)"
+                  >
+                    <DeleteOutlined class="menu-icon" />删除
+                  </MenuItem>
+                </Menu>
+              </template>
+            </Dropdown>
           </div>
         </template>
       </div>
@@ -509,11 +637,28 @@ function pickSession(id: string) {
       <div class="panel-activities">
         <div class="act-head">
           <span class="act-title">最近活动</span>
-          <span class="act-refresh" title="刷新" @click="loadActivities"><ReloadOutlined /></span>
+          <span
+            class="act-refresh"
+            title="刷新"
+            @click="loadActivities"
+          ><ReloadOutlined /></span>
         </div>
-        <div v-if="activitiesLoading && !recentActivities.length" class="act-empty">加载中…</div>
-        <div v-else-if="!recentActivities.length" class="act-empty">暂无活动</div>
-        <div v-else class="act-list">
+        <div
+          v-if="activitiesLoading && !recentActivities.length"
+          class="act-empty"
+        >
+          加载中…
+        </div>
+        <div
+          v-else-if="!recentActivities.length"
+          class="act-empty"
+        >
+          暂无活动
+        </div>
+        <div
+          v-else
+          class="act-list"
+        >
           <button
             v-for="a in recentActivities"
             :key="a.id"
@@ -522,7 +667,10 @@ function pickSession(id: string) {
             :title="a.title"
             @click="goActivity(a)"
           >
-            <span class="act-dot" :class="a.status || ''" />
+            <span
+              class="act-dot"
+              :class="a.status || ''"
+            />
             <span class="act-text">{{ a.title }}</span>
             <span class="act-time">{{ actTime(a.timestamp) }}</span>
           </button>
@@ -530,7 +678,10 @@ function pickSession(id: string) {
       </div>
 
       <div class="panel-foot">
-        <Avatar :size="22" :style="{ backgroundColor: 'var(--primary)' }">
+        <Avatar
+          :size="22"
+          :style="{ backgroundColor: 'var(--primary)' }"
+        >
           {{ (userName || 'U').charAt(0).toUpperCase() }}
         </Avatar>
         <span class="foot-name">{{ userName || '用户' }}</span>

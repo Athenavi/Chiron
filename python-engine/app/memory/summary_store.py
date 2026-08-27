@@ -18,12 +18,7 @@ from typing import Any
 import redis.asyncio as aioredis
 
 from app.db import get_pool
-from app.memory.layers import (
-    MemoryType,
-    RecalledItem,
-    Scope,
-    SummaryEntry,
-)
+from app.memory.layers import MemoryType, RecalledItem, Scope, SummaryEntry
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +124,7 @@ class SummaryStore:
 
         try:
             from pymilvus import Collection
+
             self._milvus_collection = Collection(MILVUS_COLLECTION)
             return self._milvus_collection
         except Exception as e:
@@ -179,15 +175,24 @@ class SummaryStore:
                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 0, NULL, 'active', NOW())
                    ON CONFLICT (tenant_id, user_id, content_hash) DO NOTHING
                    RETURNING id""",
-                summary_id, tenant_id, user_id, session_id,
-                content, json.dumps(topics or []), json.dumps(entities or {}),
-                turn_range[0], turn_range[1], content_hash,
+                summary_id,
+                tenant_id,
+                user_id,
+                session_id,
+                content,
+                json.dumps(topics or []),
+                json.dumps(entities or {}),
+                turn_range[0],
+                turn_range[1],
+                content_hash,
             )
             if row is None:
                 # 已存在相同 hash，返回已有 ID
                 existing = await self._pool.fetchrow(
                     "SELECT id FROM memory_summaries WHERE content_hash=$1 AND tenant_id=$2 AND user_id=$3",
-                    content_hash, tenant_id, user_id,
+                    content_hash,
+                    tenant_id,
+                    user_id,
                 )
                 return existing["id"] if existing else None
 
@@ -200,8 +205,15 @@ class SummaryStore:
         embedding = await self._get_embedding(content)
         if embedding:
             await self._milvus_insert(
-                summary_id, tenant_id, user_id, session_id,
-                content, embedding, turn_range, topics, entities,
+                summary_id,
+                tenant_id,
+                user_id,
+                session_id,
+                content,
+                embedding,
+                turn_range,
+                topics,
+                entities,
             )
 
         # 失效查询缓存
@@ -228,22 +240,34 @@ class SummaryStore:
 
         try:
             import time as t
-            metadata = json.dumps({
-                "session_id": session_id,
-                "turn_range": list(turn_range),
-                "topics": topics or [],
-                "entities": entities or {},
-                "content_hash": "",
-                "access_count": 0,
-                "last_accessed_at": int(t.time()),
-                "status": "active",
-            }, ensure_ascii=False)
 
-            coll.insert([
-                [summary_id], [tenant_id], [user_id], [session_id],
-                [content], [MemoryType.SUMMARY.value], [embedding],
-                [str(int(t.time()))], [metadata],
-            ])
+            metadata = json.dumps(
+                {
+                    "session_id": session_id,
+                    "turn_range": list(turn_range),
+                    "topics": topics or [],
+                    "entities": entities or {},
+                    "content_hash": "",
+                    "access_count": 0,
+                    "last_accessed_at": int(t.time()),
+                    "status": "active",
+                },
+                ensure_ascii=False,
+            )
+
+            coll.insert(
+                [
+                    [summary_id],
+                    [tenant_id],
+                    [user_id],
+                    [session_id],
+                    [content],
+                    [MemoryType.SUMMARY.value],
+                    [embedding],
+                    [str(int(t.time()))],
+                    [metadata],
+                ]
+            )
             coll.flush()
         except Exception as e:
             logger.warning("Milvus insert failed (PG has data): %s", e)
@@ -285,9 +309,7 @@ class SummaryStore:
             )
         else:
             # 无嵌入时降级：从 PG 取最近摘要
-            items = await self._pg_recent_summaries(
-                tenant_id, user_id, top_k
-            )
+            items = await self._pg_recent_summaries(tenant_id, user_id, top_k)
 
         # final_score 排序
         items = self._compute_final_scores(items)
@@ -341,18 +363,22 @@ class SummaryStore:
             for hits in results:
                 for hit in hits:
                     metadata = json.loads(hit.entity.get(MILVUS_FIELD_METADATA, "{}"))
-                    items.append(RecalledItem(
-                        id=hit.entity.get(MILVUS_FIELD_SUMMARY_ID, ""),
-                        content=hit.entity.get(MILVUS_FIELD_CONTENT, ""),
-                        topics=metadata.get("topics", []),
-                        entities=metadata.get("entities", {}),
-                        turn_range=tuple(metadata.get("turn_range", [0, 0])),
-                        session_id=metadata.get("session_id", ""),
-                        access_count=metadata.get("access_count", 0),
-                        last_accessed_at=metadata.get("last_accessed_at", 0),
-                        created_at=float(hit.entity.get(MILVUS_FIELD_CREATED_AT, 0)),
-                        score=hit.score,  # 初始为 cosine 相似度
-                    ))
+                    items.append(
+                        RecalledItem(
+                            id=hit.entity.get(MILVUS_FIELD_SUMMARY_ID, ""),
+                            content=hit.entity.get(MILVUS_FIELD_CONTENT, ""),
+                            topics=metadata.get("topics", []),
+                            entities=metadata.get("entities", {}),
+                            turn_range=tuple(metadata.get("turn_range", [0, 0])),
+                            session_id=metadata.get("session_id", ""),
+                            access_count=metadata.get("access_count", 0),
+                            last_accessed_at=metadata.get("last_accessed_at", 0),
+                            created_at=float(
+                                hit.entity.get(MILVUS_FIELD_CREATED_AT, 0)
+                            ),
+                            score=hit.score,  # 初始为 cosine 相似度
+                        )
+                    )
             return items
 
         except Exception as e:
@@ -375,7 +401,9 @@ class SummaryStore:
                    WHERE tenant_id=$1 AND user_id=$2 AND status='active'
                    ORDER BY created_at DESC
                    LIMIT $3""",
-                tenant_id, user_id, limit,
+                tenant_id,
+                user_id,
+                limit,
             )
 
             items = []
@@ -393,18 +421,24 @@ class SummaryStore:
                 else:
                     last_accessed = 0.0
 
-                items.append(RecalledItem(
-                    id=row["id"],
-                    content=row["content"],
-                    topics=topics or [],
-                    entities=entities or {},
-                    turn_range=(row["turn_start"], row["turn_end"]),
-                    session_id=row["session_id"],
-                    access_count=row["access_count"],
-                    last_accessed_at=last_accessed,
-                    created_at=row["created_at"].timestamp() if row["created_at"] else time.time(),
-                    score=0.0,
-                ))
+                items.append(
+                    RecalledItem(
+                        id=row["id"],
+                        content=row["content"],
+                        topics=topics or [],
+                        entities=entities or {},
+                        turn_range=(row["turn_start"], row["turn_end"]),
+                        session_id=row["session_id"],
+                        access_count=row["access_count"],
+                        last_accessed_at=last_accessed,
+                        created_at=(
+                            row["created_at"].timestamp()
+                            if row["created_at"]
+                            else time.time()
+                        ),
+                        score=0.0,
+                    )
+                )
             return items
         except Exception as e:
             logger.error("PG query failed for summaries: %s", e)
@@ -426,6 +460,7 @@ class SummaryStore:
 
             # access_factor: 使用 log 压缩（0-1）
             import math
+
             access = min(math.log1p(item.access_count) / 5.0, 1.0)
 
             # similarity_factor: 初始 score 已经是 cosine 相似度
@@ -527,19 +562,31 @@ class SummaryStore:
                    WHERE tenant_id=$1 AND user_id=$2 AND status='active'
                    ORDER BY created_at DESC
                    LIMIT $3""",
-                tenant_id, user_id, limit,
+                tenant_id,
+                user_id,
+                limit,
             )
             return [
                 {
                     "id": row["id"],
                     "content": row["content"],
-                    "topics": row["topics"] if isinstance(row["topics"], list) else json.loads(row["topics"] or "[]"),
-                    "entities": row["entities"] if isinstance(row["entities"], dict) else json.loads(row["entities"] or "{}"),
+                    "topics": (
+                        row["topics"]
+                        if isinstance(row["topics"], list)
+                        else json.loads(row["topics"] or "[]")
+                    ),
+                    "entities": (
+                        row["entities"]
+                        if isinstance(row["entities"], dict)
+                        else json.loads(row["entities"] or "{}")
+                    ),
                     "turn_start": row["turn_start"],
                     "turn_end": row["turn_end"],
                     "session_id": row["session_id"],
                     "access_count": row["access_count"],
-                    "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+                    "created_at": (
+                        row["created_at"].isoformat() if row["created_at"] else None
+                    ),
                 }
                 for row in rows
             ]
@@ -557,7 +604,9 @@ class SummaryStore:
         try:
             result = await self._pool.execute(
                 "DELETE FROM memory_summaries WHERE id=$1 AND tenant_id=$2 AND user_id=$3",
-                summary_id, tenant_id, user_id,
+                summary_id,
+                tenant_id,
+                user_id,
             )
             deleted = "DELETE 1" in (result or "")
             if deleted:
@@ -583,7 +632,9 @@ class SummaryStore:
                           status, created_at
                    FROM memory_summaries
                    WHERE content_hash=$1 AND tenant_id=$2 AND user_id=$3""",
-                content_hash, tenant_id, user_id,
+                content_hash,
+                tenant_id,
+                user_id,
             )
             if row is None:
                 return None
@@ -618,10 +669,15 @@ class SummaryStore:
 
         if embedding:
             await self._milvus_insert(
-                created.id, created.tenant_id, created.user_id, created.session_id,
-                created.content, embedding,
+                created.id,
+                created.tenant_id,
+                created.user_id,
+                created.session_id,
+                created.content,
+                embedding,
                 (created.turn_start, created.turn_end),
-                created.topics, created.entities,
+                created.topics,
+                created.entities,
             )
             created.embedding = embedding
 
@@ -641,7 +697,9 @@ class SummaryStore:
                           status, created_at
                    FROM memory_summaries
                    WHERE id=$1 AND tenant_id=$2 AND user_id=$3""",
-                summary_id, tenant_id, user_id,
+                summary_id,
+                tenant_id,
+                user_id,
             )
             if row is None:
                 return None
@@ -666,7 +724,9 @@ class SummaryStore:
                    WHERE tenant_id=$1 AND user_id=$2 AND status='active'
                    ORDER BY created_at DESC
                    LIMIT $3""",
-                tenant_id, user_id, limit,
+                tenant_id,
+                user_id,
+                limit,
             )
             return [self._row_to_entry(row) for row in rows]
         except Exception as e:
@@ -679,8 +739,14 @@ class SummaryStore:
 
         topics_raw = row["topics"]
         entities_raw = row["entities"]
-        topics = j.loads(topics_raw) if isinstance(topics_raw, str) else (topics_raw or [])
-        entities = j.loads(entities_raw) if isinstance(entities_raw, str) else (entities_raw or {})
+        topics = (
+            j.loads(topics_raw) if isinstance(topics_raw, str) else (topics_raw or [])
+        )
+        entities = (
+            j.loads(entities_raw)
+            if isinstance(entities_raw, str)
+            else (entities_raw or {})
+        )
 
         last_accessed = row["last_accessed_at"]
         if last_accessed is not None:

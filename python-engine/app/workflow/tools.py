@@ -1,12 +1,12 @@
 """工作流工具：将 LangGraph 工作流引擎接入本地工具注册表。"""
+
 from __future__ import annotations
 
 from typing import Any
 
 from app.gateway.router import GatewayRouter
 from app.tools.registry import registry
-from app.workflow.engine import run_workflow, get_instance
-
+from app.workflow.engine import get_instance, run_workflow
 
 _gateway: GatewayRouter | None = None
 
@@ -16,7 +16,9 @@ def bind_gateway(gateway: GatewayRouter) -> None:
     _gateway = gateway
 
 
-async def workflow_run(graph_json: dict, initial_state: dict[str, Any] | None = None, name: str = "") -> dict[str, Any]:
+async def workflow_run(
+    graph_json: dict, initial_state: dict[str, Any] | None = None, name: str = ""
+) -> dict[str, Any]:
     if _gateway is None:
         return {"error": "gateway not bound"}
     if not graph_json:
@@ -40,7 +42,9 @@ async def workflow_status(instance_id: str) -> dict[str, Any]:
         "workflow": inst.graph_name,
         "instance_id": inst.instance_id,
         "status": inst.status,
-        "results": {k: {"status": v.status, "output": v.output} for k, v in inst.results.items()},
+        "results": {
+            k: {"status": v.status, "output": v.output} for k, v in inst.results.items()
+        },
     }
 
 
@@ -50,7 +54,10 @@ registry.register(
     parameters={
         "type": "object",
         "properties": {
-            "graph_json": {"type": "object", "description": "StateGraph JSON with nodes/edges"},
+            "graph_json": {
+                "type": "object",
+                "description": "StateGraph JSON with nodes/edges",
+            },
             "initial_state": {"type": "object", "default": {}},
             "name": {"type": "string", "default": ""},
         },

@@ -4,23 +4,26 @@ from __future__ import annotations
 import logging
 from typing import AsyncIterator
 
+from app.config import settings
 from app.gateway.provider import ChatMessage
 from app.gateway.router import GatewayRouter
 from app.interfaces.llm import LLMProvider
-from app.config import settings
 
 logger = logging.getLogger(__name__)
 
 
 def _safe_json(s):
     import json as _json
+
     try:
         return _json.loads(s)
     except Exception:
         return {}
 
 
-def build_messages(system_prompt: str, history: list[dict], content: str) -> list[ChatMessage]:
+def build_messages(
+    system_prompt: str, history: list[dict], content: str
+) -> list[ChatMessage]:
     """构建 LLM 消息列表"""
     messages = []
 
@@ -32,20 +35,31 @@ def build_messages(system_prompt: str, history: list[dict], content: str) -> lis
         tool_calls = None
         if msg.get("tool_calls"):
             from app.gateway.provider import ToolCall
+
             tool_calls = [
                 ToolCall(
                     id=tc.get("id", ""),
-                    name=tc.get("function", {}).get("name", "") if isinstance(tc.get("function"), dict) else tc.get("name", ""),
-                    arguments=tc.get("function", {}).get("arguments", "") if isinstance(tc.get("function"), dict) else tc.get("arguments", ""),
+                    name=(
+                        tc.get("function", {}).get("name", "")
+                        if isinstance(tc.get("function"), dict)
+                        else tc.get("name", "")
+                    ),
+                    arguments=(
+                        tc.get("function", {}).get("arguments", "")
+                        if isinstance(tc.get("function"), dict)
+                        else tc.get("arguments", "")
+                    ),
                 )
                 for tc in msg["tool_calls"]
             ]
-        messages.append(ChatMessage(
-            role=role,
-            content=msg.get("content", ""),
-            tool_call_id=msg.get("tool_call_id", ""),
-            tool_calls=tool_calls,
-        ))
+        messages.append(
+            ChatMessage(
+                role=role,
+                content=msg.get("content", ""),
+                tool_call_id=msg.get("tool_call_id", ""),
+                tool_calls=tool_calls,
+            )
+        )
 
     if content:
         messages.append(ChatMessage(role="user", content=content))
@@ -57,14 +71,20 @@ def convert_tools(tools: list[dict]) -> list[dict]:
     """将工具定义转换为 OpenAI function 格式"""
     converted = []
     for tool in tools:
-        converted.append({
-            "type": "function",
-            "function": {
-                "name": tool.get("name", ""),
-                "description": tool.get("description", ""),
-                "parameters": _safe_json(tool.get("parameters_json", "{}")) if isinstance(tool.get("parameters_json"), str) else tool.get("parameters", {}),
-            },
-        })
+        converted.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": tool.get("name", ""),
+                    "description": tool.get("description", ""),
+                    "parameters": (
+                        _safe_json(tool.get("parameters_json", "{}"))
+                        if isinstance(tool.get("parameters_json"), str)
+                        else tool.get("parameters", {})
+                    ),
+                },
+            }
+        )
     return converted
 
 

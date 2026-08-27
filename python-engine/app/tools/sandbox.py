@@ -6,6 +6,7 @@
 - get_sandbox_dir() / workspace_dir()：由 contextvars（user/tenant）推导
 - safe_join()：相对路径 clamp 到 workspace，拒绝 ../ 与绝对路径逃逸
 """
+
 from __future__ import annotations
 
 import logging
@@ -30,7 +31,8 @@ def sandbox_root() -> Path:
 
 def get_sandbox_dir() -> Path:
     """当前 user 的沙箱根（由 context 推导，自动创建）。"""
-    from app.tools.context import get_user_id, get_tenant_id
+    from app.tools.context import get_tenant_id, get_user_id
+
     tenant = get_tenant_id() or "default"
     user = get_user_id() or "anonymous"
     d = sandbox_root() / tenant / user
@@ -63,7 +65,16 @@ def safe_join(rel: str) -> Path:
 def sandboxed_env() -> dict[str, str]:
     """执行环境：清理敏感/宿主变量，仅保留基础 PATH，并把用户目录变量
     重定向到沙箱内，防止 `$HOME`/`~` 泄漏宿主路径（S 安全修复）。"""
-    allow = {"PATH", "SYSTEMROOT", "WINDIR", "COMSPEC", "TEMP", "TMP", "HOME", "USERPROFILE"}
+    allow = {
+        "PATH",
+        "SYSTEMROOT",
+        "WINDIR",
+        "COMSPEC",
+        "TEMP",
+        "TMP",
+        "HOME",
+        "USERPROFILE",
+    }
     env = {k: v for k, v in os.environ.items() if k in allow}
     env["HOME"] = str(workspace_dir())
     env["USERPROFILE"] = str(workspace_dir())
@@ -75,10 +86,10 @@ def sandboxed_env() -> dict[str, str]:
 # 被禁止的 shell 逃逸模式（S 安全修复：cwd 锁定无法阻止命令内绝对路径访问宿主）
 # 注意：生产部署为 Linux/alpine（见 Dockerfile），必须覆盖 Unix 绝对路径。
 _ESCAPE_PATTERNS = [
-    r"[A-Za-z]:[\\/]",        # Windows 盘符绝对路径 (C:\ 或 C:/)
-    r"\\\\",                  # UNC 路径
+    r"[A-Za-z]:[\\/]",  # Windows 盘符绝对路径 (C:\ 或 C:/)
+    r"\\\\",  # UNC 路径
     r"(^|[^A-Za-z0-9_.])(\.\.)[\\/]",  # 父目录跳转 ..\ 或 ../
-    r"\bcd\b[^&|;]*[A-Za-z]:[\\/]",   # cd 到绝对路径
+    r"\bcd\b[^&|;]*[A-Za-z]:[\\/]",  # cd 到绝对路径
     # Unix/Linux 逃逸：绝对路径（/xxx，2+ 字符路径段或单独 /）、~ 家目录、$HOME 变量。
     # 以空格/引号/分号开头界定，避免误伤相对路径（a/b）、URL（http://）
     # 与 Windows cmd 单字符开关（/b /d /s）。
@@ -90,10 +101,24 @@ _ESCAPE_PATTERNS = [
 # 允许在沙箱内执行的命令白名单（仅允许安全的 Python/数据操作命令）
 _ALLOWED_EXECUTABLES: set[str] = {
     # Python 解释器
-    "python", "python3",
+    "python",
+    "python3",
     # 安全的基础命令
-    "echo", "ls", "dir", "cat", "type", "head", "tail", "wc",
-    "find", "grep", "sort", "uniq", "cut", "tr", "tee",
+    "echo",
+    "ls",
+    "dir",
+    "cat",
+    "type",
+    "head",
+    "tail",
+    "wc",
+    "find",
+    "grep",
+    "sort",
+    "uniq",
+    "cut",
+    "tr",
+    "tee",
 }
 
 
@@ -137,6 +162,7 @@ def _parse_command(command: str) -> tuple[list[str], str | None]:
 def _has_escape(command: str) -> str | None:
     """检测命令是否含逃逸模式，命中返回原因。"""
     import re
+
     for pat in _ESCAPE_PATTERNS:
         m = re.search(pat, command)
         if m:
@@ -177,7 +203,8 @@ async def run_in_sandbox(command: str, timeout: int = 120) -> dict[str, Any]:
         prog, rest = os.environ.get("COMSPEC", "cmd.exe"), ["/d", "/s", "/c", *args]
 
     proc = await asyncio.create_subprocess_exec(
-        prog, *rest,
+        prog,
+        *rest,
         cwd=str(workspace_dir()),
         env=sandboxed_env(),
         stdout=asyncio.subprocess.PIPE,

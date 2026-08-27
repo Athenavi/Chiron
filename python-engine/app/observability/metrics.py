@@ -1,7 +1,7 @@
 # Prometheus 指标定义
 from __future__ import annotations
 
-from prometheus_client import Counter, Histogram, Gauge, Info
+from prometheus_client import Counter, Gauge, Histogram, Info
 
 # ── HTTP 请求级 ──
 HTTP_REQUESTS = Counter(

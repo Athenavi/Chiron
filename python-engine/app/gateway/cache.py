@@ -52,7 +52,12 @@ class SemanticCache:
     # ── key 计算 ──
 
     @staticmethod
-    def _exact_key(model: str, messages: list[ChatMessage], tools: list[dict] | None, temperature: float) -> str:
+    def _exact_key(
+        model: str,
+        messages: list[ChatMessage],
+        tools: list[dict] | None,
+        temperature: float,
+    ) -> str:
         """精确缓存 key: hash(model + messages + tools + temperature)"""
         payload = {
             "model": model,
@@ -63,7 +68,9 @@ class SemanticCache:
         raw = json.dumps(payload, sort_keys=True, ensure_ascii=False)
         return hashlib.sha256(raw.encode()).hexdigest()[:32]
 
-    async def _semantic_key(self, messages: list[ChatMessage], model: str) -> str | None:
+    async def _semantic_key(
+        self, messages: list[ChatMessage], model: str
+    ) -> str | None:
         """语义缓存 key: embedding 前 64 维量化 → hash"""
         try:
             # 取最后 3 轮对话作为语义摘要
@@ -78,9 +85,7 @@ class SemanticCache:
 
             # 取前 N 维，量化为 int8
             prefix = embedding[: self._semantic_prefix_dims]
-            quantized = bytes(
-                max(0, min(255, int((v + 1) * 127.5))) for v in prefix
-            )
+            quantized = bytes(max(0, min(255, int((v + 1) * 127.5))) for v in prefix)
             h = hashlib.sha256(quantized + model.encode()).hexdigest()[:16]
             return h
         except Exception as e:

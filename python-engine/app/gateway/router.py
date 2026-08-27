@@ -2,20 +2,16 @@
 from __future__ import annotations
 
 import logging
-import time
-import sys
 import random
+import sys
+import time
 from typing import AsyncIterator, Optional
 
-from app.gateway.provider import (
-    ChatMessage,
-    ChatResponse,
-    EmbeddingResponse,
-    LLMProvider,
-)
-from app.gateway.circuit_breaker import CircuitBreaker
-from app.gateway.cache import SemanticCache
 from app.gateway.budget import TokenBudget
+from app.gateway.cache import SemanticCache
+from app.gateway.circuit_breaker import CircuitBreaker
+from app.gateway.provider import (ChatMessage, ChatResponse, EmbeddingResponse,
+                                  LLMProvider)
 
 logger = logging.getLogger(__name__)
 
@@ -34,11 +30,13 @@ def normalize_messages(messages: list) -> list[ChatMessage]:
         if isinstance(m, ChatMessage):
             normalized.append(m)
         elif isinstance(m, dict):
-            normalized.append(ChatMessage(
-                role=str(m.get("role", "user")),
-                content=m.get("content") or "",
-                tool_call_id=str(m.get("tool_call_id", "") or ""),
-            ))
+            normalized.append(
+                ChatMessage(
+                    role=str(m.get("role", "user")),
+                    content=m.get("content") or "",
+                    tool_call_id=str(m.get("tool_call_id", "") or ""),
+                )
+            )
         else:
             raise TypeError(f"unsupported message type: {type(m).__name__}")
     return normalized
@@ -81,7 +79,9 @@ class GatewayRouter:
     ):
         self._providers = providers
         self._breakers = {name: CircuitBreaker() for name in providers}
-        self._latencies: dict[str, float] = {name: 500.0 for name in providers}  # moving avg ms
+        self._latencies: dict[str, float] = {
+            name: 500.0 for name in providers
+        }  # moving avg ms
         self._cache = cache
         self._budget = budget
         # 路由权重: cost / latency / quality
@@ -113,9 +113,15 @@ class GatewayRouter:
         provider = await self._select(model, provider_hint)
         if not provider:
             yield ChatResponse(
-                content="", finish_reason="error", provider="none", model=model,
-                message="no LLM provider available for model=" + model +
-                        " (check API keys in .env; configured: " + ",".join(self._providers.keys()) + ")",
+                content="",
+                finish_reason="error",
+                provider="none",
+                model=model,
+                message="no LLM provider available for model="
+                + model
+                + " (check API keys in .env; configured: "
+                + ",".join(self._providers.keys())
+                + ")",
             )
             return
 
@@ -125,7 +131,10 @@ class GatewayRouter:
             ok = await self._budget.check(tenant_id, estimated)
             if not ok:
                 yield ChatResponse(
-                    content="", finish_reason="error", provider=provider.name, model=model,
+                    content="",
+                    finish_reason="error",
+                    provider=provider.name,
+                    model=model,
                     message="token budget exceeded for tenant " + tenant_id,
                 )
                 return
@@ -138,8 +147,11 @@ class GatewayRouter:
         total_output = 0
         try:
             async for chunk in provider.chat_stream(
-                messages, model,
-                max_tokens=max_tokens, temperature=temperature, tools=tools,
+                messages,
+                model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                tools=tools,
             ):
                 chunk.provider = provider.name
                 chunk.model = model
@@ -179,14 +191,22 @@ class GatewayRouter:
             # "Connection error." 之类的假回复）；发 error chunk，
             # 由上层 AgentRuntime 转成 error 事件（message 携带真实原因）。
             yield ChatResponse(
-                content="", finish_reason="error", provider=provider.name, model=model,
+                content="",
+                finish_reason="error",
+                provider=provider.name,
+                model=model,
                 message=f"provider {provider.name} stream failed: {type(e).__name__}: {e}",
             )
         finally:
             # S 修复：预算扣减放入 finally——正常/异常路径都会按实际用量扣除。
             # GeneratorExit(客户端断开)取消时 await 不安全，跳过(少量少计可接受)。
             _exc = sys.exc_info()[1]
-            if not isinstance(_exc, GeneratorExit) and self._budget and tenant_id and (total_input + total_output) > 0:
+            if (
+                not isinstance(_exc, GeneratorExit)
+                and self._budget
+                and tenant_id
+                and (total_input + total_output) > 0
+            ):
                 try:
                     await self._budget.deduct(tenant_id, total_input + total_output)
                 except Exception:
@@ -219,7 +239,10 @@ class GatewayRouter:
         provider = await self._select(model, provider_hint)
         if not provider:
             return ChatResponse(
-                content="", finish_reason="error", provider="none", model=model,
+                content="",
+                finish_reason="error",
+                provider="none",
+                model=model,
             )
 
         # 预算预检查
@@ -227,14 +250,20 @@ class GatewayRouter:
             ok = await self._budget.check(tenant_id, max_tokens)
             if not ok:
                 return ChatResponse(
-                    content="", finish_reason="error", provider=provider.name, model=model,
+                    content="",
+                    finish_reason="error",
+                    provider=provider.name,
+                    model=model,
                 )
 
         start = time.monotonic()
         try:
             resp = await provider.chat(
-                messages, model,
-                max_tokens=max_tokens, temperature=temperature, tools=tools,
+                messages,
+                model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                tools=tools,
             )
             resp.provider = provider.name
             resp.model = model
@@ -246,15 +275,24 @@ class GatewayRouter:
                 await self._cache.store(model, messages, tools, temperature, resp)
 
             # 预算扣减
-            if self._budget and tenant_id and resp.input_tokens + resp.output_tokens > 0:
-                await self._budget.deduct(tenant_id, resp.input_tokens + resp.output_tokens)
+            if (
+                self._budget
+                and tenant_id
+                and resp.input_tokens + resp.output_tokens > 0
+            ):
+                await self._budget.deduct(
+                    tenant_id, resp.input_tokens + resp.output_tokens
+                )
 
             return resp
         except Exception as e:
             self._breakers[provider.name].record_failure()
             logger.error("Provider %s chat failed: %s", provider.name, e)
             return ChatResponse(
-                content="", finish_reason="error", provider=provider.name, model=model,
+                content="",
+                finish_reason="error",
+                provider=provider.name,
+                model=model,
             )
         finally:
             elapsed = (time.monotonic() - start) * 1000
@@ -262,7 +300,9 @@ class GatewayRouter:
                 self._latencies[provider.name] * 0.8 + elapsed * 0.2
             )
 
-    async def embed(self, text: str, model: str, provider_hint: str = "") -> EmbeddingResponse:
+    async def embed(
+        self, text: str, model: str, provider_hint: str = ""
+    ) -> EmbeddingResponse:
         """文本嵌入 — 无缓存无预算"""
         provider = await self._select(model, provider_hint)
         if not provider:
@@ -310,9 +350,7 @@ class GatewayRouter:
             candidates = list(self._providers.values())
 
         # 过滤熔断
-        available = [
-            p for p in candidates if self._breakers[p.name].allow()
-        ]
+        available = [p for p in candidates if self._breakers[p.name].allow()]
 
         if not available:
             logger.error("All providers circuit-open for model=%s", model)
@@ -329,7 +367,12 @@ class GatewayRouter:
         if "deepseek" in model_lower and "deepseek" in self._providers:
             return [self._providers["deepseek"]]
         # gpt / o1 / o3 / embedding → openai
-        if ("gpt" in model_lower or "o1" in model_lower or "o3" in model_lower or "embedding" in model_lower) and "openai" in self._providers:
+        if (
+            "gpt" in model_lower
+            or "o1" in model_lower
+            or "o3" in model_lower
+            or "embedding" in model_lower
+        ) and "openai" in self._providers:
             return [self._providers["openai"]] if "openai" in self._providers else []
         # 兜底: 优先用 openai（最通用）
         if "openai" in self._providers:

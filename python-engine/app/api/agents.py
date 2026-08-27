@@ -1,4 +1,5 @@
 """Agents API endpoints."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -45,6 +46,7 @@ async def dispatch_agent(body: AgentDispatchRequest) -> dict[str, Any]:
     if body.system_prompt.strip():
         # 标记用户活跃（驱动 MCP 插件轮询范围）
         from app.main import touch_user
+
         touch_user(body.tenant_id)
 
         # 延迟导入：避免 app.main ↔ app.api 循环依赖
@@ -56,7 +58,11 @@ async def dispatch_agent(body: AgentDispatchRequest) -> dict[str, Any]:
         except RuntimeError:
             gateway = None
         if gateway is None:
-            return {"success": False, "error": "LLM gateway not initialized", "output": ""}
+            return {
+                "success": False,
+                "error": "LLM gateway not initialized",
+                "output": "",
+            }
 
         agent = SubAgent(
             name=body.name or body.agent_type or "agent",

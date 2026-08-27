@@ -13,6 +13,7 @@ S 安全修复：插件沙箱隔离（2026-08-17 生产安全检查）
 - 资源限制：CPU time < 10s, Memory < 256MB, Timeout 30s
 - 审计日志：所有插件输入输出记录到独立 log file
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -69,9 +70,10 @@ async def plugin_reload(request: Request) -> dict[str, Any]:
 @dataclass
 class PluginSandboxConfig:
     """插件执行沙箱配置"""
+
     max_cpu_seconds: float = 10.0  # CPU 时间限制
-    max_memory_mb: int = 256       # 内存限制 (RSS)
-    timeout_seconds: int = 30      # 总超时
+    max_memory_mb: int = 256  # 内存限制 (RSS)
+    timeout_seconds: int = 30  # 总超时
     max_output_bytes: int = 1_048_576  # 1MB 输出限制
     audit_log_enabled: bool = True
 
@@ -169,14 +171,18 @@ async def run_plugin_in_sandbox(
     return result
 
 
-def _audit(plugin_name: str, user_id: str, input_data: dict, result: dict, started: float) -> None:
+def _audit(
+    plugin_name: str, user_id: str, input_data: dict, result: dict, started: float
+) -> None:
     """审计日志：每次插件执行一条 JSONL（失败不阻断主流程）。"""
     if not SANDBOX_CONFIG.audit_log_enabled:
         return
     try:
         from app.config import settings
 
-        log_dir = Path(settings.log_dir) if getattr(settings, "log_dir", "") else Path("logs")
+        log_dir = (
+            Path(settings.log_dir) if getattr(settings, "log_dir", "") else Path("logs")
+        )
         log_dir.mkdir(parents=True, exist_ok=True)
         entry = {
             "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -185,7 +191,11 @@ def _audit(plugin_name: str, user_id: str, input_data: dict, result: dict, start
             "duration_ms": int((time.time() - started) * 1000),
             "success": bool(result.get("success")),
             "error": result.get("error"),
-            "input_keys": sorted(input_data.keys()) if isinstance(input_data, dict) else str(type(input_data)),
+            "input_keys": (
+                sorted(input_data.keys())
+                if isinstance(input_data, dict)
+                else str(type(input_data))
+            ),
         }
         with (log_dir / "plugin_audit.jsonl").open("a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")

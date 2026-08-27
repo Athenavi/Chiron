@@ -6,6 +6,7 @@ job_output 轮询结果，job_kill 取消。命令在持久 shell 中执行（�
 
 P2 修复: 添加完成任务的自动清理，防止长期运行中 _jobs 字典无限增长。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -81,7 +82,11 @@ async def run_in_background(command: str) -> dict[str, Any]:
     _job_shell_key[job_id] = shell_key
     _job_created_at[job_id] = time.monotonic()
     _ensure_cleanup_started()
-    return {"job_id": job_id, "status": "started", "note": "check with job_output(job_id)"}
+    return {
+        "job_id": job_id,
+        "status": "started",
+        "note": "check with job_output(job_id)",
+    }
 
 
 async def job_output(job_id: str) -> dict[str, Any]:

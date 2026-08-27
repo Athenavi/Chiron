@@ -118,8 +118,15 @@ onMounted(fetchPolicies)
 <template>
   <div class="policy-view">
     <div class="page-header">
-      <h2 class="page-title">模型策略管控</h2>
-      <a-button type="primary" @click="openCreate">新建策略</a-button>
+      <h2 class="page-title">
+        模型策略管控
+      </h2>
+      <a-button
+        type="primary"
+        @click="openCreate"
+      >
+        新建策略
+      </a-button>
     </div>
 
     <a-alert
@@ -139,12 +146,27 @@ onMounted(fetchPolicies)
       size="small"
     >
       <template #emptyText>
-        <div class="empty-block"><span class="empty-icon">📭</span><span class="empty-text">暂无数据</span></div>
+        <div class="empty-block">
+          <span class="empty-icon">📭</span><span class="empty-text">暂无数据</span>
+        </div>
       </template>
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'action'">
-          <a-button type="link" size="small" @click="openEdit(record as ModelPolicy)">编辑</a-button>
-          <a-button type="link" size="small" danger @click="confirmDelete(record as ModelPolicy)">删除</a-button>
+          <a-button
+            type="link"
+            size="small"
+            @click="openEdit(record as ModelPolicy)"
+          >
+            编辑
+          </a-button>
+          <a-button
+            type="link"
+            size="small"
+            danger
+            @click="confirmDelete(record as ModelPolicy)"
+          >
+            删除
+          </a-button>
         </template>
       </template>
     </a-table>
@@ -153,22 +175,30 @@ onMounted(fetchPolicies)
       v-model:open="modalVisible"
       :title="modalMode === 'create' ? '新建模型策略' : '编辑模型策略'"
       :confirm-loading="saving"
-      @ok="save"
       width="640"
+      @ok="save"
     >
       <a-form layout="vertical">
         <a-form-item label="角色 ID（留空 = 租户级兜底）">
-          <a-input v-model:value="form.role_id" placeholder="角色 UUID（留空为租户级）" />
+          <a-input
+            v-model:value="form.role_id"
+            placeholder="角色 UUID（留空为租户级）"
+          />
         </a-form-item>
         <a-form-item label="允许模型（每行一个 model_id）">
-          <a-textarea v-model:value="form.allowed_models" :rows="6" class="code-editor" placeholder="gpt-4&#10;claude-3-opus" />
+          <a-textarea
+            v-model:value="form.allowed_models"
+            :rows="6"
+            class="code-editor"
+            placeholder="gpt-4&#10;claude-3-opus"
+          />
         </a-form-item>
         <a-form-item label="每模型限速（JSON）">
           <a-textarea
             v-model:value="form.per_model_limits"
             :rows="5"
             class="code-editor"
-            placeholder='{"gpt-4": {"rpm": 60}}'
+            placeholder="{&quot;gpt-4&quot;: {&quot;rpm&quot;: 60}}"
           />
         </a-form-item>
       </a-form>

@@ -17,7 +17,10 @@ describe('auth store', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     // jsdom 30 兼容：localStorage 可能未正确初始化
-    try { localStorage.clear() } catch {}
+    try { localStorage.clear() } catch (e) {
+      // Ignore localStorage errors in test environment
+      void e
+    }
     vi.clearAllMocks()
   })
 

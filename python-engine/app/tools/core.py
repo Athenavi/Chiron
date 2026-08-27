@@ -3,12 +3,13 @@
 首波迁移：filesystem / shell / search(grep) / web。
 后续可继续扩展 memory / pm / skill / workflow 等工具。
 """
+
 from __future__ import annotations
 
+import glob as globmod
 import json
 import logging
 import os
-import glob as globmod
 import re
 from pathlib import Path
 from typing import Any
@@ -30,15 +31,18 @@ def _safe_path(path: str, root: str) -> Path:
     return target
 
 
-async def read_file(path: str, root: str = ".", offset: int = 0, limit: int = 200) -> dict[str, Any]:
+async def read_file(
+    path: str, root: str = ".", offset: int = 0, limit: int = 200
+) -> dict[str, Any]:
     from app.tools.fs_guard import observe
     from app.tools.sandbox import safe_join
+
     target = safe_join(path)  # 沙箱隔离：root 参数废弃，强制 workspace（S 安全修复）
     if not target.exists():
         return {"error": f"file not found: {path}"}
     text = target.read_text(encoding="utf-8", errors="replace")
     lines = text.splitlines()
-    page = lines[offset: offset + limit]
+    page = lines[offset : offset + limit]
     observe(target)  # 记录版本，供 write/edit 的 read-before-write 校验
     return {
         "path": str(target),
@@ -49,23 +53,34 @@ async def read_file(path: str, root: str = ".", offset: int = 0, limit: int = 20
     }
 
 
-async def read_image(path: str, root: str = ".", max_bytes: int = 5 * 1024 * 1024) -> dict[str, Any]:
+async def read_image(
+    path: str, root: str = ".", max_bytes: int = 5 * 1024 * 1024
+) -> dict[str, Any]:
     """Read an image file as a base64 data-URL (for vision-capable models)."""
     import base64
+
     from app.tools.fs_guard import observe
     from app.tools.sandbox import safe_join
+
     target = safe_join(path)  # 沙箱隔离（S 安全修复）
     if not target.exists():
         return {"error": f"file not found: {path}"}
     if target.stat().st_size > max_bytes:
-        return {"error": f"image too large ({target.stat().st_size} bytes, max {max_bytes})"}
+        return {
+            "error": f"image too large ({target.stat().st_size} bytes, max {max_bytes})"
+        }
     ext = target.suffix.lower()
     media_types = {
-        ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-        ".webp": "image/webp", ".gif": "image/gif",
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
     }
     if ext not in media_types:
-        return {"error": f"unsupported image type: {ext or 'unknown'}; supported: png/jpg/webp/gif"}
+        return {
+            "error": f"unsupported image type: {ext or 'unknown'}; supported: png/jpg/webp/gif"
+        }
     data = target.read_bytes()
     observe(target)
     return {
@@ -79,6 +94,7 @@ async def read_image(path: str, root: str = ".", max_bytes: int = 5 * 1024 * 102
 async def write_file(path: str, content: str, root: str = ".") -> dict[str, Any]:
     from app.tools.fs_guard import check_before_write
     from app.tools.sandbox import safe_join
+
     target = safe_join(path)  # 沙箱隔离：root 参数废弃（S 安全修复）
     conflict = check_before_write(target)
     if conflict:
@@ -88,16 +104,22 @@ async def write_file(path: str, content: str, root: str = ".") -> dict[str, Any]
     return {"path": str(target), "bytes": len(content.encode("utf-8"))}
 
 
-async def execute_command(command: str, cwd: str = ".", timeout: int = 30) -> dict[str, Any]:
+async def execute_command(
+    command: str, cwd: str = ".", timeout: int = 30
+) -> dict[str, Any]:
     from app.tools.sandbox import run_in_sandbox
+
     # 沙箱隔离：cwd 参数废弃，命令在 per-user workspace 内以清理环境执行（S 安全修复）
     return await run_in_sandbox(command, timeout=timeout)
 
 
-async def grep_files(query: str, root: str = ".", glob: str = "", max_results: int = 200) -> dict[str, Any]:
+async def grep_files(
+    query: str, root: str = ".", glob: str = "", max_results: int = 200
+) -> dict[str, Any]:
     pattern = re.compile(query)
     matches: list[dict[str, Any]] = []
     from app.tools.sandbox import workspace_dir
+
     base = workspace_dir()  # 沙箱隔离（S 安全修复）
     paths = globmod.glob(str(base / "**" / (glob or "*")), recursive=True)
     for p in paths:
@@ -107,7 +129,9 @@ async def grep_files(query: str, root: str = ".", glob: str = "", max_results: i
             with open(p, encoding="utf-8", errors="ignore") as f:
                 for idx, line in enumerate(f, 1):
                     if pattern.search(line):
-                        matches.append({"path": p, "line": idx, "text": line.rstrip("\n")})
+                        matches.append(
+                            {"path": p, "line": idx, "text": line.rstrip("\n")}
+                        )
                         if len(matches) >= max_results:
                             return {"count": len(matches), "matches": matches}
         except Exception:
@@ -116,8 +140,11 @@ async def grep_files(query: str, root: str = ".", glob: str = "", max_results: i
     return {"count": len(matches), "matches": matches}
 
 
-async def search_files(pattern: str, root: str = ".", max_results: int = 200) -> dict[str, Any]:
+async def search_files(
+    pattern: str, root: str = ".", max_results: int = 200
+) -> dict[str, Any]:
     from app.tools.sandbox import workspace_dir
+
     base = workspace_dir()  # 沙箱隔离（S 安全修复）
     paths = globmod.glob(str(base / "**" / (pattern or "*")), recursive=True)
     files = [p for p in paths if os.path.isfile(p)][:max_results]
@@ -127,11 +154,16 @@ async def search_files(pattern: str, root: str = ".", max_results: int = 200) ->
 async def execute_python(code: str, timeout: int = 30) -> dict[str, Any]:
     if not code:
         return {"error": "code is required"}
-    return await execute_command(command=f"python -c {json.dumps(code)}", timeout=timeout)
+    return await execute_command(
+        command=f"python -c {json.dumps(code)}", timeout=timeout
+    )
 
 
-async def web_fetch(url: str, max_chars: int = 12000, follow_redirects: bool = True) -> dict[str, Any]:
+async def web_fetch(
+    url: str, max_chars: int = 12000, follow_redirects: bool = True
+) -> dict[str, Any]:
     from app.tools.ssrf import assert_safe_url, fetch_url_safe
+
     assert_safe_url(url)
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await fetch_url_safe(client, url)
@@ -242,7 +274,11 @@ registry.register(
         "properties": {
             "path": {"type": "string"},
             "root": {"type": "string", "default": "."},
-            "max_bytes": {"type": "integer", "default": 5242880, "description": "Max image bytes"},
+            "max_bytes": {
+                "type": "integer",
+                "default": 5242880,
+                "description": "Max image bytes",
+            },
         },
         "required": ["path"],
     },

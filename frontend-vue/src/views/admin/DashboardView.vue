@@ -373,7 +373,12 @@ const cronColumns = [
 <template>
   <div class="dashboard">
     <!-- 骨架屏（加载态） -->
-    <PageSkeleton v-if="loading" variant="cards" :columns="2" header />
+    <PageSkeleton
+      v-if="loading"
+      variant="cards"
+      :columns="2"
+      header
+    />
 
     <!-- 错误态 -->
     <EmptyState
@@ -382,7 +387,13 @@ const cronColumns = [
       :description="error"
       hint="请检查后端服务是否正常，或稍后重试"
     >
-      <a-button type="primary" size="large" @click="fetchDashboardData">重试</a-button>
+      <a-button
+        type="primary"
+        size="large"
+        @click="fetchDashboardData"
+      >
+        重试
+      </a-button>
     </EmptyState>
 
     <template v-else>
@@ -401,8 +412,12 @@ const cronColumns = [
             <component :is="nav.icon" />
           </div>
           <div class="nav-card-body">
-            <div class="nav-card-label">{{ nav.label }}</div>
-            <div class="nav-card-desc">{{ nav.desc }}</div>
+            <div class="nav-card-label">
+              {{ nav.label }}
+            </div>
+            <div class="nav-card-desc">
+              {{ nav.desc }}
+            </div>
           </div>
           <ArrowRightOutlined class="nav-card-arrow" />
         </div>
@@ -410,83 +425,136 @@ const cronColumns = [
 
       <!-- 统计卡片 -->
       <div class="stats-grid">
-        <Card class="stat-card" :bordered="false">
+        <Card
+          class="stat-card"
+          :bordered="false"
+        >
           <Statistic
             title="并发连接"
             :value="stats.connections"
             :value-style="{ color: 'var(--text-primary)', fontSize: '28px', fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums' }"
           >
-            <template #prefix><ApartmentOutlined class="stat-icon" /></template>
+            <template #prefix>
+              <ApartmentOutlined class="stat-icon" />
+            </template>
             <template #suffix>
-              <Tag v-if="stats.connectionsTrend !== 0" :color="stats.connectionsTrend > 0 ? 'success' : 'error'" class="stat-trend">
+              <Tag
+                v-if="stats.connectionsTrend !== 0"
+                :color="stats.connectionsTrend > 0 ? 'success' : 'error'"
+                class="stat-trend"
+              >
                 <component :is="stats.connectionsTrend > 0 ? ArrowUpOutlined : ArrowDownOutlined" />
                 {{ Math.abs(stats.connectionsTrend) }}%
               </Tag>
             </template>
           </Statistic>
         </Card>
-        <Card class="stat-card" :bordered="false">
+        <Card
+          class="stat-card"
+          :bordered="false"
+        >
           <Statistic
             title="队列积压"
             :value="stats.queueBacklog"
             :value-style="{ color: 'var(--text-primary)', fontSize: '28px', fontVariantNumeric: 'tabular-nums' }"
           >
-            <template #prefix><OrderedListOutlined class="stat-icon" /></template>
+            <template #prefix>
+              <OrderedListOutlined class="stat-icon" />
+            </template>
             <template #suffix>
-              <Tag :color="stats.queueBacklog > 1000 ? 'error' : 'success'" class="stat-trend">
+              <Tag
+                :color="stats.queueBacklog > 1000 ? 'error' : 'success'"
+                class="stat-trend"
+              >
                 {{ stats.queueBacklog > 1000 ? '告警' : '正常' }}
               </Tag>
             </template>
           </Statistic>
         </Card>
-        <Card class="stat-card" :bordered="false">
+        <Card
+          class="stat-card"
+          :bordered="false"
+        >
           <Statistic
             title="缓存命中率"
             :value="stats.cacheHitRate"
             suffix="%"
             :value-style="{ color: 'var(--text-primary)', fontSize: '28px', fontVariantNumeric: 'tabular-nums' }"
           >
-            <template #prefix><DatabaseFilled class="stat-icon" /></template>
+            <template #prefix>
+              <DatabaseFilled class="stat-icon" />
+            </template>
           </Statistic>
         </Card>
-        <Card class="stat-card" :bordered="false">
+        <Card
+          class="stat-card"
+          :bordered="false"
+        >
           <Statistic
             title="API 延迟 P99"
             :value="stats.latencyP99"
             suffix="ms"
             :value-style="{ color: 'var(--text-primary)', fontSize: '28px', fontVariantNumeric: 'tabular-nums' }"
           >
-            <template #prefix><ThunderboltFilled class="stat-icon" /></template>
+            <template #prefix>
+              <ThunderboltFilled class="stat-icon" />
+            </template>
           </Statistic>
         </Card>
       </div>
 
       <!-- 图表区域 -->
-      <Row :gutter="16" class="charts-row">
-        <Col :xs="24" :lg="12">
-          <Card class="chart-card" :bordered="false">
+      <Row
+        :gutter="16"
+        class="charts-row"
+      >
+        <Col
+          :xs="24"
+          :lg="12"
+        >
+          <Card
+            class="chart-card"
+            :bordered="false"
+          >
             <template #title>
               <span class="chart-title">
                 <ApartmentOutlined class="chart-title-icon" /> 并发连接趋势
               </span>
             </template>
-            <VChart :option="connectionChartOption" class="chart-canvas" autoresize />
+            <VChart
+              :option="connectionChartOption"
+              class="chart-canvas"
+              autoresize
+            />
           </Card>
         </Col>
-        <Col :xs="24" :lg="12">
-          <Card class="chart-card" :bordered="false">
+        <Col
+          :xs="24"
+          :lg="12"
+        >
+          <Card
+            class="chart-card"
+            :bordered="false"
+          >
             <template #title>
               <span class="chart-title">
                 <KeyOutlined class="chart-title-icon" /> API Key 状态
               </span>
             </template>
-            <VChart :option="apiKeyChartOption" class="chart-canvas" autoresize />
+            <VChart
+              :option="apiKeyChartOption"
+              class="chart-canvas"
+              autoresize
+            />
           </Card>
         </Col>
       </Row>
 
       <!-- 告警列表 -->
-      <Card class="alert-card" :bordered="false">
+      <Card
+        class="alert-card"
+        :bordered="false"
+      >
         <template #title>
           <span class="chart-title">
             <ClockCircleOutlined class="chart-title-icon" /> 最近告警
@@ -498,12 +566,21 @@ const cronColumns = [
           description="暂无告警"
           hint="系统运行正常"
         />
-        <Table v-else :columns="alertColumns" :data-source="alerts" :pagination="false" size="small" />
+        <Table
+          v-else
+          :columns="alertColumns"
+          :data-source="alerts"
+          :pagination="false"
+          size="small"
+        />
       </Card>
     </template>
 
     <!-- 定时任务：列表 + 手动触发 + Webhook + 自动刷新（独立于指标加载态，30s 自动刷新） -->
-    <Card class="cron-card" :bordered="false">
+    <Card
+      class="cron-card"
+      :bordered="false"
+    >
       <template #title>
         <span class="chart-title">
           <ClockCircleOutlined class="chart-title-icon" /> 定时任务
@@ -511,8 +588,22 @@ const cronColumns = [
       </template>
       <template #extra>
         <Space :size="8">
-          <Button size="small" :icon="h(ReloadOutlined)" :loading="cronRefreshing" @click="fetchCronJobs()">立即刷新</Button>
-          <Button size="small" type="primary" :icon="h(PlusOutlined)" @click="openCronCreate">新建任务</Button>
+          <Button
+            size="small"
+            :icon="h(ReloadOutlined)"
+            :loading="cronRefreshing"
+            @click="fetchCronJobs()"
+          >
+            立即刷新
+          </Button>
+          <Button
+            size="small"
+            type="primary"
+            :icon="h(PlusOutlined)"
+            @click="openCronCreate"
+          >
+            新建任务
+          </Button>
         </Space>
       </template>
       <EmptyState
@@ -535,31 +626,72 @@ const cronColumns = [
             <code class="cron-schedule">{{ record.schedule }}</code>
           </template>
           <template v-else-if="column.key === 'task'">
-            <Tooltip :title="record.task" placement="topLeft">
+            <Tooltip
+              :title="record.task"
+              placement="topLeft"
+            >
               <span class="cron-task">{{ record.task }}</span>
             </Tooltip>
           </template>
           <template v-else-if="column.key === 'enabled'">
-            <Switch :checked="record.enabled" size="small" disabled />
+            <Switch
+              :checked="record.enabled"
+              size="small"
+              disabled
+            />
           </template>
           <template v-else-if="column.key === 'last_run_at'">
             {{ formatCronTime(record.last_run_at) }}
           </template>
           <template v-else-if="column.key === 'last_status'">
-            <Tag :color="cronStatusColor(record.last_status)">{{ cronStatusLabel(record.last_status) }}</Tag>
+            <Tag :color="cronStatusColor(record.last_status)">
+              {{ cronStatusLabel(record.last_status) }}
+            </Tag>
           </template>
           <template v-else-if="column.key === 'actions'">
-            <Space :size="0" wrap>
-              <Button size="small" type="link" :icon="h(PlayCircleOutlined)" @click="triggerCronJobById(record as CronJob)">手动触发</Button>
-              <Button v-if="record.webhook_token" size="small" type="link" :icon="h(CopyOutlined)" @click="copyCronWebhook(record as CronJob)">复制 Webhook</Button>
-              <Button size="small" type="link" :icon="h(EditOutlined)" @click="openCronEdit(record as CronJob)">编辑</Button>
+            <Space
+              :size="0"
+              wrap
+            >
+              <Button
+                size="small"
+                type="link"
+                :icon="h(PlayCircleOutlined)"
+                @click="triggerCronJobById(record as CronJob)"
+              >
+                手动触发
+              </Button>
+              <Button
+                v-if="record.webhook_token"
+                size="small"
+                type="link"
+                :icon="h(CopyOutlined)"
+                @click="copyCronWebhook(record as CronJob)"
+              >
+                复制 Webhook
+              </Button>
+              <Button
+                size="small"
+                type="link"
+                :icon="h(EditOutlined)"
+                @click="openCronEdit(record as CronJob)"
+              >
+                编辑
+              </Button>
               <Popconfirm
                 title="确定删除该定时任务？"
                 ok-text="删除"
                 cancel-text="取消"
                 @confirm="deleteCronJob(record as CronJob)"
               >
-                <Button size="small" type="link" danger :icon="h(DeleteOutlined)">删除</Button>
+                <Button
+                  size="small"
+                  type="link"
+                  danger
+                  :icon="h(DeleteOutlined)"
+                >
+                  删除
+                </Button>
               </Popconfirm>
             </Space>
           </template>
@@ -580,19 +712,33 @@ const cronColumns = [
       <div class="cron-form">
         <div class="cron-field">
           <label class="cron-label">任务名称</label>
-          <Input v-model:value="cronForm.name" placeholder="例如：每日早报生成" :maxlength="120" />
+          <Input
+            v-model:value="cronForm.name"
+            placeholder="例如：每日早报生成"
+            :maxlength="120"
+          />
         </div>
         <div class="cron-field">
           <label class="cron-label">Cron 表达式</label>
-          <Input v-model:value="cronForm.schedule" placeholder="例如：0 9 * * *（每天 09:00）" />
-          <div class="cron-hint">标准 5 段 Cron：分 时 日 月 周</div>
+          <Input
+            v-model:value="cronForm.schedule"
+            placeholder="例如：0 9 * * *（每天 09:00）"
+          />
+          <div class="cron-hint">
+            标准 5 段 Cron：分 时 日 月 周
+          </div>
         </div>
         <div class="cron-field">
           <label class="cron-label">任务 JSON</label>
-          <Input.TextArea v-model:value="cronForm.task" :rows="4" class="cron-task-input" placeholder='{"type":"agent","agent_id":"...","prompt":"..."}' />
+          <Input.TextArea
+            v-model:value="cronForm.task"
+            :rows="4"
+            class="cron-task-input"
+            placeholder="{&quot;type&quot;:&quot;agent&quot;,&quot;agent_id&quot;:&quot;...&quot;,&quot;prompt&quot;:&quot;...&quot;}"
+          />
           <div class="cron-hint">
-            任务类型示例：<br />
-            <code>{"type":"agent","agent_id":"...","prompt":"..."}</code>（Agent 任务）<br />
+            任务类型示例：<br>
+            <code>{"type":"agent","agent_id":"...","prompt":"..."}</code>（Agent 任务）<br>
             <code>{"type":"quick","user_input":"...","mode":"auto"}</code>（统一任务）
           </div>
         </div>

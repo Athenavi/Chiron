@@ -1,4 +1,5 @@
 """Git 工具集 — 通过 subprocess 执行常用 git 命令。"""
+
 from __future__ import annotations
 
 import asyncio
@@ -10,6 +11,7 @@ from app.tools.registry import registry
 async def _run_git(*args: str, cwd: str = ".", timeout: int = 30) -> dict[str, Any]:
     """Run a git command and return stdout/stderr/exit_code."""
     from app.tools.sandbox import workspace_dir
+
     cmd = ["git", *args]
     proc = await asyncio.create_subprocess_exec(
         *cmd,
@@ -36,8 +38,10 @@ async def _ensure_sandbox_repo() -> dict[str, Any] | None:
     这里用 rev-parse --show-toplevel 检查 repo 根必须在 workspace 内。
     返回 None 表示通过；否则返回错误 dict。
     """
-    from app.tools.sandbox import workspace_dir
     import os
+
+    from app.tools.sandbox import workspace_dir
+
     ws = os.path.normpath(str(workspace_dir()))
     check = await _run_git("rev-parse", "--show-toplevel")
     if "error" in check:
@@ -70,7 +74,12 @@ async def git_status(root: str = ".") -> dict[str, Any]:
         status = line[:2].strip()
         path = line[3:]
         files.append({"status": status, "path": path})
-    return {"exit_code": result["exit_code"], "count": len(files), "files": files, "raw": result["stdout"].strip()}
+    return {
+        "exit_code": result["exit_code"],
+        "count": len(files),
+        "files": files,
+        "raw": result["stdout"].strip(),
+    }
 
 
 async def git_diff(root: str = ".", staged: bool = False) -> dict[str, Any]:
@@ -97,7 +106,9 @@ async def git_log(root: str = ".", limit: int = 10) -> dict[str, Any]:
     commits: list[dict[str, str]] = []
     for line in lines:
         parts = line.split(" ", 1)
-        commits.append({"hash": parts[0], "message": parts[1] if len(parts) > 1 else ""})
+        commits.append(
+            {"hash": parts[0], "message": parts[1] if len(parts) > 1 else ""}
+        )
     return {"exit_code": result["exit_code"], "count": len(commits), "commits": commits}
 
 
@@ -147,7 +158,11 @@ registry.register(
     parameters={
         "type": "object",
         "properties": {
-            "root": {"type": "string", "description": "Repository root", "default": "."},
+            "root": {
+                "type": "string",
+                "description": "Repository root",
+                "default": ".",
+            },
         },
         "required": [],
     },
@@ -160,8 +175,16 @@ registry.register(
     parameters={
         "type": "object",
         "properties": {
-            "root": {"type": "string", "description": "Repository root", "default": "."},
-            "staged": {"type": "boolean", "description": "Show staged changes", "default": False},
+            "root": {
+                "type": "string",
+                "description": "Repository root",
+                "default": ".",
+            },
+            "staged": {
+                "type": "boolean",
+                "description": "Show staged changes",
+                "default": False,
+            },
         },
         "required": [],
     },
@@ -174,8 +197,16 @@ registry.register(
     parameters={
         "type": "object",
         "properties": {
-            "root": {"type": "string", "description": "Repository root", "default": "."},
-            "limit": {"type": "integer", "description": "Max commits to return", "default": 10},
+            "root": {
+                "type": "string",
+                "description": "Repository root",
+                "default": ".",
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Max commits to return",
+                "default": 10,
+            },
         },
         "required": [],
     },
@@ -189,7 +220,11 @@ registry.register(
         "type": "object",
         "properties": {
             "message": {"type": "string", "description": "Commit message"},
-            "root": {"type": "string", "description": "Repository root", "default": "."},
+            "root": {
+                "type": "string",
+                "description": "Repository root",
+                "default": ".",
+            },
         },
         "required": ["message"],
     },
@@ -202,7 +237,11 @@ registry.register(
     parameters={
         "type": "object",
         "properties": {
-            "root": {"type": "string", "description": "Repository root", "default": "."},
+            "root": {
+                "type": "string",
+                "description": "Repository root",
+                "default": ".",
+            },
         },
         "required": [],
     },

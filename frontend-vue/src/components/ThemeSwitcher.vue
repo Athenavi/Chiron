@@ -34,7 +34,9 @@ const isSystem = computed(() => themeStore.preference === 'system')
     <template #content>
       <div class="theme-switcher">
         <div class="ts-section">
-          <div class="ts-section-title">主题风格</div>
+          <div class="ts-section-title">
+            主题风格
+          </div>
           <div class="ts-grid">
             <button
               v-for="p in presets"
@@ -45,7 +47,10 @@ const isSystem = computed(() => themeStore.preference === 'system')
               :title="p.description"
               @click="selectTheme(p.id)"
             >
-              <span class="ts-swatch" :class="`ts-swatch--${p.id}`">
+              <span
+                class="ts-swatch"
+                :class="`ts-swatch--${p.id}`"
+              >
                 <span class="ts-swatch-dot ts-swatch-primary" />
                 <span class="ts-swatch-dot ts-swatch-accent" />
                 <span class="ts-swatch-dot ts-swatch-bg" />
@@ -54,13 +59,18 @@ const isSystem = computed(() => themeStore.preference === 'system')
                 <span class="ts-theme-name">{{ p.name }}</span>
                 <span class="ts-theme-desc">{{ p.description }}</span>
               </span>
-              <CheckOutlined v-if="currentTheme === p.id" class="ts-check" />
+              <CheckOutlined
+                v-if="currentTheme === p.id"
+                class="ts-check"
+              />
             </button>
           </div>
         </div>
 
         <div class="ts-section">
-          <div class="ts-section-title">外观模式</div>
+          <div class="ts-section-title">
+            外观模式
+          </div>
           <div class="ts-modes">
             <button
               type="button"
@@ -91,7 +101,12 @@ const isSystem = computed(() => themeStore.preference === 'system')
       </div>
     </template>
 
-    <button type="button" class="theme-switcher-btn" title="主题设置" aria-label="主题设置">
+    <button
+      type="button"
+      class="theme-switcher-btn"
+      title="主题设置"
+      aria-label="主题设置"
+    >
       <BulbFilled v-if="themeStore.isDark" />
       <BulbOutlined v-else />
     </button>

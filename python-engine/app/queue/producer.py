@@ -57,7 +57,9 @@ class QueueProducer:
         }
 
         stream_id = await self._redis.xadd(TASK_STREAM, message, maxlen=100000)
-        logger.info("Task enqueued: id=%s type=%s stream_id=%s", task_id, task_type, stream_id)
+        logger.info(
+            "Task enqueued: id=%s type=%s stream_id=%s", task_id, task_type, stream_id
+        )
         return task_id
 
     async def get_depth(self) -> int:

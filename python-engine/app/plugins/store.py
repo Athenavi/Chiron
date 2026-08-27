@@ -7,6 +7,7 @@
 - ActiveTracker：标记"有活跃会话"的用户（驱动 MCP 25s 轮询范围）。
   当前为进程内实现；多实例场景可替换为 Redis（SETEX + TTL）实现。
 """
+
 from __future__ import annotations
 
 import json
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 # ── 插件配置存储 ─────────────────────────────────────────────────────────
 
+
 def plugin_data_dir() -> Path:
     """插件数据根目录：环境 PLUGIN_DATA_DIR 优先，默认项目根 data/plugins
     （引擎 cwd 为 python-engine 时上溯一级）。"""
@@ -34,6 +36,7 @@ def plugin_data_dir() -> Path:
 @dataclass
 class ServerConfig:
     """MCP 服务器配置（与 Go plugins.json 结构一致）。"""
+
     name: str
     command: str
     args: list[str] = field(default_factory=list)
@@ -69,15 +72,17 @@ class PluginStore:
         servers = []
         for s in data.get("mcp_servers", []) or []:
             try:
-                servers.append(ServerConfig(
-                    name=s["name"],
-                    command=s["command"],
-                    args=s.get("args", []) or [],
-                    env=s.get("env", {}) or {},
-                    description=s.get("description", ""),
-                    version=s.get("version", ""),
-                    status=s.get("status", "active"),
-                ))
+                servers.append(
+                    ServerConfig(
+                        name=s["name"],
+                        command=s["command"],
+                        args=s.get("args", []) or [],
+                        env=s.get("env", {}) or {},
+                        description=s.get("description", ""),
+                        version=s.get("version", ""),
+                        status=s.get("status", "active"),
+                    )
+                )
             except (KeyError, TypeError):
                 continue
         return servers
@@ -89,10 +94,13 @@ class PluginStore:
     def signature(self, user_id: str) -> str:
         """配置指纹（用于变更检测：内容 hash）。"""
         servers = sorted(self.load(user_id), key=lambda s: s.name)
-        return json.dumps([s.__dict__ for s in servers], ensure_ascii=False, sort_keys=True)
+        return json.dumps(
+            [s.__dict__ for s in servers], ensure_ascii=False, sort_keys=True
+        )
 
 
 # ── 活跃会话追踪 ─────────────────────────────────────────────────────────
+
 
 class ActiveTracker:
     """标记有活跃会话的用户（驱动 MCP 轮询范围）。

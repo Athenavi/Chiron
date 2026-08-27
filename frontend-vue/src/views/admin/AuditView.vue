@@ -114,8 +114,12 @@ onMounted(() => {
 <template>
   <div class="audit-view">
     <div class="audit-header">
-      <h2 class="audit-title">操作审计</h2>
-      <p class="audit-desc">查询范围限制为 7 天内，确保命中索引性能。</p>
+      <h2 class="audit-title">
+        操作审计
+      </h2>
+      <p class="audit-desc">
+        查询范围限制为 7 天内，确保命中索引性能。
+      </p>
     </div>
 
     <div class="audit-filters">
@@ -149,8 +153,19 @@ onMounted(() => {
         style="width: 160px"
         @press-enter="onSearch"
       />
-      <a-button type="primary" class="u-full-sm" @click="onSearch">查询</a-button>
-      <a-button class="u-full-sm" @click="onReset">重置</a-button>
+      <a-button
+        type="primary"
+        class="u-full-sm"
+        @click="onSearch"
+      >
+        查询
+      </a-button>
+      <a-button
+        class="u-full-sm"
+        @click="onReset"
+      >
+        重置
+      </a-button>
     </div>
 
     <a-table
@@ -172,7 +187,13 @@ onMounted(() => {
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'action_btn'">
-          <a-button type="link" size="small" @click="showDetail(record as AuditLog)">详情</a-button>
+          <a-button
+            type="link"
+            size="small"
+            @click="showDetail(record as AuditLog)"
+          >
+            详情
+          </a-button>
         </template>
       </template>
     </a-table>
@@ -184,18 +205,40 @@ onMounted(() => {
       placement="right"
     >
       <template v-if="currentLog">
-        <a-descriptions :column="1" size="small" bordered>
-          <a-descriptions-item label="ID">{{ currentLog.id }}</a-descriptions-item>
-          <a-descriptions-item label="时间">{{ formatTime(currentLog.created_at) }}</a-descriptions-item>
-          <a-descriptions-item label="租户">{{ currentLog.tenant_id }}</a-descriptions-item>
-          <a-descriptions-item label="用户">{{ currentLog.user_id || '-' }}</a-descriptions-item>
-          <a-descriptions-item label="动作">{{ currentLog.action }}</a-descriptions-item>
-          <a-descriptions-item label="资源类型">{{ currentLog.resource_type }}</a-descriptions-item>
-          <a-descriptions-item label="资源 ID">{{ currentLog.resource_id || '-' }}</a-descriptions-item>
-          <a-descriptions-item label="IP">{{ currentLog.ip_address || '-' }}</a-descriptions-item>
+        <a-descriptions
+          :column="1"
+          size="small"
+          bordered
+        >
+          <a-descriptions-item label="ID">
+            {{ currentLog.id }}
+          </a-descriptions-item>
+          <a-descriptions-item label="时间">
+            {{ formatTime(currentLog.created_at) }}
+          </a-descriptions-item>
+          <a-descriptions-item label="租户">
+            {{ currentLog.tenant_id }}
+          </a-descriptions-item>
+          <a-descriptions-item label="用户">
+            {{ currentLog.user_id || '-' }}
+          </a-descriptions-item>
+          <a-descriptions-item label="动作">
+            {{ currentLog.action }}
+          </a-descriptions-item>
+          <a-descriptions-item label="资源类型">
+            {{ currentLog.resource_type }}
+          </a-descriptions-item>
+          <a-descriptions-item label="资源 ID">
+            {{ currentLog.resource_id || '-' }}
+          </a-descriptions-item>
+          <a-descriptions-item label="IP">
+            {{ currentLog.ip_address || '-' }}
+          </a-descriptions-item>
         </a-descriptions>
         <div class="audit-detail-block">
-          <div class="audit-detail-label">详情（details）</div>
+          <div class="audit-detail-label">
+            详情（details）
+          </div>
           <pre class="audit-detail-json">{{ formatDetails(currentLog.details) || '-' }}</pre>
         </div>
       </template>

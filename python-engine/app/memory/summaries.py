@@ -4,6 +4,7 @@
 - content_hash 精确去重（PG 唯一索引拦截）
 - 租户行级隔离：所有查询携带 tenant_id/user_id
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -36,9 +37,15 @@ def compute_hash(tenant_id: str, user_id: str, content: str) -> str:
 
 def _row_to_entry(row: Any) -> SummaryEntry:
     topics_raw = row["topics"]
-    topics = json.loads(topics_raw) if isinstance(topics_raw, str) else (topics_raw or [])
+    topics = (
+        json.loads(topics_raw) if isinstance(topics_raw, str) else (topics_raw or [])
+    )
     entities_raw = row["entities"]
-    entities = json.loads(entities_raw) if isinstance(entities_raw, str) else (entities_raw or {})
+    entities = (
+        json.loads(entities_raw)
+        if isinstance(entities_raw, str)
+        else (entities_raw or {})
+    )
     return SummaryEntry(
         id=row["id"],
         tenant_id=row["tenant_id"],
@@ -69,10 +76,16 @@ class SummaryStore:
         if self._milvus_collection is not None:
             return self._milvus_collection
         try:
-            from pymilvus import connections, Collection
+            from pymilvus import Collection, connections
+
             from app.config import settings
+
             host = settings.milvus_address.split(":")[0]
-            port = int(settings.milvus_address.split(":")[1]) if ":" in settings.milvus_address else 19530
+            port = (
+                int(settings.milvus_address.split(":")[1])
+                if ":" in settings.milvus_address
+                else 19530
+            )
             connections.connect(alias="memory", host=host, port=port)
             self._milvus_collection = Collection("memory_store", using="memory")
             self._milvus_collection.load(using="memory")
@@ -81,10 +94,14 @@ class SummaryStore:
             self._milvus_collection = None
         return self._milvus_collection
 
-    async def insert(self, entry: SummaryEntry, embedding: Optional[list[float]] = None) -> SummaryEntry:
+    async def insert(
+        self, entry: SummaryEntry, embedding: Optional[list[float]] = None
+    ) -> SummaryEntry:
         """插入摘要（PG + Milvus 双写）。content_hash 冲突时返回既有条目。"""
         pool = self._pool
-        ch = entry.content_hash or compute_hash(entry.tenant_id, entry.user_id, entry.content)
+        ch = entry.content_hash or compute_hash(
+            entry.tenant_id, entry.user_id, entry.content
+        )
         topics_json = json.dumps(entry.topics, ensure_ascii=False)
         entities_json = json.dumps(entry.entities, ensure_ascii=False)
         now = datetime.now(timezone.utc)
@@ -98,9 +115,16 @@ class SummaryStore:
                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 0, NULL, 'active', NOW())
                    ON CONFLICT (tenant_id, user_id, content_hash) DO NOTHING
                    RETURNING id""",
-                entry.id, entry.tenant_id, entry.user_id, entry.session_id,
-                entry.content, topics_json, entities_json,
-                entry.turn_start, entry.turn_end, ch,
+                entry.id,
+                entry.tenant_id,
+                entry.user_id,
+                entry.session_id,
+                entry.content,
+                topics_json,
+                entities_json,
+                entry.turn_start,
+                entry.turn_end,
+                ch,
             )
         except Exception as e:
             logger.error("SummaryStore insert PG failed: %s", e)
@@ -113,7 +137,9 @@ class SummaryStore:
 
         created = await self.get_by_id(entry.tenant_id, entry.user_id, entry.id)
         if created is None:
-            raise RuntimeError(f"summary insert succeeded but row not found: {entry.id}")
+            raise RuntimeError(
+                f"summary insert succeeded but row not found: {entry.id}"
+            )
 
         # Milvus 双写（fail-soft：失败只警告，PG 已有数据）
         if embedding:
@@ -127,45 +153,68 @@ class SummaryStore:
         if coll is None:
             return
         try:
-            metadata = json.dumps({
-                "session_id": entry.session_id,
-                "turn_range": [entry.turn_start, entry.turn_end],
-                "topics": entry.topics,
-                "entities": entry.entities,
-                "content_hash": entry.content_hash,
-                "access_count": 0,
-                "last_accessed_at": int(time.time()),
-                "status": "active",
-            }, ensure_ascii=False)
-            coll.insert([
-                [entry.id], [entry.tenant_id], [entry.user_id], [entry.session_id],
-                [entry.content], ["summary"], [embedding],
-                [str(int(time.time()))], [metadata],
-            ])
+            metadata = json.dumps(
+                {
+                    "session_id": entry.session_id,
+                    "turn_range": [entry.turn_start, entry.turn_end],
+                    "topics": entry.topics,
+                    "entities": entry.entities,
+                    "content_hash": entry.content_hash,
+                    "access_count": 0,
+                    "last_accessed_at": int(time.time()),
+                    "status": "active",
+                },
+                ensure_ascii=False,
+            )
+            coll.insert(
+                [
+                    [entry.id],
+                    [entry.tenant_id],
+                    [entry.user_id],
+                    [entry.session_id],
+                    [entry.content],
+                    ["summary"],
+                    [embedding],
+                    [str(int(time.time()))],
+                    [metadata],
+                ]
+            )
             coll.flush(using="memory")
         except Exception as e:
             logger.warning("Milvus insert summary failed (PG has data): %s", e)
 
-    async def get_by_id(self, tenant_id: str, user_id: str, summary_id: str) -> Optional[SummaryEntry]:
+    async def get_by_id(
+        self, tenant_id: str, user_id: str, summary_id: str
+    ) -> Optional[SummaryEntry]:
         row = await self._pool.fetchrow(
             f"SELECT {_COLUMNS} FROM memory_summaries WHERE id=$1 AND tenant_id=$2 AND user_id=$3",
-            summary_id, tenant_id, user_id,
+            summary_id,
+            tenant_id,
+            user_id,
         )
         return _row_to_entry(row) if row else None
 
-    async def get_by_hash(self, tenant_id: str, user_id: str, content_hash: str) -> Optional[SummaryEntry]:
+    async def get_by_hash(
+        self, tenant_id: str, user_id: str, content_hash: str
+    ) -> Optional[SummaryEntry]:
         row = await self._pool.fetchrow(
             f"SELECT {_COLUMNS} FROM memory_summaries WHERE content_hash=$1 AND tenant_id=$2 AND user_id=$3",
-            content_hash, tenant_id, user_id,
+            content_hash,
+            tenant_id,
+            user_id,
         )
         return _row_to_entry(row) if row else None
 
-    async def list_active(self, tenant_id: str, user_id: str, limit: int = 50) -> list[SummaryEntry]:
+    async def list_active(
+        self, tenant_id: str, user_id: str, limit: int = 50
+    ) -> list[SummaryEntry]:
         rows = await self._pool.fetch(
             f"""SELECT {_COLUMNS} FROM memory_summaries
                 WHERE tenant_id=$1 AND user_id=$2 AND status='active'
                 ORDER BY created_at DESC LIMIT $3""",
-            tenant_id, user_id, limit,
+            tenant_id,
+            user_id,
+            limit,
         )
         return [_row_to_entry(r) for r in rows]
 
@@ -192,22 +241,35 @@ class SummaryStore:
                WHERE tenant_id=$1 AND user_id=$2 AND status='active'
                  AND (last_accessed_at IS NULL AND created_at < NOW() - ($3 || ' days')::INTERVAL
                    OR last_accessed_at < NOW() - ($3 || ' days')::INTERVAL)""",
-            tenant_id, user_id, str(days),
+            tenant_id,
+            user_id,
+            str(days),
         )
-        return int((result or "").replace("UPDATE ", "")) if "UPDATE" in (result or "") else 0
+        return (
+            int((result or "").replace("UPDATE ", ""))
+            if "UPDATE" in (result or "")
+            else 0
+        )
 
     async def count_by_topic(self, tenant_id: str, user_id: str, topic: str) -> int:
         row = await self._pool.fetchrow(
             """SELECT COUNT(*) as cnt FROM memory_summaries
                WHERE tenant_id=$1 AND user_id=$2 AND status='active'
                  AND topics @> $3::jsonb""",
-            tenant_id, user_id, json.dumps([topic]),
+            tenant_id,
+            user_id,
+            json.dumps([topic]),
         )
         return row["cnt"] if row else 0
 
     async def delete_all(self, tenant_id: str, user_id: str) -> int:
         result = await self._pool.execute(
             "DELETE FROM memory_summaries WHERE tenant_id=$1 AND user_id=$2",
-            tenant_id, user_id,
+            tenant_id,
+            user_id,
         )
-        return int((result or "").replace("DELETE ", "")) if "DELETE" in (result or "") else 0
+        return (
+            int((result or "").replace("DELETE ", ""))
+            if "DELETE" in (result or "")
+            else 0
+        )

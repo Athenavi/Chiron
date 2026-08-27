@@ -14,16 +14,9 @@ import logging
 from typing import Any
 
 from app.memory.conflict_manager import ConflictManager
-from app.memory.layers import (
-    ProfileItem,
-    ProfileUpdateResult,
-    RecalledItem,
-    RecallResult,
-    Scope,
-    SessionContext,
-    SlotType,
-    SourceType,
-)
+from app.memory.layers import (ProfileItem, ProfileUpdateResult, RecalledItem,
+                               RecallResult, Scope, SessionContext, SlotType,
+                               SourceType)
 from app.memory.profile_card import ProfileCard
 from app.memory.session_meta import SessionMetaStore
 
@@ -58,7 +51,9 @@ class MemoryService:
         self._summary_store = summary_store
         self._producer = producer
         # 从 profile_card 获取 conflict_manager
-        self._conflict_manager = conflict_manager or getattr(profile_card, '_conflict_manager', None)
+        self._conflict_manager = conflict_manager or getattr(
+            profile_card, "_conflict_manager", None
+        )
 
     # ── 生命周期钩子 ──────────────────────────────────────────────────
 
@@ -104,7 +99,10 @@ class MemoryService:
 
         logger.info(
             "Session started: %s (user=%s, tenant=%s, profile_cached=%s)",
-            session_id, user_id, tenant_id, profile_cached,
+            session_id,
+            user_id,
+            tenant_id,
+            profile_cached,
         )
 
         return SessionContext(
@@ -147,7 +145,8 @@ class MemoryService:
             if usage_ratio >= compaction_threshold:
                 logger.info(
                     "Token budget reached %.0f%%, triggering compaction for session=%s",
-                    usage_ratio * 100, session_id,
+                    usage_ratio * 100,
+                    session_id,
                 )
                 meta.mark_degraded("compaction_triggered")
                 self._session_meta.update(session_id)
@@ -163,7 +162,9 @@ class MemoryService:
 
         logger.debug(
             "Turn completed: session=%s, tokens_in=%d, tokens_out=%d, usage=%.0f%%",
-            session_id, tokens_in, tokens_out,
+            session_id,
+            tokens_in,
+            tokens_out,
             (total_tokens / max_tokens * 100) if max_tokens > 0 else 0,
         )
 
@@ -238,9 +239,7 @@ class MemoryService:
                         if self._is_turn_range_overlap(
                             item.turn_range, exclude_turn_range
                         ):
-                            logger.debug(
-                                "Excluding overlapping summary: %s", item.id
-                            )
+                            logger.debug("Excluding overlapping summary: %s", item.id)
                             continue
                         filtered.append(item)
                     raw_items = filtered
@@ -249,7 +248,9 @@ class MemoryService:
                 summary_items = raw_items[:top_k]
 
             except Exception as e:
-                logger.warning("L3 recall failed (fail-soft, returning empty L3): %s", e)
+                logger.warning(
+                    "L3 recall failed (fail-soft, returning empty L3): %s", e
+                )
                 summary_items = []
 
         return RecallResult(
@@ -461,7 +462,10 @@ class MemoryService:
 
         logger.info(
             "Conflict %s resolved: %s (tenant=%s, user=%s)",
-            conflict_id, resolution, tenant_id, user_id,
+            conflict_id,
+            resolution,
+            tenant_id,
+            user_id,
         )
 
         return result
@@ -588,7 +592,11 @@ class MemoryService:
         for item in items:
             entry_dict = item.to_dict()
             if entry_dict.get("id") == entry_id:
-                slot = item.slot if isinstance(item.slot, SlotType) else SlotType(item.slot)
+                slot = (
+                    item.slot
+                    if isinstance(item.slot, SlotType)
+                    else SlotType(item.slot)
+                )
                 return await self._profile_card.delete_item(
                     tenant_id=tenant_id,
                     user_id=user_id,
@@ -608,7 +616,10 @@ class MemoryService:
         for item in items:
             slot = item.slot if isinstance(item.slot, SlotType) else SlotType(item.slot)
             deleted = await self._profile_card.delete_item(
-                tenant_id, user_id, slot, item.item_key,
+                tenant_id,
+                user_id,
+                slot,
+                item.item_key,
             )
             if deleted:
                 count += 1
@@ -623,7 +634,9 @@ class MemoryService:
         slot: str | None = None,
     ) -> dict[str, Any]:
         """语义检索（API 层桥接）。"""
-        scope = Scope(tenant_id=tenant_id, user_id=user_id, session_id=f"search_{user_id}")
+        scope = Scope(
+            tenant_id=tenant_id, user_id=user_id, session_id=f"search_{user_id}"
+        )
         result = await self.recall(
             scope=scope,
             query=query,
@@ -732,7 +745,8 @@ class MemoryService:
             )
             logger.debug(
                 "Enqueued consolidate task: session=%s, turn=%d",
-                session_id, turn_count,
+                session_id,
+                turn_count,
             )
         except Exception as e:
             logger.warning("Failed to enqueue consolidate task: %s", e)
@@ -760,7 +774,8 @@ class MemoryService:
                 priority=1,  # 高优先级
             )
             logger.debug(
-                "Enqueued rollup task: session=%s", session_id,
+                "Enqueued rollup task: session=%s",
+                session_id,
             )
         except Exception as e:
             logger.warning("Failed to enqueue rollup task: %s", e)

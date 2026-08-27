@@ -12,6 +12,7 @@ pipeline 步骤：
 4. 写 L3（PG + Milvus 双写）
 5. 稳定事实探测（可选，PR-4 冲突流用）
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -35,7 +36,7 @@ class ConsolidateResult:
     """一次巩固的产出。"""
 
     summary: Optional[SummaryEntry] = None
-    deduplicated: bool = False       # 精确 hash 命中既有条目
+    deduplicated: bool = False  # 精确 hash 命中既有条目
     near_duplicate_of: Optional[str] = None  # 近重复既有 summary id
     error: str = ""
 
@@ -186,31 +187,37 @@ def _extract_entities(text: str) -> dict[str, list[str]]:
     if urls:
         entities["urls"] = urls
 
-    emails = re.findall(r'[\w.+-]+@[\w-]+\.[\w.-]+', text)
+    emails = re.findall(r"[\w.+-]+@[\w-]+\.[\w.-]+", text)
     if emails:
         entities["emails"] = emails
 
-    phones = re.findall(r'(?<!\d)1[3-9]\d{9}(?!\d)', text)
+    phones = re.findall(r"(?<!\d)1[3-9]\d{9}(?!\d)", text)
     if phones:
         entities["phones"] = phones
 
-    paths = re.findall(r'(?:[/\\][\w./\\-]+\.\w+|[\w./\\-]+\.(?:py|js|ts|go|rs|java|cpp|c|md|yaml|yml|json|toml))', text)
+    paths = re.findall(
+        r"(?:[/\\][\w./\\-]+\.\w+|[\w./\\-]+\.(?:py|js|ts|go|rs|java|cpp|c|md|yaml|yml|json|toml))",
+        text,
+    )
     if paths:
         entities["file_paths"] = paths
 
-    dates = re.findall(r'\d{4}[-/]\d{1,2}[-/]\d{1,2}', text)
+    dates = re.findall(r"\d{4}[-/]\d{1,2}[-/]\d{1,2}", text)
     if dates:
         entities["dates"] = dates
 
-    amounts = re.findall(r'[¥$￥]\s*[\d,]+(?:\.\d+)?(?:万|亿)?', text)
+    amounts = re.findall(r"[¥$￥]\s*[\d,]+(?:\.\d+)?(?:万|亿)?", text)
     if amounts:
         entities["amounts"] = amounts
 
-    ips = re.findall(r'\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b', text)
+    ips = re.findall(
+        r"\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b",
+        text,
+    )
     if ips:
         entities["ip_addresses"] = ips
 
-    code_refs = re.findall(r'\b([A-Z][a-zA-Z0-9_]*)\.([a-z][a-zA-Z0-9_]*)\(', text)
+    code_refs = re.findall(r"\b([A-Z][a-zA-Z0-9_]*)\.([a-z][a-zA-Z0-9_]*)\(", text)
     if code_refs:
         entities["code_refs"] = [f"{c[0]}.{c[1]}()" for c in code_refs]
 
@@ -225,15 +232,17 @@ def _extract_topics(text: str) -> list[str]:
     2. 否则取高频名词短语（简单分词）
     """
     # 策略 1：显式 topics 行
-    m = re.search(r'topics?\s*[:：]\s*(.+)', text, re.IGNORECASE)
+    m = re.search(r"topics?\s*[:：]\s*(.+)", text, re.IGNORECASE)
     if m:
         raw = m.group(1).strip()
-        parts = [p.strip().strip('"\'[]') for p in re.split(r'[,，;；]', raw) if p.strip()]
+        parts = [
+            p.strip().strip("\"'[]") for p in re.split(r"[,，;；]", raw) if p.strip()
+        ]
         if parts:
             return parts[:5]
 
     # 策略 2：简单关键词提取
-    words = re.findall(r'[\u4e00-\u9fff]{2,4}|[a-zA-Z]{3,}', text)
+    words = re.findall(r"[\u4e00-\u9fff]{2,4}|[a-zA-Z]{3,}", text)
     freq: dict[str, int] = {}
     for w in words:
         freq[w] = freq.get(w, 0) + 1

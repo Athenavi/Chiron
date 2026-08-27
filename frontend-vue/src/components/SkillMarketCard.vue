@@ -8,7 +8,9 @@
         allow-clear
         class="market-search"
       >
-        <template #prefix><SearchOutlined /></template>
+        <template #prefix>
+          <SearchOutlined />
+        </template>
       </Input>
     </div>
 
@@ -20,7 +22,10 @@
       :hint="searchQuery ? '尝试调整搜索关键词' : '管理员发布市场条目后，将展示在这里'"
     />
 
-    <div v-else class="market-grid">
+    <div
+      v-else
+      class="market-grid"
+    >
       <div
         v-for="item in filteredItems"
         :key="item.id"
@@ -33,30 +38,56 @@
             <span class="card-name">{{ displayName(item) }}</span>
             <span class="card-desc">{{ displayDesc(item) }}</span>
           </div>
-          <Tag v-if="item.installed" color="green" class="installed-tag">已安装</Tag>
+          <Tag
+            v-if="item.installed"
+            color="green"
+            class="installed-tag"
+          >
+            已安装
+          </Tag>
         </div>
 
         <!-- Agent：系统提示词摘要 -->
-        <div v-if="type === 'agent' && systemPrompt(item)" class="prompt-preview">
-          <div class="prompt-label">系统提示词</div>
-          <div class="prompt-text">{{ systemPrompt(item) }}</div>
+        <div
+          v-if="type === 'agent' && systemPrompt(item)"
+          class="prompt-preview"
+        >
+          <div class="prompt-label">
+            系统提示词
+          </div>
+          <div class="prompt-text">
+            {{ systemPrompt(item) }}
+          </div>
         </div>
 
         <!-- MCP：命令与参数 -->
-        <div v-else-if="type === 'mcp'" class="mcp-info">
+        <div
+          v-else-if="type === 'mcp'"
+          class="mcp-info"
+        >
           <div class="mcp-line">
             <span class="mcp-label">command</span>
             <code class="mcp-code">{{ mcpCommand(item) || '—' }}</code>
           </div>
-          <div v-if="mcpArgs(item).length" class="mcp-line">
+          <div
+            v-if="mcpArgs(item).length"
+            class="mcp-line"
+          >
             <span class="mcp-label">args</span>
             <code class="mcp-code">{{ mcpArgs(item).join(' ') }}</code>
           </div>
         </div>
 
         <div class="card-meta">
-          <Tag v-if="type === 'skill' && execType(item)">{{ execType(item) }}</Tag>
-          <Tag v-if="type === 'agent'" :color="toolCount(item) ? 'blue' : 'default'">{{ toolCount(item) }} 工具</Tag>
+          <Tag v-if="type === 'skill' && execType(item)">
+            {{ execType(item) }}
+          </Tag>
+          <Tag
+            v-if="type === 'agent'"
+            :color="toolCount(item) ? 'blue' : 'default'"
+          >
+            {{ toolCount(item) }} 工具
+          </Tag>
           <Tag>v{{ item.version || '1.0.0' }}</Tag>
         </div>
 

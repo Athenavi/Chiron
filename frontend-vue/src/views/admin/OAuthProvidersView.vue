@@ -338,9 +338,17 @@ onMounted(() => {
 
 <template>
   <div class="oauth-providers-view">
-    <Card title="三方登录 Provider" :loading="loading">
+    <Card
+      title="三方登录 Provider"
+      :loading="loading"
+    >
       <template #extra>
-        <Button type="primary" @click="openCreate">新建 Provider</Button>
+        <Button
+          type="primary"
+          @click="openCreate"
+        >
+          新建 Provider
+        </Button>
       </template>
 
       <Alert
@@ -359,95 +367,191 @@ onMounted(() => {
         size="middle"
       >
         <template #emptyText>
-          <div class="empty-block"><span class="empty-icon">📭</span><span class="empty-text">暂无数据</span></div>
+          <div class="empty-block">
+            <span class="empty-icon">📭</span><span class="empty-text">暂无数据</span>
+          </div>
         </template>
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'enabled'">
-            <Tag :color="record.enabled ? 'green' : 'default'">{{ record.enabled ? '启用' : '停用' }}</Tag>
+            <Tag :color="record.enabled ? 'green' : 'default'">
+              {{ record.enabled ? '启用' : '停用' }}
+            </Tag>
           </template>
           <template v-else-if="column.key === 'auto_provision'">
-            <Tag :color="record.auto_provision ? 'blue' : 'default'">{{ record.auto_provision ? '是' : '否' }}</Tag>
+            <Tag :color="record.auto_provision ? 'blue' : 'default'">
+              {{ record.auto_provision ? '是' : '否' }}
+            </Tag>
           </template>
           <template v-else-if="column.key === 'protocol'">
-            <Tag :color="record.protocol === 'oauth2' ? 'purple' : 'cyan'">{{ record.protocol }}</Tag>
+            <Tag :color="record.protocol === 'oauth2' ? 'purple' : 'cyan'">
+              {{ record.protocol }}
+            </Tag>
           </template>
           <template v-else-if="column.key === 'actions'">
-            <Button size="small" style="margin-right: 8px" @click="openEdit(record as SsoProvider)">编辑</Button>
-            <Popconfirm title="确定删除该 Provider？" ok-text="删除" cancel-text="取消" @confirm="handleDelete(record as SsoProvider)">
-              <Button size="small" danger>删除</Button>
+            <Button
+              size="small"
+              style="margin-right: 8px"
+              @click="openEdit(record as SsoProvider)"
+            >
+              编辑
+            </Button>
+            <Popconfirm
+              title="确定删除该 Provider？"
+              ok-text="删除"
+              cancel-text="取消"
+              @confirm="handleDelete(record as SsoProvider)"
+            >
+              <Button
+                size="small"
+                danger
+              >
+                删除
+              </Button>
             </Popconfirm>
           </template>
         </template>
       </Table>
     </Card>
 
-    <Card title="人机验证（防接口滥用）" style="margin-top: 16px" :loading="captchaLoading">
+    <Card
+      title="人机验证（防接口滥用）"
+      style="margin-top: 16px"
+      :loading="captchaLoading"
+    >
       <Alert
         type="info"
         show-icon
         style="margin-bottom: 16px"
         message="启用后登录/注册必须携带验证码 token；未启用时同 IP 连续失败 5 次也会自动升级为强制验证码，30 次直接拒绝。"
       />
-      <Form layout="vertical" style="max-width: 520px">
+      <Form
+        layout="vertical"
+        style="max-width: 520px"
+      >
         <FormItem label="验证服务商">
-          <Select v-model:value="captcha.provider" :options="captchaProviders" />
+          <Select
+            v-model:value="captcha.provider"
+            :options="captchaProviders"
+          />
         </FormItem>
-        <FormItem v-if="captcha.provider !== 'custom'" label="Site Key">
-          <Input v-model:value="captcha.site_key" placeholder="前端渲染组件用的站点密钥" />
+        <FormItem
+          v-if="captcha.provider !== 'custom'"
+          label="Site Key"
+        >
+          <Input
+            v-model:value="captcha.site_key"
+            placeholder="前端渲染组件用的站点密钥"
+          />
         </FormItem>
         <FormItem label="Secret（留空保留原值）">
-          <Input v-model:value="captcha.secret" placeholder="服务端校验密钥（AES-GCM 加密存储）" />
+          <Input
+            v-model:value="captcha.secret"
+            placeholder="服务端校验密钥（AES-GCM 加密存储）"
+          />
         </FormItem>
-        <FormItem v-if="captcha.provider === 'custom'" label="验证端点 URL">
-          <Input v-model:value="captcha.verify_url" placeholder="https://your-captcha.example.com/verify" />
+        <FormItem
+          v-if="captcha.provider === 'custom'"
+          label="验证端点 URL"
+        >
+          <Input
+            v-model:value="captcha.verify_url"
+            placeholder="https://your-captcha.example.com/verify"
+          />
         </FormItem>
         <FormItem label="启用">
           <Switch v-model:checked="captcha.enabled" />
         </FormItem>
         <FormItem>
-          <Button type="primary" :loading="captchaSaving" @click="handleSaveCaptcha">保存配置</Button>
+          <Button
+            type="primary"
+            :loading="captchaSaving"
+            @click="handleSaveCaptcha"
+          >
+            保存配置
+          </Button>
         </FormItem>
       </Form>
     </Card>
 
-    <Card title="短信服务（验证码登录）" style="margin-top: 16px" :loading="smsLoading">
+    <Card
+      title="短信服务（验证码登录）"
+      style="margin-top: 16px"
+      :loading="smsLoading"
+    >
       <Alert
         type="info"
         show-icon
         style="margin-bottom: 16px"
         message="启用后登录页出现「短信登录」标签页，个人中心可绑定手机号；验证码发送有冷却与每日上限防滥用。AccessKeySecret 加密存储、回显脱敏。"
       />
-      <Form layout="vertical" style="max-width: 520px">
+      <Form
+        layout="vertical"
+        style="max-width: 520px"
+      >
         <FormItem label="短信服务商">
-          <Select v-model:value="sms.provider" :options="smsProviders" />
+          <Select
+            v-model:value="sms.provider"
+            :options="smsProviders"
+          />
         </FormItem>
         <template v-if="sms.provider !== 'custom'">
           <FormItem label="短信签名（SignName）">
-            <Input v-model:value="sms.sign_name" placeholder="例：Chiron" />
+            <Input
+              v-model:value="sms.sign_name"
+              placeholder="例：Chiron"
+            />
           </FormItem>
           <FormItem label="模板 ID（阿里云 TemplateCode / 腾讯云 TemplateId）">
-            <Input v-model:value="sms.template_id" placeholder="例：SMS_12345678（模板参数需含 code）" />
+            <Input
+              v-model:value="sms.template_id"
+              placeholder="例：SMS_12345678（模板参数需含 code）"
+            />
           </FormItem>
           <FormItem label="AccessKeyID（腾讯云为 SmsSdkAppId）">
             <Input v-model:value="sms.access_key_id" />
           </FormItem>
         </template>
-        <FormItem v-if="sms.provider === 'custom'" label="发送端点 URL">
-          <Input v-model:value="sms.endpoint" placeholder="https://your-sms.example.com/send" />
+        <FormItem
+          v-if="sms.provider === 'custom'"
+          label="发送端点 URL"
+        >
+          <Input
+            v-model:value="sms.endpoint"
+            placeholder="https://your-sms.example.com/send"
+          />
         </FormItem>
         <FormItem label="AccessKeySecret（留空保留原值）">
-          <Input v-model:value="sms.secret" type="password" placeholder="AES-GCM 加密存储" />
+          <Input
+            v-model:value="sms.secret"
+            type="password"
+            placeholder="AES-GCM 加密存储"
+          />
         </FormItem>
         <div class="form-grid">
           <FormItem label="验证码有效期（秒）">
-            <InputNumber v-model:value="sms.code_ttl_seconds" :min="60" :max="900" style="width: 100%" />
+            <InputNumber
+              v-model:value="sms.code_ttl_seconds"
+              :min="60"
+              :max="900"
+              style="width: 100%"
+            />
           </FormItem>
           <FormItem label="发送冷却（秒）">
-            <InputNumber v-model:value="sms.send_interval_seconds" :min="0" :max="3600" style="width: 100%" />
+            <InputNumber
+              v-model:value="sms.send_interval_seconds"
+              :min="0"
+              :max="3600"
+              style="width: 100%"
+            />
           </FormItem>
         </div>
         <FormItem label="同一手机号每日发送上限">
-          <InputNumber v-model:value="sms.daily_limit" :min="1" :max="100" style="width: 100%" />
+          <InputNumber
+            v-model:value="sms.daily_limit"
+            :min="1"
+            :max="100"
+            style="width: 100%"
+          />
         </FormItem>
         <div class="switch-row">
           <FormItem label="启用短信服务">
@@ -461,7 +565,13 @@ onMounted(() => {
           </FormItem>
         </div>
         <FormItem>
-          <Button type="primary" :loading="smsSaving" @click="handleSaveSms">保存配置</Button>
+          <Button
+            type="primary"
+            :loading="smsSaving"
+            @click="handleSaveSms"
+          >
+            保存配置
+          </Button>
         </FormItem>
       </Form>
     </Card>
@@ -478,45 +588,83 @@ onMounted(() => {
       <Form layout="vertical">
         <div class="form-grid">
           <FormItem label="名称（唯一）">
-            <Input v-model:value="providerForm.name" placeholder="例：corporate-okta" />
+            <Input
+              v-model:value="providerForm.name"
+              placeholder="例：corporate-okta"
+            />
           </FormItem>
           <FormItem label="展示名">
-            <Input v-model:value="providerForm.display_name" placeholder="登录按钮文案，默认同名称" />
+            <Input
+              v-model:value="providerForm.display_name"
+              placeholder="登录按钮文案，默认同名称"
+            />
           </FormItem>
           <FormItem label="协议">
-            <Select v-model:value="providerForm.protocol" :options="[
-              { value: 'oidc', label: 'OIDC（标准发现）' },
-              { value: 'oauth2', label: 'OAuth2（显式端点）' },
-            ]" />
+            <Select
+              v-model:value="providerForm.protocol"
+              :options="[
+                { value: 'oidc', label: 'OIDC（标准发现）' },
+                { value: 'oauth2', label: 'OAuth2（显式端点）' },
+              ]"
+            />
           </FormItem>
           <FormItem label="类型模板">
-            <Select v-model:value="providerForm.provider_type" :options="providerTypes" />
+            <Select
+              v-model:value="providerForm.provider_type"
+              :options="providerTypes"
+            />
           </FormItem>
           <FormItem label="Client ID">
             <Input v-model:value="providerForm.client_id" />
           </FormItem>
           <FormItem label="Client Secret（编辑时留空保留原值）">
-            <Input v-model:value="providerForm.client_secret" type="password" />
+            <Input
+              v-model:value="providerForm.client_secret"
+              type="password"
+            />
           </FormItem>
-          <FormItem v-if="providerForm.protocol === 'oidc'" label="Issuer">
-            <Input v-model:value="providerForm.issuer" placeholder="https://accounts.google.com" />
+          <FormItem
+            v-if="providerForm.protocol === 'oidc'"
+            label="Issuer"
+          >
+            <Input
+              v-model:value="providerForm.issuer"
+              placeholder="https://accounts.google.com"
+            />
           </FormItem>
           <FormItem label="排序（小者靠前）">
-            <InputNumber v-model:value="providerForm.sort_order" :min="0" :max="9999" style="width: 100%" />
+            <InputNumber
+              v-model:value="providerForm.sort_order"
+              :min="0"
+              :max="9999"
+              style="width: 100%"
+            />
           </FormItem>
         </div>
         <FormItem label="Scopes（空格分隔，留空用模板默认）">
-          <Input v-model:value="providerForm.scopes" placeholder="openid email profile" />
+          <Input
+            v-model:value="providerForm.scopes"
+            placeholder="openid email profile"
+          />
         </FormItem>
         <div class="form-grid">
           <FormItem label="授权端点覆盖（OAuth2 可留空用模板）">
-            <Input v-model:value="providerForm.auth_url" placeholder="留空 = 模板缺省" />
+            <Input
+              v-model:value="providerForm.auth_url"
+              placeholder="留空 = 模板缺省"
+            />
           </FormItem>
           <FormItem label="Token 端点覆盖">
-            <Input v-model:value="providerForm.token_url" placeholder="留空 = 模板缺省" />
+            <Input
+              v-model:value="providerForm.token_url"
+              placeholder="留空 = 模板缺省"
+            />
           </FormItem>
           <FormItem label="Userinfo 端点覆盖">
-            <Input v-model:value="providerForm.userinfo_url" placeholder="留空 = 模板缺省" />
+            <Input
+              v-model:value="providerForm.userinfo_url"
+              placeholder="留空 = 模板缺省"
+            />
           </FormItem>
         </div>
         <div class="switch-row">

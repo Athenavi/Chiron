@@ -10,10 +10,11 @@
 避免用户 A 的插件工具被用户 B 列出或调用。注册表为进程内可重建状态：
 实例重启后由插件配置重新注册（幂等覆盖）。
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Awaitable
+from typing import Any, Awaitable, Callable
 
 
 @dataclass
@@ -54,8 +55,11 @@ class ToolRegistry:
         if owner:
             owners.add(owner)
         self._tools[name] = ToolDef(
-            name=name, description=description, parameters=parameters,
-            handler=handler, owners=owners,
+            name=name,
+            description=description,
+            parameters=parameters,
+            handler=handler,
+            owners=owners,
         )
 
     def set_owners(self, name: str, owners: set[str]) -> None:
@@ -90,6 +94,7 @@ class ToolRegistry:
             return user_id
         try:
             from app.tools.context import get_user_id
+
             return get_user_id() or ""
         except ImportError:  # pragma: no cover — 上下文模块不可用时视为未认证
             return ""
@@ -101,17 +106,21 @@ class ToolRegistry:
         for tool in self._tools.values():
             if not self._visible(tool, user_id):
                 continue
-            converted.append({
-                "type": "function",
-                "function": {
-                    "name": tool.name,
-                    "description": tool.description,
-                    "parameters": tool.parameters,
-                },
-            })
+            converted.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": tool.name,
+                        "description": tool.description,
+                        "parameters": tool.parameters,
+                    },
+                }
+            )
         return converted
 
-    async def execute(self, name: str, params: dict[str, Any], user_id: str = "") -> dict[str, Any]:
+    async def execute(
+        self, name: str, params: dict[str, Any], user_id: str = ""
+    ) -> dict[str, Any]:
         """执行工具。owner 工具要求当前用户匹配（无上下文/未认证时拒绝 owner 工具，
         防止未认证直连越权调用他人插件工具）。"""
         user_id = self._resolve_user(user_id)

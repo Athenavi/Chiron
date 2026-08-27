@@ -2,14 +2,15 @@
 
 Every handler has the signature ``async def handler(args: str, ctx: CommandContext) -> str``.
 """
+
 from __future__ import annotations
 
 from typing import Any
 
 from app.commands.registry import CommandContext, registry
 
-
 # ── /help ───────────────────────────────────────────────────────
+
 
 async def _help(args: str, ctx: CommandContext | None) -> str:
     """List all available slash commands."""
@@ -22,6 +23,7 @@ async def _help(args: str, ctx: CommandContext | None) -> str:
 
 # ── /clear ──────────────────────────────────────────────────────
 
+
 async def _clear(args: str, ctx: CommandContext | None) -> str:
     """Clear conversation history."""
     if ctx is not None:
@@ -31,6 +33,7 @@ async def _clear(args: str, ctx: CommandContext | None) -> str:
 
 # ── /compact ────────────────────────────────────────────────────
 
+
 async def _compact(args: str, ctx: CommandContext | None) -> str:
     """Compress / summarise conversation context."""
     if ctx is None or not ctx.history:
@@ -39,14 +42,17 @@ async def _compact(args: str, ctx: CommandContext | None) -> str:
     summary = f"Compacted {count} messages into context summary."
     if ctx is not None:
         ctx.history.clear()
-        ctx.history.append({
-            "role": "system",
-            "content": f"[Compacted summary of {count} previous messages]",
-        })
+        ctx.history.append(
+            {
+                "role": "system",
+                "content": f"[Compacted summary of {count} previous messages]",
+            }
+        )
     return summary
 
 
 # ── /model <name> ───────────────────────────────────────────────
+
 
 async def _model(args: str, ctx: CommandContext | None) -> str:
     """Switch the LLM model."""
@@ -59,6 +65,7 @@ async def _model(args: str, ctx: CommandContext | None) -> str:
 
 
 # ── /temperature <value> ────────────────────────────────────────
+
 
 async def _temperature(args: str, ctx: CommandContext | None) -> str:
     """Adjust the sampling temperature."""
@@ -78,6 +85,7 @@ async def _temperature(args: str, ctx: CommandContext | None) -> str:
 
 # ── /think ──────────────────────────────────────────────────────
 
+
 async def _think(args: str, ctx: CommandContext | None) -> str:
     """Enter thinking / plan mode."""
     if ctx is not None:
@@ -87,6 +95,7 @@ async def _think(args: str, ctx: CommandContext | None) -> str:
 
 # ── /act ────────────────────────────────────────────────────────
 
+
 async def _act(args: str, ctx: CommandContext | None) -> str:
     """Exit thinking mode and start acting."""
     if ctx is not None:
@@ -95,6 +104,7 @@ async def _act(args: str, ctx: CommandContext | None) -> str:
 
 
 # ── /skill <name> ───────────────────────────────────────────────
+
 
 async def _skill(args: str, ctx: CommandContext | None) -> str:
     """Load a skill by name."""
@@ -107,6 +117,7 @@ async def _skill(args: str, ctx: CommandContext | None) -> str:
 
 
 # ── /memory <query> ─────────────────────────────────────────────
+
 
 async def _memory(args: str, ctx: CommandContext | None) -> str:
     """Search memories and show user profile.
@@ -152,11 +163,14 @@ async def _memory(args: str, ctx: CommandContext | None) -> str:
         return f"No memories found for '{query}'."
     lines = [f"Memory search '{query}' ({data['count']} hits, {data['mode']} mode):"]
     for r in data["results"]:
-        lines.append(f"  [{r['slot']}] {r['key']}: {r['value']} (score={r.get('score', 0):.2f})")
+        lines.append(
+            f"  [{r['slot']}] {r['key']}: {r['value']} (score={r.get('score', 0):.2f})"
+        )
     return "\n".join(lines)
 
 
 # ── /context ────────────────────────────────────────────────────
+
 
 async def _context(args: str, ctx: CommandContext | None) -> str:
     """Show current context information."""
@@ -174,6 +188,7 @@ async def _context(args: str, ctx: CommandContext | None) -> str:
 
 # ── /cost ───────────────────────────────────────────────────────
 
+
 async def _cost(args: str, ctx: CommandContext | None) -> str:
     """Show token usage and estimated cost."""
     total = sum(len(m.get("content", "")) for m in (ctx.history if ctx else []))
@@ -187,6 +202,7 @@ async def _cost(args: str, ctx: CommandContext | None) -> str:
 
 # ── /undo ───────────────────────────────────────────────────────
 
+
 async def _undo(args: str, ctx: CommandContext | None) -> str:
     """Undo last file edit."""
     if ctx is not None:
@@ -198,6 +214,7 @@ async def _undo(args: str, ctx: CommandContext | None) -> str:
 
 # ── /retry ──────────────────────────────────────────────────────
 
+
 async def _retry(args: str, ctx: CommandContext | None) -> str:
     """Retry the last agent response."""
     if ctx is not None:
@@ -208,19 +225,19 @@ async def _retry(args: str, ctx: CommandContext | None) -> str:
 # ── register all built-ins ──────────────────────────────────────
 
 _BUILTINS: list[tuple[str, str, Any]] = [
-    ("help",        "List all available commands",             _help),
-    ("clear",       "Clear conversation history",             _clear),
-    ("compact",     "Compress/summarize conversation context", _compact),
-    ("model",       "Switch LLM model (/model <name>)",       _model),
+    ("help", "List all available commands", _help),
+    ("clear", "Clear conversation history", _clear),
+    ("compact", "Compress/summarize conversation context", _compact),
+    ("model", "Switch LLM model (/model <name>)", _model),
     ("temperature", "Adjust temperature (/temperature <val>)", _temperature),
-    ("think",       "Enter thinking/plan mode",                _think),
-    ("act",         "Exit thinking mode, start acting",        _act),
-    ("skill",       "Load a skill (/skill <name>)",            _skill),
-    ("memory",      "Search or list memories (/memory [query])",  _memory),
-    ("context",     "Show current context",                    _context),
-    ("cost",        "Show token usage and cost",               _cost),
-    ("undo",        "Undo last file edit",                     _undo),
-    ("retry",       "Retry last agent response",               _retry),
+    ("think", "Enter thinking/plan mode", _think),
+    ("act", "Exit thinking mode, start acting", _act),
+    ("skill", "Load a skill (/skill <name>)", _skill),
+    ("memory", "Search or list memories (/memory [query])", _memory),
+    ("context", "Show current context", _context),
+    ("cost", "Show token usage and cost", _cost),
+    ("undo", "Undo last file edit", _undo),
+    ("retry", "Retry last agent response", _retry),
 ]
 
 

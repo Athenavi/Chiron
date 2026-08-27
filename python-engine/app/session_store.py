@@ -12,6 +12,7 @@ Session Store — Redis-backed 会话消息缓存（支持降级到内存）
     messages = await store.get_or_init(session_id, history_from_go)
     await store.append(session_id, new_messages)
 """
+
 from __future__ import annotations
 
 import json
@@ -45,7 +46,10 @@ class SessionStore:
 
         # 隐私模式：no_retention 时跳过 Redis 持久层，降级到内存（不落盘）
         if is_no_retention():
-            logger.debug("Privacy no_retention: skip Redis session persistence for %s", session_id)
+            logger.debug(
+                "Privacy no_retention: skip Redis session persistence for %s",
+                session_id,
+            )
             return self._local_get_or_init(session_id, history)
 
         # 尝试 Redis 后端
@@ -54,7 +58,9 @@ class SessionStore:
                 return await self._redis_get_or_init(session_id, history)
             except Exception as e:
                 logger.warning("Redis session get failed, fallback to local: %s", e)
-                self._redis_enabled = False  # 降级（仅降级当前实例，不修改共享 self._redis）
+                self._redis_enabled = (
+                    False  # 降级（仅降级当前实例，不修改共享 self._redis）
+                )
 
         # 内存降级
         return self._local_get_or_init(session_id, history)
@@ -65,7 +71,10 @@ class SessionStore:
 
         # 隐私模式：no_retention 时跳过 Redis 持久层，仅保留内存态（不落盘）
         if is_no_retention():
-            logger.debug("Privacy no_retention: skip Redis session persistence for %s", session_id)
+            logger.debug(
+                "Privacy no_retention: skip Redis session persistence for %s",
+                session_id,
+            )
             self._local_set(session_id, messages)
             return
 
@@ -100,7 +109,9 @@ class SessionStore:
             try:
                 cursor = 0
                 while True:
-                    cursor, keys = await self._redis.scan(cursor, match=REDIS_KEY_PREFIX + "*", count=100)
+                    cursor, keys = await self._redis.scan(
+                        cursor, match=REDIS_KEY_PREFIX + "*", count=100
+                    )
                     if keys:
                         await self._redis.delete(*keys)
                     if cursor == 0:
@@ -114,7 +125,9 @@ class SessionStore:
 
     # ── Redis 后端 ──
 
-    async def _redis_get_or_init(self, session_id: str, history: list[dict]) -> list[dict]:
+    async def _redis_get_or_init(
+        self, session_id: str, history: list[dict]
+    ) -> list[dict]:
         data = await self._redis.get(REDIS_KEY_PREFIX + session_id)
         if data:
             # 延长 TTL
@@ -123,7 +136,11 @@ class SessionStore:
             logger.debug("Redis cache HIT: %s (%d messages)", session_id, len(result))
             return result
 
-        logger.info("Redis cache MISS: %s (init from history: %d msgs)", session_id, len(history))
+        logger.info(
+            "Redis cache MISS: %s (init from history: %d msgs)",
+            session_id,
+            len(history),
+        )
         messages = list(history)
         await self._redis_set(session_id, messages)
         return messages
@@ -152,7 +169,11 @@ class SessionStore:
             # 若直接返回缓存引用会污染共享状态，导致并发/多轮上下文错乱
             return list(cached)
 
-        logger.info("Local cache MISS: %s (init from history: %d msgs)", session_id, len(history))
+        logger.info(
+            "Local cache MISS: %s (init from history: %d msgs)",
+            session_id,
+            len(history),
+        )
         messages = list(history)
         self._local[session_id] = messages
         self._evict_if_needed()

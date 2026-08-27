@@ -5,6 +5,7 @@
 新增模式只需在 _MODE_CONFIGS 加一条条目。mode_overrides.json（可被创造
 模式的 mode_edit 工具写入）在加载时叠加覆盖。
 """
+
 from __future__ import annotations
 
 import json
@@ -17,20 +18,22 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 # ── 核心工具列表（Token Economy：只暴露这些给 LLM，其余按需激活） ──
-CORE_TOOL_NAMES = frozenset({
-    "recall",        # 检索记忆（用户偏好/事实）
-    "remember",      # 保存新事实
-    "skill_list",    # 列出可用技能
-    "skill_run",     # 执行技能
-    "web_fetch",     # 获取外部信息
-    "shell_exec",    # 执行命令
-    "execute_python",  # 执行 Python
-    "git_status",    # 查看项目状态
-    "read_file",     # 读取文件
-    "write_file",    # 写入/保存文件
-    "grep_files",    # 搜索文件
-    "subagent",      # 子 agent 委派（多 agent 协作核心）
-})
+CORE_TOOL_NAMES = frozenset(
+    {
+        "recall",  # 检索记忆（用户偏好/事实）
+        "remember",  # 保存新事实
+        "skill_list",  # 列出可用技能
+        "skill_run",  # 执行技能
+        "web_fetch",  # 获取外部信息
+        "shell_exec",  # 执行命令
+        "execute_python",  # 执行 Python
+        "git_status",  # 查看项目状态
+        "read_file",  # 读取文件
+        "write_file",  # 写入/保存文件
+        "grep_files",  # 搜索文件
+        "subagent",  # 子 agent 委派（多 agent 协作核心）
+    }
+)
 
 # 极简模式：仅信息读取 + 编辑 + shell（deepseek minimal 的 persistent-bash + str_replace_editor 语义）
 MINIMAL_TOOL_NAMES = frozenset({"read_file", "edit_file", "shell_exec"})
@@ -60,14 +63,16 @@ class AgentMode(str, Enum):
 @dataclass(frozen=True)
 class ModeConfig:
     mode: AgentMode
-    persona: Optional[str] = None       # None = 用现有默认 persona；str = 固定完整 persona
-    include_context: bool = True        # 是否注入记忆/skills/RAG/git 上下文段
+    persona: Optional[str] = None  # None = 用现有默认 persona；str = 固定完整 persona
+    include_context: bool = True  # 是否注入记忆/skills/RAG/git 上下文段
     include_tools: frozenset = frozenset(CORE_TOOL_NAMES)  # 模式可见工具
     extra_tools: frozenset = frozenset()  # 模式额外注册的工具
-    enable_compaction: bool = True      # 是否启用上下文压缩
-    compaction: Optional[dict] = None   # SaaS：截断策略配置（strategy/max_messages/max_context_tokens/
-                                        #        threshold_ratio/snipe_ratio/tool_result_max_chars 等），
-                                        #        租户/模式可手动确认；None = 默认策略
+    enable_compaction: bool = True  # 是否启用上下文压缩
+    compaction: Optional[dict] = (
+        None  # SaaS：截断策略配置（strategy/max_messages/max_context_tokens/
+    )
+    #        threshold_ratio/snipe_ratio/tool_result_max_chars 等），
+    #        租户/模式可手动确认；None = 默认策略
 
 
 _BASE_MODES: dict[AgentMode, ModeConfig] = {

@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import logging
 
-from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.middleware.base import (BaseHTTPMiddleware,
+                                       RequestResponseEndpoint)
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
@@ -20,7 +21,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self._limiter = limiter
 
-    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         # 公开路径跳过
         if request.url.path in {"/healthz", "/readyz", "/metrics", "/info"}:
             return await call_next(request)

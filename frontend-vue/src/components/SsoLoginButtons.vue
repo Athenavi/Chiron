@@ -51,7 +51,10 @@ function startSso(p: SsoPublicProvider) {
 </script>
 
 <template>
-  <div v-if="providers.length" class="sso-group">
+  <div
+    v-if="providers.length"
+    class="sso-group"
+  >
     <div class="sso-divider">
       <span>{{ mode === 'bind' ? '绑定三方账号' : '三方登录' }}</span>
     </div>
@@ -64,7 +67,10 @@ function startSso(p: SsoPublicProvider) {
         :title="displayName(p)"
         @click="startSso(p)"
       >
-        <span class="sso-badge" :style="{ background: brandOf(p).color }">{{ brandOf(p).badge }}</span>
+        <span
+          class="sso-badge"
+          :style="{ background: brandOf(p).color }"
+        >{{ brandOf(p).badge }}</span>
         <span class="sso-label">{{ displayName(p) }}</span>
       </button>
     </div>

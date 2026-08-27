@@ -262,20 +262,43 @@ function onSlashInput() {
     @dragleave="onDragLeave"
     @drop="onDrop"
   >
-    <div class="input-card" :class="{ 'drag-active': dragOver }">
+    <div
+      class="input-card"
+      :class="{ 'drag-active': dragOver }"
+    >
       <!-- 大文本粘贴折叠预览 -->
-      <div v-if="pastedLargeText" class="paste-preview">
+      <div
+        v-if="pastedLargeText"
+        class="paste-preview"
+      >
         <div class="paste-preview-text">
           {{ pastedLargeText.slice(0, PASTE_PREVIEW) }}<span v-if="pastedLargeText.length > PASTE_PREVIEW">…</span>
         </div>
-        <div class="paste-preview-meta">已粘贴 {{ pastedLargeText.length }} 字符</div>
+        <div class="paste-preview-meta">
+          已粘贴 {{ pastedLargeText.length }} 字符
+        </div>
         <div class="paste-preview-actions">
-          <button class="paste-btn discard" type="button" @click="discardPastedText">丢弃</button>
-          <button class="paste-btn accept" type="button" @click="acceptPastedText">插入</button>
+          <button
+            class="paste-btn discard"
+            type="button"
+            @click="discardPastedText"
+          >
+            丢弃
+          </button>
+          <button
+            class="paste-btn accept"
+            type="button"
+            @click="acceptPastedText"
+          >
+            插入
+          </button>
         </div>
       </div>
       <!-- 斜杠命令面板 -->
-      <div v-if="showSlashMenu" class="slash-menu">
+      <div
+        v-if="showSlashMenu"
+        class="slash-menu"
+      >
         <div
           v-for="(c, i) in filteredCommands"
           :key="c.cmd"
@@ -289,14 +312,34 @@ function onSlashInput() {
         </div>
       </div>
       <!-- 附件预览区 -->
-      <div v-if="pendingAttachments.length" class="attachment-preview">
-        <div v-for="att in pendingAttachments" :key="att.id" class="att-thumb">
-          <img v-if="att.isImage" :src="att.url" :alt="att.name" class="att-thumb-img" />
-          <div v-else class="att-thumb-file">
+      <div
+        v-if="pendingAttachments.length"
+        class="attachment-preview"
+      >
+        <div
+          v-for="att in pendingAttachments"
+          :key="att.id"
+          class="att-thumb"
+        >
+          <img
+            v-if="att.isImage"
+            :src="att.url"
+            :alt="att.name"
+            class="att-thumb-img"
+          >
+          <div
+            v-else
+            class="att-thumb-file"
+          >
             <FileOutlined />
             <span class="att-thumb-name">{{ att.name }}</span>
           </div>
-          <button class="att-remove" type="button" title="移除" @click="removeAttachment(att.id)">
+          <button
+            class="att-remove"
+            type="button"
+            title="移除"
+            @click="removeAttachment(att.id)"
+          >
             <CloseOutlined />
           </button>
         </div>
@@ -320,7 +363,7 @@ function onSlashInput() {
         multiple
         style="display: none"
         @change="onFileChange"
-      />
+      >
       <div class="input-actions">
         <div class="input-left">
           <Button
@@ -331,7 +374,9 @@ function onSlashInput() {
             title="上传文件"
             @click="triggerFilePick"
           >
-            <template #icon><PaperClipOutlined /></template>
+            <template #icon>
+              <PaperClipOutlined />
+            </template>
           </Button>
           <span class="mode-label">模式</span>
           <Select
@@ -361,7 +406,9 @@ function onSlashInput() {
             title="打开上下文面板（会话/轨迹/上下文）"
             @click="emit('open-panel')"
           >
-            <template #icon><BranchesOutlined /></template>
+            <template #icon>
+              <BranchesOutlined />
+            </template>
             <span class="context-label">上下文</span>
           </Button>
         </div>

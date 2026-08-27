@@ -10,6 +10,7 @@
 - POST   /v1/memory/organize                触发异步智能整理（去重/归档/补嵌入）
 - GET    /v1/memory/organize/status         整理任务状态
 """
+
 from __future__ import annotations
 
 import logging
@@ -17,7 +18,7 @@ import logging
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from app.memory.layers import SLOTS, SLOT_LABELS
+from app.memory.layers import SLOT_LABELS, SLOTS
 from app.memory.service import get_service
 
 logger = logging.getLogger(__name__)
@@ -104,7 +105,9 @@ async def update_profile(request: Request):
         if confidence is not None:
             confidence = max(0, min(100, int(confidence)))
         entry = await svc.update_entry(
-            tenant_id, user_id, entry_id,
+            tenant_id,
+            user_id,
+            entry_id,
             key=str(body["key"]) if body.get("key") is not None else None,
             value=str(body["value"]) if body.get("value") is not None else None,
             confidence=int(confidence) if confidence is not None else None,
@@ -113,7 +116,9 @@ async def update_profile(request: Request):
     except ValueError as e:
         return _bad_request(str(e))
     if entry is None:
-        return JSONResponse({"success": False, "error": "entry not found"}, status_code=404)
+        return JSONResponse(
+            {"success": False, "error": "entry not found"}, status_code=404
+        )
     return {"success": True, "entry": entry.to_dict()}
 
 
@@ -127,7 +132,9 @@ async def delete_profile(entry_id: str, request: Request):
         return _bad_request("user_id is required")
     deleted = await svc.delete_entry(tenant_id, user_id, entry_id)
     if not deleted:
-        return JSONResponse({"success": False, "error": "entry not found"}, status_code=404)
+        return JSONResponse(
+            {"success": False, "error": "entry not found"}, status_code=404
+        )
     return {"success": True, "deleted": entry_id}
 
 
@@ -158,7 +165,8 @@ async def search_memory(request: Request):
     body = await request.json()
     try:
         data = await svc.search(
-            tenant_id, user_id,
+            tenant_id,
+            user_id,
             query=str(body.get("query") or ""),
             top_k=int(body.get("top_k", 10)),
             slot=str(body["slot"]) if body.get("slot") else None,
@@ -177,7 +185,11 @@ async def organize_memory(request: Request):
     if not user_id:
         return _bad_request("user_id is required")
     result = await svc.start_organize(tenant_id, user_id)
-    return {"success": True, **result, "status": svc.organize_status(tenant_id, user_id)}
+    return {
+        "success": True,
+        **result,
+        "status": svc.organize_status(tenant_id, user_id),
+    }
 
 
 @router.get("/v1/memory/organize/status")
@@ -192,6 +204,7 @@ async def organize_status(request: Request):
 
 
 # ── L3 摘要管理 ──────────────────────────────────────
+
 
 @router.get("/v1/memory/summaries")
 async def list_summaries(request: Request):
@@ -210,6 +223,7 @@ async def list_summaries(request: Request):
 
 
 # ── 冲突裁决 ─────────────────────────────────────────
+
 
 @router.get("/v1/memory/conflicts")
 async def list_conflicts(request: Request):
@@ -265,5 +279,7 @@ async def delete_conflict(conflict_id: str, request: Request):
         return _bad_request("user_id is required")
     deleted = await svc.delete_conflict(tenant_id, user_id, conflict_id)
     if not deleted:
-        return JSONResponse({"success": False, "error": "conflict not found"}, status_code=404)
+        return JSONResponse(
+            {"success": False, "error": "conflict not found"}, status_code=404
+        )
     return {"success": True, "deleted": conflict_id}

@@ -5,6 +5,7 @@
 2. 行范围编辑 (start_line, end_line → new_content)
 3. 统一 diff 输出
 """
+
 from __future__ import annotations
 
 import difflib
@@ -31,6 +32,7 @@ async def edit_file(
         inclusive) and *new_content*.
     """
     from app.tools.sandbox import safe_join
+
     target = safe_join(path)  # 沙箱隔离：root 参数废弃（S 安全修复）
     if not target.exists():
         return {"error": f"file not found: {path}"}
@@ -50,6 +52,7 @@ async def edit_file(
             return {"error": f"old_string occurs {count} times; it must be unique"}
         # read-before-write：文件被读过且已变化则拒绝
         from app.tools.fs_guard import check_before_write
+
         conflict = check_before_write(target)
         if conflict:
             return {"error": conflict}
@@ -61,7 +64,9 @@ async def edit_file(
             return {"error": "new_content is required for line-range editing"}
         total = len(original_lines)
         if start_line < 1 or end_line < start_line or start_line > total:
-            return {"error": f"invalid range ({start_line}, {end_line}) for file with {total} lines"}
+            return {
+                "error": f"invalid range ({start_line}, {end_line}) for file with {total} lines"
+            }
         # Clamp end_line to file length
         end_line = min(end_line, total)
         before = original_lines[: start_line - 1]
@@ -73,7 +78,9 @@ async def edit_file(
         modified = "".join(new_lines)
 
     else:
-        return {"error": "provide (old_string, new_string) or (start_line, end_line, new_content)"}
+        return {
+            "error": "provide (old_string, new_string) or (start_line, end_line, new_content)"
+        }
 
     # ── Write & diff ──────────────────────────────────────────────
     target.write_text(modified, encoding="utf-8")
@@ -101,12 +108,28 @@ registry.register(
         "type": "object",
         "properties": {
             "path": {"type": "string", "description": "File path to edit"},
-            "old_string": {"type": "string", "description": "Exact string to find (must occur once)"},
+            "old_string": {
+                "type": "string",
+                "description": "Exact string to find (must occur once)",
+            },
             "new_string": {"type": "string", "description": "Replacement string"},
-            "start_line": {"type": "integer", "description": "1-based start line for range edit"},
-            "end_line": {"type": "integer", "description": "1-based inclusive end line for range edit"},
-            "new_content": {"type": "string", "description": "Replacement content for line-range edit"},
-            "root": {"type": "string", "default": ".", "description": "Root directory for path safety"},
+            "start_line": {
+                "type": "integer",
+                "description": "1-based start line for range edit",
+            },
+            "end_line": {
+                "type": "integer",
+                "description": "1-based inclusive end line for range edit",
+            },
+            "new_content": {
+                "type": "string",
+                "description": "Replacement content for line-range edit",
+            },
+            "root": {
+                "type": "string",
+                "default": ".",
+                "description": "Root directory for path safety",
+            },
         },
         "required": ["path"],
     },

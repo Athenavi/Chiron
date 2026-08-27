@@ -28,6 +28,7 @@
 API 层（app/api/skills.py）与运行时工具链（app/tools/skill.py）共用此解析规则：
 API 从 query 参数（网关注入）取身份，工具链从 app.tools.context（contextvars）取身份。
 """
+
 from __future__ import annotations
 
 import json
@@ -139,7 +140,9 @@ def resolve_skill_roots(
     时写目标为用户私有目录（有 user_id）或租户共享层（仅 tenant_id）。
     """
     if root:
-        return SkillRoots(write=Path(root), search=((Path(root), SCOPE_ROOT),), write_scope=SCOPE_ROOT)
+        return SkillRoots(
+            write=Path(root), search=((Path(root), SCOPE_ROOT),), write_scope=SCOPE_ROOT
+        )
     base = Path(os.getenv("SKILL_STORE_PATH", DEFAULT_SKILL_ROOT))
     tid = _safe_segment(tenant_id, "tenant_id")
     uid = _safe_segment(user_id, "user_id")
@@ -148,7 +151,11 @@ def resolve_skill_roots(
     _migrate_legacy_to_shared(base, global_shared)
     if not tid and not uid:
         # 身份缺失（未登录 / 系统任务）→ 全局共享目录
-        return SkillRoots(write=global_shared, search=((global_shared, SCOPE_SHARED),), write_scope=SCOPE_SHARED)
+        return SkillRoots(
+            write=global_shared,
+            search=((global_shared, SCOPE_SHARED),),
+            write_scope=SCOPE_SHARED,
+        )
 
     if scope == "tenant" and not tid:
         raise ValueError("scope='tenant' requires a tenant_id")
@@ -227,7 +234,9 @@ class SkillStore:
         scope 仅影响写目标：'tenant' → 租户共享层；空 / 'private' → 用户私有目录
         （无 user_id 时回退租户共享层）。读取始终沿 user → 租户 shared → 全局 shared。
         """
-        self._roots = resolve_skill_roots(root, tenant_id=tenant_id, user_id=user_id, scope=scope)
+        self._roots = resolve_skill_roots(
+            root, tenant_id=tenant_id, user_id=user_id, scope=scope
+        )
         self._root = self._roots.write
         self._root.mkdir(parents=True, exist_ok=True)
 
@@ -283,7 +292,9 @@ class SkillStore:
         形成“本地覆盖”，读取时本地版本优先——团队共享技能可被成员本地停用。
         """
         p = self._path(skill.name)
-        p.write_text(json.dumps(skill.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
+        p.write_text(
+            json.dumps(skill.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
     def delete(self, name: str) -> bool:
         """仅删除写目标目录（默认 user 私有目录）中的技能。

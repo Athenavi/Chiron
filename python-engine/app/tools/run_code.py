@@ -19,6 +19,7 @@ S5 沙箱隔离（subprocess + IPC 代理）：
   封禁 __class__/__subclasses__ 等对象内省逃逸链
 - S 修复：子进程不可用时 fail-closed 报错，绝不在宿主进程直接 exec 用户代码
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -30,13 +31,12 @@ import time
 import types
 from typing import Any
 
-from app.tools.code_guard import (  # noqa: F401 — 向后兼容再导出（tests 直接从本模块导入 _check_static）
-    BLOCKED_BUILTINS as _BLOCKED_BUILTINS,
-    DANGEROUS_CALLS,
-    DANGEROUS_MODULES,
-    check_static as _check_static,
-    safe_builtins as _safe_builtins,
-)
+from app.tools.code_guard import \
+    BLOCKED_BUILTINS as \
+    _BLOCKED_BUILTINS  # noqa: F401 — 向后兼容再导出（tests 直接从本模块导入 _check_static）
+from app.tools.code_guard import DANGEROUS_CALLS, DANGEROUS_MODULES
+from app.tools.code_guard import check_static as _check_static
+from app.tools.code_guard import safe_builtins as _safe_builtins
 from app.tools.registry import registry
 
 logger = logging.getLogger(__name__)
@@ -101,7 +101,11 @@ def _render_result(value: Any) -> Any:
     if value is None or isinstance(value, (str, int, float, bool)):
         return value
     try:
-        return json.loads(json.dumps(value, ensure_ascii=False, default=str, check_circular=True, indent=None))
+        return json.loads(
+            json.dumps(
+                value, ensure_ascii=False, default=str, check_circular=True, indent=None
+            )
+        )
     except (ValueError, RecursionError, OverflowError):
         return str(value)
 
@@ -136,6 +140,7 @@ def _run_subprocess_sync(
 
     try:
         from app.tools.sandbox import sandboxed_env
+
         # S 安全修复:子进程清理宿主 env(API key/JWT_SECRET 等),仅保留基础变量,
         # 防止沙箱内模型代码 `os.environ` 外带密钥。
         proc = subprocess.Popen(
@@ -160,11 +165,17 @@ def _run_subprocess_sync(
 
     try:
         # 1) 写 init 消息
-        init_msg = json.dumps({
-            "type": "init",
-            "code": code,
-            "tools": tool_names,
-        }, ensure_ascii=False) + "\n"
+        init_msg = (
+            json.dumps(
+                {
+                    "type": "init",
+                    "code": code,
+                    "tools": tool_names,
+                },
+                ensure_ascii=False,
+            )
+            + "\n"
+        )
         try:
             proc.stdin.write(init_msg)
             proc.stdin.flush()
@@ -199,7 +210,9 @@ def _run_subprocess_sync(
             try:
                 msg = json.loads(line)
             except json.JSONDecodeError as e:
-                logger.warning("invalid IPC line from subprocess: %s (line=%r)", e, line[:200])
+                logger.warning(
+                    "invalid IPC line from subprocess: %s (line=%r)", e, line[:200]
+                )
                 continue
 
             mtype = msg.get("type")
@@ -210,7 +223,8 @@ def _run_subprocess_sync(
 
                 # 调度 async registry.execute 到主 asyncio loop（带 contextvar 快照）
                 future = asyncio.run_coroutine_threadsafe(
-                    _safe_tool_call(name, args, context_snapshot), loop,
+                    _safe_tool_call(name, args, context_snapshot),
+                    loop,
                 )
                 try:
                     result_obj = future.result(timeout=max(1, deadline - time.time()))
@@ -242,7 +256,9 @@ def _run_subprocess_sync(
                         }
 
                 try:
-                    proc.stdin.write(json.dumps(resp, ensure_ascii=False, default=str) + "\n")
+                    proc.stdin.write(
+                        json.dumps(resp, ensure_ascii=False, default=str) + "\n"
+                    )
                     proc.stdin.flush()
                 except (BrokenPipeError, OSError):
                     return {
@@ -274,7 +290,9 @@ def _run_subprocess_sync(
         }
 
 
-async def _safe_tool_call(name: str, args: dict[str, Any], context_snapshot: dict[str, Any] | None) -> Any:
+async def _safe_tool_call(
+    name: str, args: dict[str, Any], context_snapshot: dict[str, Any] | None
+) -> Any:
     """异步包装 registry.execute，供 run_coroutine_threadsafe 调度。
 
     contextvars 不跨线程传播：本函数在调度时显式 restore 主进程捕获的
@@ -283,11 +301,14 @@ async def _safe_tool_call(name: str, args: dict[str, Any], context_snapshot: dic
     """
     if context_snapshot is not None:
         from app.tools.context import restore_context
+
         restore_context(context_snapshot)
     return await registry.execute(name, args)
 
 
-async def _run_in_subprocess(code: str, tool_names: list[str], timeout: int) -> dict[str, Any] | None:
+async def _run_in_subprocess(
+    code: str, tool_names: list[str], timeout: int
+) -> dict[str, Any] | None:
     """在 executor 线程中运行同步子进程执行器，避免阻塞主 asyncio loop。
 
     工具调用通过 ``asyncio.run_coroutine_threadsafe`` 回调主 loop 执行。
@@ -299,7 +320,13 @@ async def _run_in_subprocess(code: str, tool_names: list[str], timeout: int) -> 
     # 在主 loop 当前 task 的 contextvar 中捕获快照（测试或 agent runtime 设置的 user_id 等）
     context_snapshot = get_all()
     return await loop.run_in_executor(
-        None, _run_subprocess_sync, code, tool_names, timeout, loop, context_snapshot,
+        None,
+        _run_subprocess_sync,
+        code,
+        tool_names,
+        timeout,
+        loop,
+        context_snapshot,
     )
 
 
@@ -319,12 +346,15 @@ def _get_reader_pool() -> concurrent.futures.ThreadPoolExecutor:
     global _READER_POOL
     if _READER_POOL is None:
         _READER_POOL = concurrent.futures.ThreadPoolExecutor(
-            max_workers=1, thread_name_prefix="subproc_reader",
+            max_workers=1,
+            thread_name_prefix="subproc_reader",
         )
     return _READER_POOL
 
 
-def _readline_with_deadline(proc: "subprocess.Popen[str]", deadline: float) -> str | None:
+def _readline_with_deadline(
+    proc: "subprocess.Popen[str]", deadline: float
+) -> str | None:
     """读一行 stdout，带 deadline 超时。
 
     返回 None 表示超时；返回空串表示 EOF；否则返回一行（含末尾 \\n）。
@@ -360,6 +390,7 @@ def _read_stderr_sync(proc: "subprocess.Popen[str]") -> str:
     """读取子进程 stderr（非阻塞）。"""
     try:
         import select
+
         # POSIX 路径
         if hasattr(select, "select"):
             r, _, _ = select.select([proc.stderr], [], [], 0.5)
@@ -375,7 +406,9 @@ def _read_stderr_sync(proc: "subprocess.Popen[str]") -> str:
 # ── 主入口（仅 subprocess 隔离执行，子进程不可用即 fail-closed） ──────
 
 
-async def run_code(code: str, description: str = "", timeout: int = DEFAULT_TIMEOUT_SECONDS) -> dict[str, Any]:
+async def run_code(
+    code: str, description: str = "", timeout: int = DEFAULT_TIMEOUT_SECONDS
+) -> dict[str, Any]:
     """Execute a Python async program against the tool SDK.
 
     在独立子进程中执行（OS 级隔离 + IPC 代理 tools 调用）；子进程不可用时

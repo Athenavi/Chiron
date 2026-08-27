@@ -6,12 +6,13 @@
 3. 独立限流 (QPS=20, Burst=40 每租户)
 4. Trace 集成: 每次检索记录 span
 """
+
 from __future__ import annotations
 
 import logging
 import time
-from typing import Optional
 from dataclasses import dataclass, field
+from typing import Optional
 
 from app.rag.retriever import RAGRetriever
 from app.trace import record_span
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class DocumentChunk:
     """文档分片"""
+
     chunk_id: str
     document_id: str
     tenant_id: str  # SaaS 安全: 租户隔离
@@ -33,6 +35,7 @@ class DocumentChunk:
 @dataclass
 class RetrieveResult:
     """检索结果"""
+
     document_id: str
     chunk_id: str
     content: str
@@ -43,18 +46,18 @@ class RetrieveResult:
 
 class EnhancedKnowledgeBase:
     """增强的知识库 (租户隔离 + 链路追踪)
-    
+
     核心能力:
     1. 文档索引 (分块 + 嵌入 + Milvus 存储)
     2. 向量检索 (COSINE 相似度, 租户隔离 filter)
     3. 文档管理 (列出/删除/统计)
     4. 链路追踪 (每次检索记录 span)
     """
-    
+
     def __init__(self):
         self.retriever = RAGRetriever()
         self._collections: dict[str, str] = {}  # tenant_id -> collection_name
-    
+
     async def index_document(
         self,
         tenant_id: str,
@@ -65,7 +68,7 @@ class EnhancedKnowledgeBase:
         trace_id: str = "",
     ) -> dict:
         """索引文档 (带 trace)
-        
+
         流程:
         1. 文本分块
         2. 调用 LLM 生成嵌入向量
@@ -73,7 +76,7 @@ class EnhancedKnowledgeBase:
         4. 记录 span
         """
         start_time = time.time()
-        
+
         try:
             result = await self.retriever.index_document(
                 tenant_id=tenant_id,
@@ -82,9 +85,9 @@ class EnhancedKnowledgeBase:
                 file_type=file_type,
                 metadata=metadata or {},
             )
-            
+
             duration_ms = int((time.time() - start_time) * 1000)
-            
+
             # 记录 span
             if trace_id:
                 await record_span(
@@ -99,14 +102,17 @@ class EnhancedKnowledgeBase:
                     },
                     tenant_id=tenant_id,
                 )
-            
+
             logger.info(
                 "Document indexed (doc=%s, chunks=%d, duration=%dms, tenant=%s)",
-                document_id, result.get("chunks_count", 0), duration_ms, tenant_id,
+                document_id,
+                result.get("chunks_count", 0),
+                duration_ms,
+                tenant_id,
             )
-            
+
             return result
-            
+
         except Exception as e:
             logger.error(f"Document indexing failed: {e}")
             return {
@@ -115,7 +121,7 @@ class EnhancedKnowledgeBase:
                 "status": "failed",
                 "error": str(e),
             }
-    
+
     async def retrieve(
         self,
         tenant_id: str,
@@ -125,14 +131,14 @@ class EnhancedKnowledgeBase:
         trace_id: str = "",
     ) -> list[RetrieveResult]:
         """检索相关文档片段 (带 trace + 租户隔离)
-        
+
         SaaS 安全:
         - 查询条件强制过滤 tenant_id
         - Milvus expr = f'tenant_id == "{tenant_id}"'
         - 所有返回结果携带 tenant_id 元数据
         """
         start_time = time.time()
-        
+
         try:
             # 调用底层检索器
             raw_results = await self.retriever.retrieve(
@@ -141,20 +147,22 @@ class EnhancedKnowledgeBase:
                 top_k=top_k,
                 threshold=threshold,
             )
-            
+
             duration_ms = int((time.time() - start_time) * 1000)
 
             # 纵深防御：retriever 层已按 tenant 过滤（Milvus expr），
             # 此处兜底剔除漏网的跨租户数据，绝不盲目把查询租户 ID
             # 盖到归属不明的结果上
             filtered_results = [
-                r for r in raw_results
+                r
+                for r in raw_results
                 if not r.get("tenant_id") or r.get("tenant_id") == tenant_id
             ]
             if len(filtered_results) < len(raw_results):
                 logger.warning(
                     "kb.retrieve: dropped %d cross-tenant results (tenant=%s)",
-                    len(raw_results) - len(filtered_results), tenant_id,
+                    len(raw_results) - len(filtered_results),
+                    tenant_id,
                 )
 
             # 转换为 RetrieveResult
@@ -169,7 +177,7 @@ class EnhancedKnowledgeBase:
                 )
                 for r in filtered_results
             ]
-            
+
             # 记录 span
             if trace_id:
                 await record_span(
@@ -185,18 +193,21 @@ class EnhancedKnowledgeBase:
                     },
                     tenant_id=tenant_id,
                 )
-            
+
             logger.info(
                 "Retrieved %d chunks (query=%s, duration=%dms, tenant=%s)",
-                len(results), query[:50], duration_ms, tenant_id,
+                len(results),
+                query[:50],
+                duration_ms,
+                tenant_id,
             )
-            
+
             return results
-            
+
         except Exception as e:
             logger.error(f"Retrieval failed: {e}")
             return []
-    
+
     async def list_documents(
         self,
         tenant_id: str,
@@ -228,7 +239,7 @@ class EnhancedKnowledgeBase:
             }
             for r in rows
         ]
-    
+
     async def delete_document(
         self,
         tenant_id: str,
@@ -241,7 +252,9 @@ class EnhancedKnowledgeBase:
             # 1. 删除 Milvus 中的 chunks
             collection = await self.retriever._get_collection()
             if collection:
-                delete_expr = f'document_id == "{document_id}" AND tenant_id == "{tenant_id}"'
+                delete_expr = (
+                    f'document_id == "{document_id}" AND tenant_id == "{tenant_id}"'
+                )
                 await collection.delete(expr=delete_expr)
                 await collection.flush()
 
@@ -257,14 +270,16 @@ class EnhancedKnowledgeBase:
 
             logger.info(
                 "Document deleted (doc=%s, tenant=%s, pg=%s)",
-                document_id, tenant_id, deleted,
+                document_id,
+                tenant_id,
+                deleted,
             )
             return True
 
         except Exception as e:
             logger.error(f"Document deletion failed: {e}")
             return False
-    
+
     async def get_tenant_stats(
         self,
         tenant_id: str,
@@ -301,7 +316,7 @@ class EnhancedKnowledgeBase:
 # ── API Handler ────────────────────────────────────────────────────
 class KnowledgeBaseHandler:
     """知识库 HTTP Handler (Go 侧代理到 Python)
-    
+
     路由:
     - POST /v1/kb/index      索引文档
     - POST /v1/kb/search     检索文档
@@ -309,10 +324,10 @@ class KnowledgeBaseHandler:
     - DELETE /v1/kb/{id}     删除文档
     - GET  /v1/kb/stats      租户统计
     """
-    
+
     def __init__(self):
         self.kb = EnhancedKnowledgeBase()
-    
+
     async def handle_index(
         self,
         tenant_id: str,
@@ -329,7 +344,7 @@ class KnowledgeBaseHandler:
             file_type=file_type,
             trace_id=trace_id,
         )
-    
+
     async def handle_search(
         self,
         tenant_id: str,
@@ -346,7 +361,7 @@ class KnowledgeBaseHandler:
             threshold=threshold,
             trace_id=trace_id,
         )
-        
+
         return {
             "query": query,
             "results": [
@@ -360,7 +375,7 @@ class KnowledgeBaseHandler:
             ],
             "count": len(results),
         }
-    
+
     async def handle_delete(
         self,
         tenant_id: str,

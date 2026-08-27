@@ -9,6 +9,7 @@ web_fetch/web_search/skill_install 等出站 HTTP 的目标 host 解析后，
 - 连接时复检：调用方应在 socket.getaddrinfo 之后、connect 之前再次校验 IP，
   防 DNS rebinding（解析级防护的固有局限）
 """
+
 from __future__ import annotations
 
 import ipaddress
@@ -30,7 +31,7 @@ _BLOCKED_IPV4 = [
     ipaddress.ip_network("0.0.0.0/8"),
     ipaddress.ip_network("10.0.0.0/8"),
     ipaddress.ip_network("127.0.0.0/8"),
-    ipaddress.ip_network("169.254.0.0/16"),   # 云元数据/链路本地
+    ipaddress.ip_network("169.254.0.0/16"),  # 云元数据/链路本地
     ipaddress.ip_network("172.16.0.0/12"),
     ipaddress.ip_network("192.168.0.0/16"),
     ipaddress.ip_network("224.0.0.0/4"),
@@ -40,8 +41,8 @@ _BLOCKED_IPV4 = [
 _BLOCKED_IPV6 = [
     ipaddress.ip_network("::1/128"),
     ipaddress.ip_network("::/128"),
-    ipaddress.ip_network("fc00::/7"),        # ULA
-    ipaddress.ip_network("fe80::/10"),       # 链路本地
+    ipaddress.ip_network("fc00::/7"),  # ULA
+    ipaddress.ip_network("fe80::/10"),  # 链路本地
 ]
 
 

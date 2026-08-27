@@ -8,14 +8,15 @@
 
 用户身份取自工具执行上下文（app.tools.context，AgentRuntime.run 内设置）。
 """
+
 from __future__ import annotations
 
 import logging
 from typing import Any, Optional
 
+from app.memory.layers import Scope, SlotType, SourceType
+from app.tools.context import get_session_id, get_tenant_id, get_user_id
 from app.tools.registry import registry
-from app.tools.context import get_tenant_id, get_user_id, get_session_id
-from app.memory.layers import SlotType, SourceType, Scope
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,7 @@ def _get_memory_service():
     """获取 MemoryService 实例（从应用上下文中）。"""
     try:
         from app.memory.service import get_memory_service
+
         return get_memory_service()
     except ImportError:
         return None
@@ -149,7 +151,9 @@ async def recall(query: str = "", slot: Optional[str] = None) -> dict[str, Any]:
         if result.summary_items:
             parts.append("\n📚 **相关历史摘要 (L3)**:")
             for item in result.summary_items[:5]:
-                parts.append(f"- [{item.session_id}] {item.content[:100]}... (score: {item.score:.2f})")
+                parts.append(
+                    f"- [{item.session_id}] {item.content[:100]}... (score: {item.score:.2f})"
+                )
 
         if not parts:
             return {"output": "No memories found yet."}
@@ -269,7 +273,9 @@ async def memory_search(query: str, limit: int = 10) -> dict[str, Any]:
         result = await svc.recall(scope=scope, query=query, top_k=limit)
 
         # 从 summary_items 中提取 L3 结果
-        l3_results = result.summary_items[:limit] if hasattr(result, 'summary_items') else []
+        l3_results = (
+            result.summary_items[:limit] if hasattr(result, "summary_items") else []
+        )
 
         if not l3_results:
             return {
@@ -324,7 +330,10 @@ registry.register(
     parameters={
         "type": "object",
         "properties": {
-            "key": {"type": "string", "description": "Unique key for this memory (e.g. 'timezone')"},
+            "key": {
+                "type": "string",
+                "description": "Unique key for this memory (e.g. 'timezone')",
+            },
             "value": {"type": "string", "description": "Memory content to remember"},
             "slot": {
                 "type": "string",

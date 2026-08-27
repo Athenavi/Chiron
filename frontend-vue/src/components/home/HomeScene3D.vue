@@ -269,7 +269,11 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div ref="el" class="hero-scene" aria-hidden="true" />
+  <div
+    ref="el"
+    class="hero-scene"
+    aria-hidden="true"
+  />
 </template>
 
 <style scoped>

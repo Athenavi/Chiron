@@ -10,12 +10,9 @@ import time
 
 import redis.asyncio as aioredis
 
-from app.observability.metrics import (
-    QUEUE_DEPTH,
-    QUEUE_PROCESSING_DURATION,
-    QUEUE_DLQ_TOTAL,
-    QUEUE_RETRY_TOTAL,
-)
+from app.observability.metrics import (QUEUE_DEPTH, QUEUE_DLQ_TOTAL,
+                                       QUEUE_PROCESSING_DURATION,
+                                       QUEUE_RETRY_TOTAL)
 
 logger = logging.getLogger(__name__)
 
@@ -38,11 +35,19 @@ class QueueWorker:
       - 关闭: 停止消费 → 等待 in-flight → 退出
     """
 
-    def __init__(self, redis: aioredis.Redis, concurrency: int = 10, gateway=None, memory_service=None):
+    def __init__(
+        self,
+        redis: aioredis.Redis,
+        concurrency: int = 10,
+        gateway=None,
+        memory_service=None,
+    ):
         self._redis = redis
         self._concurrency = concurrency
         self._gateway = gateway  # GatewayRouter（用于 RAG 构建/嵌入），可为 None
-        self._memory_service = memory_service  # MemoryService（用于记忆存储），可为 None
+        self._memory_service = (
+            memory_service  # MemoryService（用于记忆存储），可为 None
+        )
         self._running = False
         self._semaphore = asyncio.Semaphore(concurrency)
         self._in_flight: set[asyncio.Task] = set()
@@ -51,13 +56,15 @@ class QueueWorker:
     async def start(self) -> None:
         """启动消费者"""
         self._running = True
-        
+
         # P1-2: 注册信号处理器（支持 SIGTERM/Kill -15）
         await self._register_signal_handlers()
 
         # 确保 Consumer Group 存在
         try:
-            await self._redis.xgroup_create(TASK_STREAM, GROUP_NAME, id="0", mkstream=True)
+            await self._redis.xgroup_create(
+                TASK_STREAM, GROUP_NAME, id="0", mkstream=True
+            )
             logger.info("Consumer group '%s' created", GROUP_NAME)
         except aioredis.ResponseError as e:
             if "BUSYGROUP" not in str(e):
@@ -66,7 +73,8 @@ class QueueWorker:
 
         logger.info(
             "Queue worker started: consumer=%s concurrency=%d",
-            self._consumer_name, self._concurrency,
+            self._consumer_name,
+            self._concurrency,
         )
 
         while self._running:
@@ -81,28 +89,33 @@ class QueueWorker:
     async def stop(self) -> None:
         """P1-2: 优雅停止（带超时保护）"""
         self._running = False
-        logger.info("Queue worker stopping, waiting for %d in-flight tasks...", len(self._in_flight))
+        logger.info(
+            "Queue worker stopping, waiting for %d in-flight tasks...",
+            len(self._in_flight),
+        )
         if self._in_flight:
             # P1-2: 设置超时，防止 task 永久挂起
             try:
                 await asyncio.wait_for(
                     asyncio.gather(*self._in_flight, return_exceptions=True),
-                    timeout=30.0  # 最多等待 30 秒
+                    timeout=30.0,  # 最多等待 30 秒
                 )
             except asyncio.TimeoutError:
-                logger.error("Queue worker shutdown timed out, cancelling remaining tasks")
+                logger.error(
+                    "Queue worker shutdown timed out, cancelling remaining tasks"
+                )
                 for task in self._in_flight:
                     task.cancel()
         logger.info("Queue worker stopped")
-    
+
     async def _register_signal_handlers(self) -> None:
         """P1-2: 注册 UNIX 信号处理器（Kubernetes Docker Pod 兼容）"""
         loop = asyncio.get_event_loop()
-        
+
         def _signal_handler():
             """信号回调：触发异步停止"""
             asyncio.create_task(self.stop())
-        
+
         try:
             loop.add_signal_handler(signal.SIGTERM, _signal_handler)
             loop.add_signal_handler(signal.SIGINT, _signal_handler)
@@ -134,13 +147,9 @@ class QueueWorker:
             for stream_id, fields in messages:
                 # 等待信号量
                 await self._semaphore.acquire()
-                task = asyncio.create_task(
-                    self._process_message(stream_id, fields)
-                )
+                task = asyncio.create_task(self._process_message(stream_id, fields))
                 # 设置超时保护，防止 task 永久挂起
-                timeout_task = asyncio.create_task(
-                    asyncio.wait_for(task, timeout=3600)
-                )
+                timeout_task = asyncio.create_task(asyncio.wait_for(task, timeout=3600))
                 self._in_flight.add(timeout_task)
                 timeout_task.add_done_callback(self._task_done)
 
@@ -152,11 +161,31 @@ class QueueWorker:
 
     async def _process_message(self, stream_id: str, fields: dict) -> None:
         """处理单条消息"""
-        task_type = fields.get(b"task_type", b"").decode() if isinstance(fields.get(b"task_type"), bytes) else fields.get("task_type", "")
-        task_id = fields.get(b"task_id", b"").decode() if isinstance(fields.get(b"task_id"), bytes) else fields.get("task_id", "")
-        payload_raw = fields.get(b"payload", b"{}").decode() if isinstance(fields.get(b"payload"), bytes) else fields.get("payload", "{}")
-        retry_count = int(fields.get(b"retry_count", 0) if isinstance(fields.get(b"retry_count"), bytes) else fields.get("retry_count", 0))
-        tenant_id = fields.get(b"tenant_id", b"").decode() if isinstance(fields.get(b"tenant_id"), bytes) else fields.get("tenant_id", "")
+        task_type = (
+            fields.get(b"task_type", b"").decode()
+            if isinstance(fields.get(b"task_type"), bytes)
+            else fields.get("task_type", "")
+        )
+        task_id = (
+            fields.get(b"task_id", b"").decode()
+            if isinstance(fields.get(b"task_id"), bytes)
+            else fields.get("task_id", "")
+        )
+        payload_raw = (
+            fields.get(b"payload", b"{}").decode()
+            if isinstance(fields.get(b"payload"), bytes)
+            else fields.get("payload", "{}")
+        )
+        retry_count = int(
+            fields.get(b"retry_count", 0)
+            if isinstance(fields.get(b"retry_count"), bytes)
+            else fields.get("retry_count", 0)
+        )
+        tenant_id = (
+            fields.get(b"tenant_id", b"").decode()
+            if isinstance(fields.get(b"tenant_id"), bytes)
+            else fields.get("tenant_id", "")
+        )
 
         start = time.monotonic()
         try:
@@ -167,23 +196,30 @@ class QueueWorker:
             await self._redis.xack(TASK_STREAM, GROUP_NAME, stream_id)
             elapsed = time.monotonic() - start
             QUEUE_PROCESSING_DURATION.labels(task_type=task_type).observe(elapsed)
-            logger.info("Task completed: id=%s type=%s (%.2fs)", task_id, task_type, elapsed)
+            logger.info(
+                "Task completed: id=%s type=%s (%.2fs)", task_id, task_type, elapsed
+            )
 
         except Exception as e:
             logger.error("Task failed: id=%s type=%s error=%s", task_id, task_type, e)
 
             if retry_count >= MAX_RETRIES:
                 # 移入死信队列
-                await self._redis.xadd(DLQ_STREAM, {
-                    "task_id": task_id,
-                    "task_type": task_type,
-                    "payload": payload_raw,
-                    "error": str(e),
-                    "retry_count": str(retry_count),
-                })
+                await self._redis.xadd(
+                    DLQ_STREAM,
+                    {
+                        "task_id": task_id,
+                        "task_type": task_type,
+                        "payload": payload_raw,
+                        "error": str(e),
+                        "retry_count": str(retry_count),
+                    },
+                )
                 await self._redis.xack(TASK_STREAM, GROUP_NAME, stream_id)
                 QUEUE_DLQ_TOTAL.labels(task_type=task_type).inc()
-                logger.warning("Task moved to DLQ: id=%s (retries=%d)", task_id, retry_count)
+                logger.warning(
+                    "Task moved to DLQ: id=%s (retries=%d)", task_id, retry_count
+                )
             else:
                 # 重试：重新投递消息并递增 retry_count（保留租户标识以保持观测链路）
                 retry_count += 1
@@ -198,9 +234,16 @@ class QueueWorker:
                 await self._redis.xadd(TASK_STREAM, retry_msg, maxlen=10000)
                 await self._redis.xack(TASK_STREAM, GROUP_NAME, stream_id)
                 QUEUE_RETRY_TOTAL.labels(task_type=task_type).inc()
-                logger.info("Task re-queued for retry: id=%s (retry=%d/%d)", task_id, retry_count, MAX_RETRIES)
+                logger.info(
+                    "Task re-queued for retry: id=%s (retry=%d/%d)",
+                    task_id,
+                    retry_count,
+                    MAX_RETRIES,
+                )
 
-    async def _dispatch(self, task_type: str, payload: dict, tenant_id: str = "") -> None:
+    async def _dispatch(
+        self, task_type: str, payload: dict, tenant_id: str = ""
+    ) -> None:
         """分发任务到具体处理器"""
         if task_type == "rag_index":
             await self._handle_rag_index(payload)
@@ -232,7 +275,9 @@ class QueueWorker:
 
         pool = get_pool()
         # 幂等：任务级重试/重复投递时 KB 已激活则跳过（避免重复构建与扣费）
-        kb = await pool.fetchrow("SELECT status FROM knowledge_bases WHERE id = $1", kb_id)
+        kb = await pool.fetchrow(
+            "SELECT status FROM knowledge_bases WHERE id = $1", kb_id
+        )
         if kb is None:
             # KB 已被删除（文档应随 CASCADE 清除）——直接失败进 DLQ，不误扣费
             raise ValueError(f"知识库不存在: {kb_id}")
@@ -253,12 +298,14 @@ class QueueWorker:
                 errors.append(f"{doc_id}: 无内容")
                 await pool.execute(
                     "UPDATE knowledge_documents SET status='error', error_message=$1 WHERE id=$2",
-                    "no content", doc_id,
+                    "no content",
+                    doc_id,
                 )
                 continue
 
             await pool.execute(
-                "UPDATE knowledge_documents SET status='processing' WHERE id=$1", doc_id,
+                "UPDATE knowledge_documents SET status='processing' WHERE id=$1",
+                doc_id,
             )
             chunk_count = 0
             error_msg = None
@@ -282,12 +329,14 @@ class QueueWorker:
                 errors.append(f"{doc_id}: {error_msg}")
                 await pool.execute(
                     "UPDATE knowledge_documents SET status='error', error_message=$1 WHERE id=$2",
-                    error_msg, doc_id,
+                    error_msg,
+                    doc_id,
                 )
             else:
                 await pool.execute(
                     "UPDATE knowledge_documents SET status='completed', chunk_count=$1 WHERE id=$2",
-                    chunk_count, doc_id,
+                    chunk_count,
+                    doc_id,
                 )
 
         # 全部文档成功才扣费并激活；有失败则置 error（与 wiki 分支「成功才激活」语义一致）
@@ -302,7 +351,8 @@ class QueueWorker:
                     # 防负扣费：余额不足时事务回滚并报错（任务进 DLQ，不重复扣费）
                     res = await conn.execute(
                         "UPDATE users SET credits = credits - $1 WHERE id = $2 AND credits >= $1",
-                        estimated_cost, user_id,
+                        estimated_cost,
+                        user_id,
                     )
                     if not res or res.startswith("UPDATE 0"):
                         raise RuntimeError(
@@ -312,7 +362,8 @@ class QueueWorker:
                         """UPDATE knowledge_bases
                            SET status = 'active', credits_consumed = credits_consumed + $1, updated_at = NOW()
                            WHERE id = $2""",
-                        estimated_cost, kb_id,
+                        estimated_cost,
+                        kb_id,
                     )
         if errors:
             logger.warning("rag_index 部分文档失败，KB 置 error: %s", errors)
@@ -484,7 +535,8 @@ class QueueWorker:
             payload.get("kb_id", ""),
             payload.get("doc_id", ""),
             payload.get("tenant_id", ""),
-            chunks, embeddings,
+            chunks,
+            embeddings,
             builder._vector_db_type,
         )
         logger.info("embed_batch 完成: count=%d", len(texts))

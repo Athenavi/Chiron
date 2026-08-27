@@ -2,6 +2,7 @@
 
 Provides a unified command registration / lookup / execution interface.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -11,6 +12,7 @@ from typing import Any, Awaitable, Callable
 @dataclass
 class CommandDef:
     """Definition of a single slash command."""
+
     name: str
     description: str
     handler: Callable[[str, Any], Awaitable[str]]
@@ -23,6 +25,7 @@ class CommandContext:
     Attributes can be set by the host application (conversation history,
     current model, memory manager, etc.).
     """
+
     history: list[dict[str, str]] = field(default_factory=list)
     model: str = ""
     temperature: float = 0.7

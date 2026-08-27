@@ -238,31 +238,60 @@ async function handleSetPassword() {
     </div>
 
     <Card class="profile-card">
-      <Form :model="form" layout="vertical">
+      <Form
+        :model="form"
+        layout="vertical"
+      >
         <FormItem label="姓名">
-          <Input v-model:value="form.name" placeholder="请输入姓名" />
+          <Input
+            v-model:value="form.name"
+            placeholder="请输入姓名"
+          />
         </FormItem>
         <FormItem label="邮箱">
-          <Input v-model:value="form.email" placeholder="请输入邮箱" disabled />
+          <Input
+            v-model:value="form.email"
+            placeholder="请输入邮箱"
+            disabled
+          />
         </FormItem>
         <FormItem>
-          <Button type="primary" :loading="loading" @click="handleUpdateProfile">
+          <Button
+            type="primary"
+            :loading="loading"
+            @click="handleUpdateProfile"
+          >
             保存修改
           </Button>
         </FormItem>
       </Form>
     </Card>
 
-        <Card class="profile-card" title="外观与主题" style="margin-top: 16px">
+    <Card
+      class="profile-card"
+      title="外观与主题"
+      style="margin-top: 16px"
+    >
       <div class="appearance-row">
-        <div class="appearance-label">深浅模式</div>
-        <a-radio-group :value="themeStore.preference" @change="(e: any) => themeStore.toggleTheme()">
-          <a-radio-button :value="'dark'">深色</a-radio-button>
-          <a-radio-button :value="'light'">浅色</a-radio-button>
+        <div class="appearance-label">
+          深浅模式
+        </div>
+        <a-radio-group
+          :value="themeStore.preference"
+          @change="(e: any) => themeStore.toggleTheme()"
+        >
+          <a-radio-button :value="'dark'">
+            深色
+          </a-radio-button>
+          <a-radio-button :value="'light'">
+            浅色
+          </a-radio-button>
         </a-radio-group>
       </div>
       <div class="appearance-row">
-        <div class="appearance-label">强调色</div>
+        <div class="appearance-label">
+          强调色
+        </div>
         <div class="accent-picker">
           <button
             v-for="c in ACCENT_PRESETS"
@@ -274,24 +303,41 @@ async function handleSetPassword() {
             :title="c"
             @click="themeStore.setAccent(c)"
           />
-          <label class="accent-custom" :style="{ backgroundColor: themeStore.accent || '#0a0a0a' }" title="自定义颜色">
+          <label
+            class="accent-custom"
+            :style="{ backgroundColor: themeStore.accent || '#0a0a0a' }"
+            title="自定义颜色"
+          >
             <input
               type="color"
               :value="themeStore.accent"
               @input="(e: any) => themeStore.setAccent(e.target.value)"
-            />
+            >
           </label>
         </div>
       </div>
     </Card>
 
-<Card class="profile-card" title="三方账号绑定" style="margin-top: 16px">
+    <Card
+      class="profile-card"
+      title="三方账号绑定"
+      style="margin-top: 16px"
+    >
       <Spin :spinning="bindingsLoading">
-        <EmptyState v-if="!identities.length && !bindable.length" description="暂无可用的三方登录方式" />
+        <EmptyState
+          v-if="!identities.length && !bindable.length"
+          description="暂无可用的三方登录方式"
+        />
         <template v-else>
-          <div v-for="item in identities" :key="item.id" class="identity-row">
+          <div
+            v-for="item in identities"
+            :key="item.id"
+            class="identity-row"
+          >
             <div class="identity-info">
-              <Tag color="blue">{{ item.provider_type }}</Tag>
+              <Tag color="blue">
+                {{ item.provider_type }}
+              </Tag>
               <span class="identity-name">{{ item.provider_name }}</span>
               <span class="identity-meta">{{ item.email || item.subject }}</span>
             </div>
@@ -301,11 +347,21 @@ async function handleSetPassword() {
               cancel-text="取消"
               @confirm="handleUnbind(item.id)"
             >
-              <Button danger :loading="unbinding === item.id">解绑</Button>
+              <Button
+                danger
+                :loading="unbinding === item.id"
+              >
+                解绑
+              </Button>
             </Popconfirm>
           </div>
-          <div v-if="bindable.length" class="bind-section">
-            <div class="bind-title">可绑定的三方账号</div>
+          <div
+            v-if="bindable.length"
+            class="bind-section"
+          >
+            <div class="bind-title">
+              可绑定的三方账号
+            </div>
             <div class="bind-buttons">
               <Button
                 v-for="p in bindable"
@@ -320,11 +376,18 @@ async function handleSetPassword() {
       </Spin>
     </Card>
 
-    <Card class="profile-card" title="手机号" style="margin-top: 16px" :loading="phoneLoading">
+    <Card
+      class="profile-card"
+      title="手机号"
+      style="margin-top: 16px"
+      :loading="phoneLoading"
+    >
       <template v-if="phoneBound">
         <div class="identity-row">
           <div class="identity-info">
-            <Tag color="green"><MobileOutlined /></Tag>
+            <Tag color="green">
+              <MobileOutlined />
+            </Tag>
             <span class="identity-name">{{ phone }}</span>
             <span class="identity-meta">可用于短信验证码登录</span>
           </div>
@@ -334,23 +397,38 @@ async function handleSetPassword() {
             cancel-text="取消"
             @confirm="handleUnbindPhone"
           >
-            <Button danger :loading="unbindingPhone">解绑</Button>
+            <Button
+              danger
+              :loading="unbindingPhone"
+            >
+              解绑
+            </Button>
           </Popconfirm>
         </div>
       </template>
       <template v-else>
-        <Form :model="phoneForm" layout="vertical" class="profile-form">
+        <Form
+          :model="phoneForm"
+          layout="vertical"
+          class="profile-form"
+        >
           <FormItem label="手机号">
             <Input
               v-model:value="phoneForm.phone"
               placeholder="请输入手机号"
               :maxlength="21"
             >
-              <template #prefix><MobileOutlined /></template>
+              <template #prefix>
+                <MobileOutlined />
+              </template>
             </Input>
           </FormItem>
           <FormItem label="验证码">
-            <Input v-model:value="phoneForm.code" placeholder="短信验证码" :maxlength="6">
+            <Input
+              v-model:value="phoneForm.code"
+              placeholder="短信验证码"
+              :maxlength="6"
+            >
               <template #suffix>
                 <Button
                   size="small"
@@ -365,7 +443,11 @@ async function handleSetPassword() {
             </Input>
           </FormItem>
           <FormItem>
-            <Button type="primary" :loading="phoneBinding" @click="handleBindPhone">
+            <Button
+              type="primary"
+              :loading="phoneBinding"
+              @click="handleBindPhone"
+            >
               绑定手机号
             </Button>
           </FormItem>
@@ -373,13 +455,21 @@ async function handleSetPassword() {
       </template>
     </Card>
 
-    <Card class="profile-card" title="设置密码" style="margin-top: 16px">
+    <Card
+      class="profile-card"
+      title="设置密码"
+      style="margin-top: 16px"
+    >
       <template #extra>
         <span class="pwd-hint">
           <SafetyOutlined /> 三方登录账号首次设置密码无需当前密码
         </span>
       </template>
-      <Form :model="pwdForm" layout="vertical" class="profile-form">
+      <Form
+        :model="pwdForm"
+        layout="vertical"
+        class="profile-form"
+      >
         <FormItem label="当前密码（首次设置可留空）">
           <Input
             v-model:value="pwdForm.current_password"
@@ -388,13 +478,27 @@ async function handleSetPassword() {
           />
         </FormItem>
         <FormItem label="新密码">
-          <Input v-model:value="pwdForm.new_password" type="password" placeholder="8-128 位" />
+          <Input
+            v-model:value="pwdForm.new_password"
+            type="password"
+            placeholder="8-128 位"
+          />
         </FormItem>
         <FormItem label="确认新密码">
-          <Input v-model:value="pwdForm.confirm" type="password" placeholder="再次输入新密码" />
+          <Input
+            v-model:value="pwdForm.confirm"
+            type="password"
+            placeholder="再次输入新密码"
+          />
         </FormItem>
         <FormItem>
-          <Button type="primary" :loading="pwdLoading" @click="handleSetPassword">保存密码</Button>
+          <Button
+            type="primary"
+            :loading="pwdLoading"
+            @click="handleSetPassword"
+          >
+            保存密码
+          </Button>
         </FormItem>
       </Form>
     </Card>

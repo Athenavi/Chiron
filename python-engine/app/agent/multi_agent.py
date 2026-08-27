@@ -6,6 +6,7 @@ Multi-Agent System — Claude Code 风格的子代理调度机制
 - 同步/异步调度子任务
 - 内置 code / review / research / test 代理
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -18,7 +19,7 @@ from typing import Any
 
 from app.gateway.provider import ChatMessage, ToolCall
 from app.gateway.router import GatewayRouter
-from app.tools.registry import registry, ToolRegistry
+from app.tools.registry import ToolRegistry, registry
 
 logger = logging.getLogger(__name__)
 
@@ -148,11 +149,13 @@ class SubAgent:
                     # 工具调用
                     if chunk.tool_calls:
                         for tc in chunk.tool_calls:
-                            tool_calls.append({
-                                "id": tc.id,
-                                "name": tc.name,
-                                "arguments": tc.arguments,
-                            })
+                            tool_calls.append(
+                                {
+                                    "id": tc.id,
+                                    "name": tc.name,
+                                    "arguments": tc.arguments,
+                                }
+                            )
 
                     # Token 用量
                     if chunk.input_tokens:
@@ -186,7 +189,9 @@ class SubAgent:
                         role="assistant",
                         content=response_content or "",
                         tool_calls=[
-                            ToolCall(id=tc["id"], name=tc["name"], arguments=tc["arguments"])
+                            ToolCall(
+                                id=tc["id"], name=tc["name"], arguments=tc["arguments"]
+                            )
                             for tc in tool_calls
                         ],
                     )
@@ -196,19 +201,29 @@ class SubAgent:
                     from app.tools.context import set_tool_context
 
                     # S 修复：优先用 context 携带的 user_id（缺省回退 tenant），不再用 tenant 冒充 user
-                    _ctx_user = context.get("user_id") if isinstance(context, dict) else ""
+                    _ctx_user = (
+                        context.get("user_id") if isinstance(context, dict) else ""
+                    )
                     set_tool_context(
-                        session_id=context.get("session_id") if isinstance(context, dict) else "",
+                        session_id=(
+                            context.get("session_id")
+                            if isinstance(context, dict)
+                            else ""
+                        ),
                         user_id=_ctx_user or tenant_id or "anonymous",
                         tenant_id=tenant_id or "default",
                     )
                     for tc in tool_calls:
                         tool_result = await self._execute_tool(tc)
-                        messages.append(ChatMessage(
-                            role="tool",
-                            content=json.dumps(tool_result, ensure_ascii=False, default=str),
-                            tool_call_id=tc["id"],
-                        ))
+                        messages.append(
+                            ChatMessage(
+                                role="tool",
+                                content=json.dumps(
+                                    tool_result, ensure_ascii=False, default=str
+                                ),
+                                tool_call_id=tc["id"],
+                            )
+                        )
                     continue
 
                 # 无工具调用 → 推理完成
@@ -246,7 +261,9 @@ class SubAgent:
         name = tc.get("name", "")
         raw_args = tc.get("arguments", "{}")
         try:
-            args = json.loads(raw_args) if isinstance(raw_args, str) else (raw_args or {})
+            args = (
+                json.loads(raw_args) if isinstance(raw_args, str) else (raw_args or {})
+            )
         except (json.JSONDecodeError, TypeError):
             args = {"input": str(raw_args)}
         if not isinstance(args, dict):

@@ -24,25 +24,66 @@ const cardCount = computed(() => props.columns * 2)
 </script>
 
 <template>
-  <div class="page-skeleton" role="status" aria-live="polite" aria-busy="true">
+  <div
+    class="page-skeleton"
+    role="status"
+    aria-live="polite"
+    aria-busy="true"
+  >
     <!-- 标题栏 -->
-    <div v-if="header" class="sk-header">
-      <Skeleton :title="{ width: '32%' }" :loading="true" active :paragraph="false" />
-      <Skeleton :title="{ width: '14%' }" :loading="true" active :paragraph="false" style="margin-top: 6px" />
+    <div
+      v-if="header"
+      class="sk-header"
+    >
+      <Skeleton
+        :title="{ width: '32%' }"
+        :loading="true"
+        active
+        :paragraph="false"
+      />
+      <Skeleton
+        :title="{ width: '14%' }"
+        :loading="true"
+        active
+        :paragraph="false"
+        style="margin-top: 6px"
+      />
     </div>
 
     <!-- 列表行 -->
     <template v-if="variant === 'list'">
-      <div v-for="i in rows" :key="i" class="sk-row">
-        <Skeleton avatar :title="{ width: '40%' }" :loading="true" active :paragraph="{ width: ['24%'], rows: 1 }" />
+      <div
+        v-for="i in rows"
+        :key="i"
+        class="sk-row"
+      >
+        <Skeleton
+          avatar
+          :title="{ width: '40%' }"
+          :loading="true"
+          active
+          :paragraph="{ width: ['24%'], rows: 1 }"
+        />
       </div>
     </template>
 
     <!-- 卡片网格 -->
     <template v-else-if="variant === 'cards'">
-      <div class="sk-grid" :style="{ '--cols': columns }">
-        <div v-for="i in cardCount" :key="i" class="sk-card">
-          <Skeleton :title="false" :loading="true" active :paragraph="{ rows: 3, width: ['100%', '80%', '52%'] }" />
+      <div
+        class="sk-grid"
+        :style="{ '--cols': columns }"
+      >
+        <div
+          v-for="i in cardCount"
+          :key="i"
+          class="sk-card"
+        >
+          <Skeleton
+            :title="false"
+            :loading="true"
+            active
+            :paragraph="{ rows: 3, width: ['100%', '80%', '52%'] }"
+          />
         </div>
       </div>
     </template>
@@ -50,10 +91,24 @@ const cardCount = computed(() => props.columns * 2)
     <!-- 详情页 -->
     <template v-else-if="variant === 'detail'">
       <div class="sk-detail-head">
-        <Skeleton avatar :avatar-size="56" :title="{ width: '30%' }" :loading="true" active :paragraph="{ rows: 1, width: ['18%'] }" />
+        <Skeleton
+          avatar
+          :avatar-size="56"
+          :title="{ width: '30%' }"
+          :loading="true"
+          active
+          :paragraph="{ rows: 1, width: ['18%'] }"
+        />
       </div>
       <div class="sk-detail-body">
-        <Skeleton v-for="i in rows" :key="i" :title="false" :loading="true" active :paragraph="{ rows: 1, width: ['100%', '92%', '76%'][i % 3] }" />
+        <Skeleton
+          v-for="i in rows"
+          :key="i"
+          :title="false"
+          :loading="true"
+          active
+          :paragraph="{ rows: 1, width: ['100%', '92%', '76%'][i % 3] }"
+        />
       </div>
     </template>
 
@@ -61,13 +116,35 @@ const cardCount = computed(() => props.columns * 2)
     <template v-else-if="variant === 'table'">
       <div class="sk-table">
         <div class="sk-table-head">
-          <div v-for="i in columns + 1" :key="i" class="sk-cell">
-            <Skeleton :title="{ width: '60%' }" :loading="true" active :paragraph="false" />
+          <div
+            v-for="i in columns + 1"
+            :key="i"
+            class="sk-cell"
+          >
+            <Skeleton
+              :title="{ width: '60%' }"
+              :loading="true"
+              active
+              :paragraph="false"
+            />
           </div>
         </div>
-        <div v-for="r in rows" :key="r" class="sk-table-row">
-          <div v-for="i in columns + 1" :key="i" class="sk-cell">
-            <Skeleton :title="{ width: `${40 + (i * 13) % 50}%` }" :loading="true" active :paragraph="false" />
+        <div
+          v-for="r in rows"
+          :key="r"
+          class="sk-table-row"
+        >
+          <div
+            v-for="i in columns + 1"
+            :key="i"
+            class="sk-cell"
+          >
+            <Skeleton
+              :title="{ width: `${40 + (i * 13) % 50}%` }"
+              :loading="true"
+              active
+              :paragraph="false"
+            />
           </div>
         </div>
       </div>

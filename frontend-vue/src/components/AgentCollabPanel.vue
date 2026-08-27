@@ -2,17 +2,30 @@
   <div class="agent-collab-panel">
     <div class="panel-header">
       <div class="header-title">
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-          <path d="M10 2a3 3 0 00-3 3v3a3 3 0 006 0V5a3 3 0 00-3-3zM6 9a3 3 0 00-3 3v1a3 3 0 006 0v-1a3 3 0 00-3-3zM17 12a3 3 0 01-3 3v1a3 3 0 01-6 0v-1a3 3 0 01-3-3 4 4 0 018 0z"/>
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+        >
+          <path d="M10 2a3 3 0 00-3 3v3a3 3 0 006 0V5a3 3 0 00-3-3zM6 9a3 3 0 00-3 3v1a3 3 0 006 0v-1a3 3 0 00-3-3zM17 12a3 3 0 01-3 3v1a3 3 0 01-6 0v-1a3 3 0 01-3-3 4 4 0 018 0z" />
         </svg>
         Agent 协同执行
       </div>
       <div class="header-actions">
-        <button @click="collapsePanel" class="btn-collapse">收起</button>
+        <button
+          class="btn-collapse"
+          @click="collapsePanel"
+        >
+          收起
+        </button>
       </div>
     </div>
     
-    <div class="panel-body" v-if="!isCollapsed">
+    <div
+      v-if="!isCollapsed"
+      class="panel-body"
+    >
       <!-- Agent 列表 -->
       <div class="agents-container">
         <div
@@ -24,27 +37,55 @@
           @click="showOutput[index] = !showOutput[index]"
         >
           <!-- Agent 头像 -->
-          <div class="agent-avatar" :style="{ backgroundColor: agent.color }">
+          <div
+            class="agent-avatar"
+            :style="{ backgroundColor: agent.color }"
+          >
             <span class="agent-icon">{{ agent.icon }}</span>
-            <div v-if="agent.status === 'running'" class="status-ring"></div>
+            <div
+              v-if="agent.status === 'running'"
+              class="status-ring"
+            />
           </div>
           
           <!-- Agent 信息 -->
           <div class="agent-info">
-            <div class="agent-name">{{ agent.name }}</div>
-            <div class="agent-role">{{ agent.role }}</div>
-            <div class="agent-status">{{ statusText(agent.status) }}</div>
+            <div class="agent-name">
+              {{ agent.name }}
+            </div>
+            <div class="agent-role">
+              {{ agent.role }}
+            </div>
+            <div class="agent-status">
+              {{ statusText(agent.status) }}
+            </div>
           </div>
           
           <!-- 执行状态 -->
           <div class="agent-actions">
-            <div v-if="agent.status === 'running'" class="spinner-sm"></div>
-            <div v-else-if="agent.status === 'completed'" class="check-icon">✓</div>
-            <div v-else-if="agent.status === 'error'" class="error-icon">✗</div>
+            <div
+              v-if="agent.status === 'running'"
+              class="spinner-sm"
+            />
+            <div
+              v-else-if="agent.status === 'completed'"
+              class="check-icon"
+            >
+              ✓
+            </div>
+            <div
+              v-else-if="agent.status === 'error'"
+              class="error-icon"
+            >
+              ✗
+            </div>
           </div>
           
           <!-- 输出预览 (点击展开) -->
-          <div v-if="agent.output && showOutput[index]" class="agent-output">
+          <div
+            v-if="agent.output && showOutput[index]"
+            class="agent-output"
+          >
             <pre>{{ truncateOutput(agent.output) }}</pre>
           </div>
         </div>
@@ -54,9 +95,17 @@
       <div class="execution-log">
         <div class="log-header">
           <span>执行日志</span>
-          <button @click="clearLog" class="btn-clear">清空</button>
+          <button
+            class="btn-clear"
+            @click="clearLog"
+          >
+            清空
+          </button>
         </div>
-        <div ref="logContainer" class="log-content">
+        <div
+          ref="logContainer"
+          class="log-content"
+        >
           <div
             v-for="(log, index) in logs"
             :key="index"

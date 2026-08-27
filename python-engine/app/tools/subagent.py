@@ -7,19 +7,15 @@ AgentRuntime 循环（独立消息历史、模式、轮次预算），收集其�
 限制：max_turns 深度上限（默认 5，等效 maxDepth 预算）；模式复用
 get_mode_config（minimal 子 agent 天然精简工具集）。
 """
+
 from __future__ import annotations
 
 import logging
 import uuid
 from typing import Any
 
-from app.tools.context import (
-    get_all,
-    get_gateway,
-    get_tenant_id,
-    get_user_id,
-    restore_context,
-)
+from app.tools.context import (get_all, get_gateway, get_tenant_id,
+                               get_user_id, restore_context)
 from app.tools.registry import registry
 
 logger = logging.getLogger(__name__)
@@ -28,7 +24,9 @@ MAX_TURNS_CAP = 10
 MAX_DEPTH = 3  # S3: 委派深度上限（deepseek 默认 maxDepth=3），防无限递归
 
 
-async def subagent(task: str, mode: str = "normal", max_turns: int = 5) -> dict[str, Any]:
+async def subagent(
+    task: str, mode: str = "normal", max_turns: int = 5
+) -> dict[str, Any]:
     """Delegate *task* to a child agent running in its own session.
 
     The child runs a full agent loop (own message history, mode config,
@@ -99,8 +97,16 @@ registry.register(
         "type": "object",
         "properties": {
             "task": {"type": "string", "description": "The task for the child agent"},
-            "mode": {"type": "string", "enum": ["normal", "minimal", "ptc", "creative"], "default": "normal"},
-            "max_turns": {"type": "integer", "default": 5, "description": "Child loop turns cap (max 10)"},
+            "mode": {
+                "type": "string",
+                "enum": ["normal", "minimal", "ptc", "creative"],
+                "default": "normal",
+            },
+            "max_turns": {
+                "type": "integer",
+                "default": 5,
+                "description": "Child loop turns cap (max 10)",
+            },
         },
         "required": ["task"],
     },

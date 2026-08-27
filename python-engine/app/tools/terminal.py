@@ -8,6 +8,7 @@ deepseek 用 PTY 解决），故命令输出重定向到临时文件、用哨兵
 规避缓冲问题且保持 shell 状态持久。超时/崩溃时关闭 shell，下次调用重建
 （与 deepseek 的 reset 语义一致）。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -41,7 +42,11 @@ class PersistentTerminal:
 
     def _prune_procs(self) -> None:
         """回收已退出的进程条目，防止 _procs 无限累积（S 资源修复）。"""
-        dead = [k for k, p in self._procs.items() if p is not None and p.returncode is not None]
+        dead = [
+            k
+            for k, p in self._procs.items()
+            if p is not None and p.returncode is not None
+        ]
         for k in dead:
             self._procs.pop(k, None)
 
@@ -66,25 +71,32 @@ class PersistentTerminal:
         )
         # 首命令 cd 到沙箱 workspace，保证状态持久在隔离目录内（S 安全修复）
         try:
-            if sys.platform == 'win32':
-                proc.stdin.write(f'cd /d \"{ws}\"\n'.encode('utf-8'))
+            if sys.platform == "win32":
+                proc.stdin.write(f'cd /d "{ws}"\n'.encode("utf-8"))
             else:
-                proc.stdin.write(f'cd \"{ws}\"\n'.encode('utf-8'))
+                proc.stdin.write(f'cd "{ws}"\n'.encode("utf-8"))
             await proc.stdin.drain()
         except Exception:
             pass
         self._procs[key] = proc
         return proc
 
-    async def execute(self, key: str, command: str, timeout: int = DEFAULT_TIMEOUT_SECONDS) -> dict[str, Any]:
+    async def execute(
+        self, key: str, command: str, timeout: int = DEFAULT_TIMEOUT_SECONDS
+    ) -> dict[str, Any]:
         proc = await self._get_proc(key)
 
         # 逃逸拦截：与 shell_exec 同一套规则（绝对路径/父目录/云元数据），
         # 否则持久 shell 可直接 cat /etc/passwd 等（S 安全修复）
         from app.tools.sandbox import _has_escape
+
         esc = _has_escape(command)
         if esc:
-            return {"output": f"[blocked: {esc}] command not allowed in sandbox", "exit_code": -1, "persistent": True}
+            return {
+                "output": f"[blocked: {esc}] command not allowed in sandbox",
+                "exit_code": -1,
+                "persistent": True,
+            }
 
         # 每命令一个临时工作目录：out=输出 / code=退出码 / done=完成哨兵
         workdir = Path(tempfile.mkdtemp(prefix="chiron_sh_"))
@@ -110,7 +122,12 @@ class PersistentTerminal:
             await proc.stdin.drain()
         except (BrokenPipeError, ConnectionResetError, ValueError):
             await self._discard(key)
-            return {"output": "[shell exited — reset]", "exit_code": -1, "persistent": False, "reset": True}
+            return {
+                "output": "[shell exited — reset]",
+                "exit_code": -1,
+                "persistent": False,
+                "reset": True,
+            }
 
         # 轮询完成哨兵
         elapsed = 0.0
@@ -119,21 +136,35 @@ class PersistentTerminal:
                 break
             if proc.returncode is not None:
                 await self._discard(key)
-                return {"output": f"[shell exited: code {proc.returncode} — reset]", "exit_code": proc.returncode or 0, "persistent": False, "reset": True}
+                return {
+                    "output": f"[shell exited: code {proc.returncode} — reset]",
+                    "exit_code": proc.returncode or 0,
+                    "persistent": False,
+                    "reset": True,
+                }
             await asyncio.sleep(0.05)
             elapsed += 0.05
         else:
             # 超时：关闭不确定的 shell，下次重建
             await self._discard(key)
-            partial = out_file.read_text(encoding="utf-8", errors="replace") if out_file.exists() else ""
+            partial = (
+                out_file.read_text(encoding="utf-8", errors="replace")
+                if out_file.exists()
+                else ""
+            )
             return {
-                "output": (partial + "\n" if partial else "") + f"[timed out after {timeout}s — shell reset]",
+                "output": (partial + "\n" if partial else "")
+                + f"[timed out after {timeout}s — shell reset]",
                 "exit_code": -1,
                 "persistent": False,
                 "reset": True,
             }
 
-        output = out_file.read_text(encoding="utf-8", errors="replace") if out_file.exists() else ""
+        output = (
+            out_file.read_text(encoding="utf-8", errors="replace")
+            if out_file.exists()
+            else ""
+        )
         exit_code = 0
         try:
             exit_code = int(code_file.read_text(encoding="utf-8").strip() or 0)
@@ -159,7 +190,9 @@ class PersistentTerminal:
 _terminal = PersistentTerminal()
 
 
-async def persistent_shell(command: str, timeout: int = DEFAULT_TIMEOUT_SECONDS) -> dict[str, Any]:
+async def persistent_shell(
+    command: str, timeout: int = DEFAULT_TIMEOUT_SECONDS
+) -> dict[str, Any]:
     """Run *command* in the session's persistent shell.
 
     cwd, exported variables, activated environments, functions and background
@@ -188,7 +221,11 @@ registry.register(
         "type": "object",
         "properties": {
             "command": {"type": "string", "description": "Shell command to run"},
-            "timeout": {"type": "integer", "default": DEFAULT_TIMEOUT_SECONDS, "description": "Seconds before the shell is reset"},
+            "timeout": {
+                "type": "integer",
+                "default": DEFAULT_TIMEOUT_SECONDS,
+                "description": "Seconds before the shell is reset",
+            },
         },
         "required": ["command"],
     },

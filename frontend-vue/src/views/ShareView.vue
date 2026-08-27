@@ -78,28 +78,57 @@ function formatDate(iso: string): string {
     </header>
 
     <main class="share-main">
-      <PageSkeleton v-if="loading" variant="detail" :rows="4" />
-      <EmptyState v-else-if="error" size="page" :description="error" />
+      <PageSkeleton
+        v-if="loading"
+        variant="detail"
+        :rows="4"
+      />
+      <EmptyState
+        v-else-if="error"
+        size="page"
+        :description="error"
+      />
       <template v-else-if="share">
         <div class="share-head">
-          <h1 class="share-title">{{ share.title || '新对话' }}</h1>
+          <h1 class="share-title">
+            {{ share.title || '新对话' }}
+          </h1>
           <div class="share-meta">
             {{ formatDate(share.created_at) }} · {{ share.messages.length }} 条消�?
           </div>
         </div>
 
-        <div class="share-thread" @click="handleClick">
-          <div v-for="(m, i) in share.messages" :key="i" class="share-msg" :class="m.role">
+        <div
+          class="share-thread"
+          @click="handleClick"
+        >
+          <div
+            v-for="(m, i) in share.messages"
+            :key="i"
+            class="share-msg"
+            :class="m.role"
+          >
             <div class="share-msg-bubble">
-              <div v-if="m.role === 'assistant'" class="share-msg-text" v-html="renderMarkdown(m.content)"></div>
-              <div v-else class="share-msg-text">{{ m.content }}</div>
+              <div
+                v-if="m.role === 'assistant'"
+                class="share-msg-text"
+                v-html="renderMarkdown(m.content)"
+              />
+              <div
+                v-else
+                class="share-msg-text"
+              >
+                {{ m.content }}
+              </div>
             </div>
           </div>
         </div>
       </template>
     </main>
 
-    <footer class="share-footer">�?Chiron 生成 · 本页可被任何获得链接的人查看</footer>
+    <footer class="share-footer">
+      �?Chiron 生成 · 本页可被任何获得链接的人查看
+    </footer>
   </div>
 </template>
 

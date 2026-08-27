@@ -9,6 +9,7 @@ Benefits:
 - Easy scaling (read replicas, sharding)
 - Reduced database exposure surface
 """
+
 from __future__ import annotations
 
 import logging

@@ -1,4 +1,5 @@
 """Glob 工具集 — 文件模式匹配搜索。"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -22,10 +23,12 @@ async def glob_files(pattern: str, root: str = ".") -> dict[str, Any]:
                     size = p.stat().st_size
                 except OSError:
                     size = 0
-                matches.append({
-                    "path": str(p),
-                    "size": size,
-                })
+                matches.append(
+                    {
+                        "path": str(p),
+                        "size": size,
+                    }
+                )
     except (ValueError, OSError) as exc:
         return {"error": str(exc), "count": 0, "files": []}
 

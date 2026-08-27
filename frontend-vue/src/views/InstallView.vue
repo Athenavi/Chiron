@@ -284,17 +284,38 @@ onMounted(fetchStatus)
 
       <a-spin :spinning="loading">
         <!-- 依赖探测（始终展示，便于排查连接问题） -->
-        <div v-if="!error && deps.length" class="dep-list" aria-label="依赖就绪状态">
-          <div v-for="d in deps" :key="d.name" class="dep-item">
-            <span class="dep-icon" :class="d.ok ? 'ok' : 'fail'">{{ d.ok ? '✅' : '❌' }}</span>
+        <div
+          v-if="!error && deps.length"
+          class="dep-list"
+          aria-label="依赖就绪状态"
+        >
+          <div
+            v-for="d in deps"
+            :key="d.name"
+            class="dep-item"
+          >
+            <span
+              class="dep-icon"
+              :class="d.ok ? 'ok' : 'fail'"
+            >{{ d.ok ? '✅' : '❌' }}</span>
             <span class="dep-name">{{ d.name }}</span>
             <span class="dep-msg">{{ d.message }}</span>
           </div>
-          <a-button v-if="!depsReady" size="small" type="link" @click="fetchStatus">重新检测</a-button>
+          <a-button
+            v-if="!depsReady"
+            size="small"
+            type="link"
+            @click="fetchStatus"
+          >
+            重新检测
+          </a-button>
         </div>
 
         <!-- 部署模型说明 -->
-        <div v-if="!error && !installed" class="install-hint hint-info">
+        <div
+          v-if="!error && !installed"
+          class="install-hint hint-info"
+        >
           本部署仅需在 <code>.env</code> 配置 <b>APP_SECRET</b>（唯一主密钥）、PostgreSQL / Redis / CORS / 存储 / 模型 / 支付等配置。
           初始化后可在后台「系统设置」统一管理。若数据库/Redis 不在本机默认地址，可在安装向导中填写连接信息，
           保存后 <b>重启服务</b> 生效。
@@ -303,22 +324,45 @@ onMounted(fetchStatus)
         <!-- 错误（无法连接后端，优先显示） -->
         <template v-if="error">
           <div class="installed-state">
-            <div class="error-icon">⚠</div>
-            <h3 class="installed-title">无法检查系统状态</h3>
-            <p class="installed-desc">请确认后端服务已启动（默认端口 8080）。</p>
-            <a-button type="primary" block @click="fetchStatus">重试</a-button>
+            <div class="error-icon">
+              ⚠
+            </div>
+            <h3 class="installed-title">
+              无法检查系统状态
+            </h3>
+            <p class="installed-desc">
+              请确认后端服务已启动（默认端口 8080）。
+            </p>
+            <a-button
+              type="primary"
+              block
+              @click="fetchStatus"
+            >
+              重试
+            </a-button>
           </div>
         </template>
 
         <!-- 已初始化（优先于向导） -->
         <template v-else-if="installed">
           <div class="installed-state">
-            <div class="installed-icon">✅</div>
-            <h3 class="installed-title">系统已初始化</h3>
+            <div class="installed-icon">
+              ✅
+            </div>
+            <h3 class="installed-title">
+              系统已初始化
+            </h3>
             <p class="installed-desc">
               管理员账户已创建，请使用管理员凭据登录系统。
             </p>
-            <a-button type="primary" size="large" block @click="router.push('/login')">前往登录</a-button>
+            <a-button
+              type="primary"
+              size="large"
+              block
+              @click="router.push('/login')"
+            >
+              前往登录
+            </a-button>
           </div>
         </template>
 
@@ -334,18 +378,41 @@ onMounted(fetchStatus)
           <p class="install-hint hint-info">
             提示：未配置 APP_SECRET 时令牌为随机生成（重启后变化）；配置 APP_SECRET 后令牌由其确定性派生。
           </p>
-          <a-form layout="vertical" @finish="submitToken">
+          <a-form
+            layout="vertical"
+            @finish="submitToken"
+          >
             <a-form-item label="安装令牌">
-              <a-input v-model:value="manualToken" placeholder="在此粘贴启动日志中的 token" />
+              <a-input
+                v-model:value="manualToken"
+                placeholder="在此粘贴启动日志中的 token"
+              />
             </a-form-item>
-            <a-button type="primary" html-type="submit" block @click="submitToken">提交令牌</a-button>
+            <a-button
+              type="primary"
+              html-type="submit"
+              block
+              @click="submitToken"
+            >
+              提交令牌
+            </a-button>
           </a-form>
-          <a-button type="link" block @click="router.replace('/install')">重新访问安装页</a-button>
+          <a-button
+            type="link"
+            block
+            @click="router.replace('/install')"
+          >
+            重新访问安装页
+          </a-button>
         </template>
 
         <!-- ── 安装模式 Step 1：环境检测（APP_SECRET） ── -->
         <template v-else-if="wizard === 'env'">
-          <a-steps :current="0" size="small" class="wizard-steps">
+          <a-steps
+            :current="0"
+            size="small"
+            class="wizard-steps"
+          >
             <a-step title="环境检测" />
             <a-step title="数据库配置" />
             <a-step title="创建管理员" />
@@ -356,21 +423,39 @@ onMounted(fetchStatus)
           </p>
           <div class="env-check">
             <div class="dep-item">
-              <span class="dep-icon" :class="appSecretSet ? 'ok' : 'fail'">{{ appSecretSet ? '✅' : '❌' }}</span>
+              <span
+                class="dep-icon"
+                :class="appSecretSet ? 'ok' : 'fail'"
+              >{{ appSecretSet ? '✅' : '❌' }}</span>
               <span class="dep-name">APP_SECRET</span>
               <span class="dep-msg">{{ appSecretSet ? '已配置' : '未配置或为弱值（占位符）' }}</span>
             </div>
             <div class="dep-item">
-              <span class="dep-icon" :class="dataWritable ? 'ok' : 'fail'">{{ dataWritable ? '✅' : '❌' }}</span>
+              <span
+                class="dep-icon"
+                :class="dataWritable ? 'ok' : 'fail'"
+              >{{ dataWritable ? '✅' : '❌' }}</span>
               <span class="dep-name">数据目录</span>
               <span class="dep-msg">{{ dataWritable ? '可写（install.lock 可落盘）' : '不可写：请检查 data/ 目录权限' }}</span>
             </div>
           </div>
-          <a-form layout="vertical" @finish="skipStep1">
+          <a-form
+            layout="vertical"
+            @finish="skipStep1"
+          >
             <a-form-item label="APP_SECRET（部署主密钥，至少 32 字符）">
-              <a-input-password v-model:value="dbForm.app_secret" placeholder="在此输入 APP_SECRET（或先在 .env 中配置后重启服务）" />
+              <a-input-password
+                v-model:value="dbForm.app_secret"
+                placeholder="在此输入 APP_SECRET（或先在 .env 中配置后重启服务）"
+              />
             </a-form-item>
-            <a-button type="primary" html-type="submit" :loading="submitting" block @click="skipStep1">
+            <a-button
+              type="primary"
+              html-type="submit"
+              :loading="submitting"
+              block
+              @click="skipStep1"
+            >
               {{ appSecretSet ? '继续配置数据库' : '提交 APP_SECRET 并继续' }}
             </a-button>
           </a-form>
@@ -378,7 +463,11 @@ onMounted(fetchStatus)
 
         <!-- ── 安装模式 Step 2：数据库配置 ── -->
         <template v-else-if="wizard === 'db'">
-          <a-steps :current="1" size="small" class="wizard-steps">
+          <a-steps
+            :current="1"
+            size="small"
+            class="wizard-steps"
+          >
             <a-step title="环境检测" />
             <a-step title="数据库配置" />
             <a-step title="创建管理员" />
@@ -387,27 +476,65 @@ onMounted(fetchStatus)
             填写 PostgreSQL 连接信息（必填）与 Redis（选填，留空则按环境变量并降级运行）。
             后端将 <b>尝试连接验证</b>，通过后加密保存到 <code>data/install.lock</code>；重启服务后全面生效。
           </p>
-          <a-form layout="vertical" @finish="submitStep2">
-            <a-form-item label="PostgreSQL 连接串（DSN）" required>
-              <a-input v-model:value="dbForm.postgres_dsn" placeholder="postgres://user:pass@host:5432/chiron?sslmode=disable" />
+          <a-form
+            layout="vertical"
+            @finish="submitStep2"
+          >
+            <a-form-item
+              label="PostgreSQL 连接串（DSN）"
+              required
+            >
+              <a-input
+                v-model:value="dbForm.postgres_dsn"
+                placeholder="postgres://user:pass@host:5432/chiron?sslmode=disable"
+              />
             </a-form-item>
             <a-form-item label="Redis 地址（选填）">
-              <a-input v-model:value="dbForm.redis_addr" placeholder="localhost:6379" />
+              <a-input
+                v-model:value="dbForm.redis_addr"
+                placeholder="localhost:6379"
+              />
             </a-form-item>
             <a-form-item label="Redis 密码（选填）">
-              <a-input-password v-model:value="dbForm.redis_password" placeholder="无密码可留空" />
+              <a-input-password
+                v-model:value="dbForm.redis_password"
+                placeholder="无密码可留空"
+              />
             </a-form-item>
             <a-form-item label="Redis DB（选填）">
-              <a-input-number v-model:value="dbForm.redis_db" :min="0" :max="15" style="width: 100%" />
+              <a-input-number
+                v-model:value="dbForm.redis_db"
+                :min="0"
+                :max="15"
+                style="width: 100%"
+              />
             </a-form-item>
-            <a-button type="primary" html-type="submit" :loading="submitting" block @click="submitStep2">保存并验证连接</a-button>
-            <a-button style="margin-top: 8px" block @click="goBackToEnv">上一步：修改 APP_SECRET</a-button>
+            <a-button
+              type="primary"
+              html-type="submit"
+              :loading="submitting"
+              block
+              @click="submitStep2"
+            >
+              保存并验证连接
+            </a-button>
+            <a-button
+              style="margin-top: 8px"
+              block
+              @click="goBackToEnv"
+            >
+              上一步：修改 APP_SECRET
+            </a-button>
           </a-form>
         </template>
 
         <!-- ── 安装模式 Step 3：创建管理员 ── -->
         <template v-else-if="wizard === 'admin'">
-          <a-steps :current="2" size="small" class="wizard-steps">
+          <a-steps
+            :current="2"
+            size="small"
+            class="wizard-steps"
+          >
             <a-step title="环境检测" />
             <a-step title="数据库配置" />
             <a-step title="创建管理员" />
@@ -416,33 +543,86 @@ onMounted(fetchStatus)
             数据库配置已保存并验证通过。请创建首个管理员账户（owner 角色），该账户拥有全部管理权限。
             完成后安装入口将关闭。
           </p>
-          <a-form layout="vertical" @finish="submitStep3">
-            <a-form-item label="邮箱" required>
-              <a-input v-model:value="adminForm.email" type="email" placeholder="admin@example.com" />
+          <a-form
+            layout="vertical"
+            @finish="submitStep3"
+          >
+            <a-form-item
+              label="邮箱"
+              required
+            >
+              <a-input
+                v-model:value="adminForm.email"
+                type="email"
+                placeholder="admin@example.com"
+              />
             </a-form-item>
-            <a-form-item label="姓名" required>
-              <a-input v-model:value="adminForm.name" placeholder="管理员姓名" />
+            <a-form-item
+              label="姓名"
+              required
+            >
+              <a-input
+                v-model:value="adminForm.name"
+                placeholder="管理员姓名"
+              />
             </a-form-item>
-            <a-form-item label="密码（至少 8 位）" required>
-              <a-input-password v-model:value="adminForm.password" placeholder="至少 8 位" />
+            <a-form-item
+              label="密码（至少 8 位）"
+              required
+            >
+              <a-input-password
+                v-model:value="adminForm.password"
+                placeholder="至少 8 位"
+              />
             </a-form-item>
-            <a-form-item label="确认密码" required>
-              <a-input-password v-model:value="adminForm.confirm" placeholder="再次输入密码" />
+            <a-form-item
+              label="确认密码"
+              required
+            >
+              <a-input-password
+                v-model:value="adminForm.confirm"
+                placeholder="再次输入密码"
+              />
             </a-form-item>
-            <a-button type="primary" html-type="submit" :loading="submitting" block @click="submitStep3">完成安装</a-button>
-            <a-button style="margin-top: 8px" block @click="goBackToDb">上一步：修改数据库配置</a-button>
+            <a-button
+              type="primary"
+              html-type="submit"
+              :loading="submitting"
+              block
+              @click="submitStep3"
+            >
+              完成安装
+            </a-button>
+            <a-button
+              style="margin-top: 8px"
+              block
+              @click="goBackToDb"
+            >
+              上一步：修改数据库配置
+            </a-button>
           </a-form>
         </template>
 
         <!-- ── 安装模式：完成 ── -->
         <template v-else-if="wizard === 'done'">
           <div class="installed-state">
-            <div class="installed-icon">✅</div>
-            <h3 class="installed-title">安装完成</h3>
+            <div class="installed-icon">
+              ✅
+            </div>
+            <h3 class="installed-title">
+              安装完成
+            </h3>
             <p class="installed-desc">
               管理员账户已创建，数据库配置已保存。请 <b>重启服务</b> 使全部功能生效，然后使用管理员凭据登录。
             </p>
-            <a-button type="primary" size="large" block @click="router.replace('/login')">前往登录</a-button>
+            <a-button
+              type="primary"
+              size="large"
+              block
+              @click="router.replace('/login')"
+            >
+              前往登录
+            </a-button>
           </div>
         </template>
 
@@ -457,26 +637,67 @@ onMounted(fetchStatus)
               PostgreSQL 连接正常，但 Redis 不可用（服务以降级模式运行）。仍可直接创建管理员账户完成初始化。
             </template>
           </p>
-          <a-form layout="vertical" @finish="submitLegacy">
-            <a-form-item label="邮箱" required>
-              <a-input v-model:value="legacyForm.email" type="email" placeholder="admin@example.com" />
+          <a-form
+            layout="vertical"
+            @finish="submitLegacy"
+          >
+            <a-form-item
+              label="邮箱"
+              required
+            >
+              <a-input
+                v-model:value="legacyForm.email"
+                type="email"
+                placeholder="admin@example.com"
+              />
             </a-form-item>
-            <a-form-item label="姓名" required>
-              <a-input v-model:value="legacyForm.name" placeholder="管理员姓名" />
+            <a-form-item
+              label="姓名"
+              required
+            >
+              <a-input
+                v-model:value="legacyForm.name"
+                placeholder="管理员姓名"
+              />
             </a-form-item>
-            <a-form-item label="密码（至少 8 位）" required>
-              <a-input-password v-model:value="legacyForm.password" placeholder="至少 8 位" />
+            <a-form-item
+              label="密码（至少 8 位）"
+              required
+            >
+              <a-input-password
+                v-model:value="legacyForm.password"
+                placeholder="至少 8 位"
+              />
             </a-form-item>
-            <a-form-item label="确认密码" required>
-              <a-input-password v-model:value="legacyForm.confirm" placeholder="再次输入密码" />
+            <a-form-item
+              label="确认密码"
+              required
+            >
+              <a-input-password
+                v-model:value="legacyForm.confirm"
+                placeholder="再次输入密码"
+              />
             </a-form-item>
-            <a-button type="primary" html-type="submit" :loading="submitting" block @click="submitLegacy">初始化系统</a-button>
+            <a-button
+              type="primary"
+              html-type="submit"
+              :loading="submitting"
+              block
+              @click="submitLegacy"
+            >
+              初始化系统
+            </a-button>
           </a-form>
         </template>
       </a-spin>
 
       <div class="install-footer">
-        <a-button type="link" @click="router.push('/login')">返回登录</a-button>
+        <a-button
+          type="link"
+          @click="router.push('/login')"
+        >
+          返回登录
+        </a-button>
       </div>
     </div>
   </div>

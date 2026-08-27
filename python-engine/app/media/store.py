@@ -3,6 +3,7 @@
 提供 BaseStore 抽象接口和 LocalStore 本地文件系统实现。
 通过 create_store() 工厂函数根据环境变量选择后端。
 """
+
 from __future__ import annotations
 
 import json
@@ -36,18 +37,23 @@ class BaseStore(ABC):
     """存储后端抽象接口。"""
 
     @abstractmethod
-    def write(self, name: str, content: bytes, asset_type: str = "text",
-              category: str = "generated", tags: list[str] | None = None,
-              fmt: str = "", width: int = 0, height: int = 0) -> Asset:
-        ...
+    def write(
+        self,
+        name: str,
+        content: bytes,
+        asset_type: str = "text",
+        category: str = "generated",
+        tags: list[str] | None = None,
+        fmt: str = "",
+        width: int = 0,
+        height: int = 0,
+    ) -> Asset: ...
 
     @abstractmethod
-    def get(self, asset_id: str) -> Asset | None:
-        ...
+    def get(self, asset_id: str) -> Asset | None: ...
 
     @abstractmethod
-    def list(self) -> list[Asset]:
-        ...
+    def list(self) -> list[Asset]: ...
 
 
 class LocalStore(BaseStore):
@@ -68,21 +74,43 @@ class LocalStore(BaseStore):
                     a = Asset(**item)
                     self._assets[a.id] = a
             except Exception:
-                logger.warning("Corrupted metadata.json at %s, starting with empty store", self._index_path)
+                logger.warning(
+                    "Corrupted metadata.json at %s, starting with empty store",
+                    self._index_path,
+                )
 
     def _save(self) -> None:
         data = [
             {
-                "id": a.id, "name": a.name, "file_url": a.file_url, "type": a.type,
-                "category": a.category, "tags": a.tags, "size": a.size,
-                "format": a.format, "width": a.width, "height": a.height,
+                "id": a.id,
+                "name": a.name,
+                "file_url": a.file_url,
+                "type": a.type,
+                "category": a.category,
+                "tags": a.tags,
+                "size": a.size,
+                "format": a.format,
+                "width": a.width,
+                "height": a.height,
                 "created_at": a.created_at,
             }
             for a in self._assets.values()
         ]
-        self._index_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        self._index_path.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
-    def write(self, name: str, content: bytes, asset_type: str = "text", category: str = "generated", tags: list[str] | None = None, fmt: str = "", width: int = 0, height: int = 0) -> Asset:
+    def write(
+        self,
+        name: str,
+        content: bytes,
+        asset_type: str = "text",
+        category: str = "generated",
+        tags: list[str] | None = None,
+        fmt: str = "",
+        width: int = 0,
+        height: int = 0,
+    ) -> Asset:
         asset_id = uuid.uuid4().hex[:12]
         prefix = asset_id[:8]
         safe_name = name.replace("/", "_").replace("\\", "_")
@@ -92,9 +120,16 @@ class LocalStore(BaseStore):
         out.write_bytes(content)
 
         asset = Asset(
-            id=asset_id, name=name, file_url=str(out), type=asset_type,
-            category=category, tags=tags or [], size=len(content),
-            format=fmt, width=width, height=height,
+            id=asset_id,
+            name=name,
+            file_url=str(out),
+            type=asset_type,
+            category=category,
+            tags=tags or [],
+            size=len(content),
+            format=fmt,
+            width=width,
+            height=height,
         )
         self._assets[asset_id] = asset
         self._save()
@@ -125,6 +160,7 @@ def create_store() -> BaseStore:
 
     if backend == "s3":
         from app.media.s3_store import S3Store
+
         bucket = os.getenv("S3_BUCKET", "")
         if not bucket:
             raise ValueError("S3_BUCKET is required when MEDIA_STORE_BACKEND=s3")

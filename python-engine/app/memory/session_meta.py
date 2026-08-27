@@ -74,7 +74,12 @@ class SessionMetaStore:
             last_active_at=now,
         )
         self._store[session_id] = meta
-        logger.debug("Created session meta for %s (user=%s, tenant=%s)", session_id, user_id, tenant_id)
+        logger.debug(
+            "Created session meta for %s (user=%s, tenant=%s)",
+            session_id,
+            user_id,
+            tenant_id,
+        )
         return meta
 
     def get(self, session_id: str) -> Optional[SessionMeta]:
@@ -92,7 +97,9 @@ class SessionMetaStore:
 
         # 检查是否过期
         if time.time() - meta.last_active_at > IDLE_TTL:
-            logger.info("Session %s expired (idle > %d min)", session_id, IDLE_TTL // 60)
+            logger.info(
+                "Session %s expired (idle > %d min)", session_id, IDLE_TTL // 60
+            )
             self.delete(session_id)
             return None
 
@@ -159,7 +166,8 @@ class SessionMetaStore:
         """
         now = time.time()
         expired = [
-            sid for sid, meta in self._store.items()
+            sid
+            for sid, meta in self._store.items()
             if now - meta.last_active_at > IDLE_TTL
         ]
         for sid in expired:

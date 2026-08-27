@@ -1,11 +1,11 @@
 # 熔断器 — per-provider 三态: CLOSED → OPEN → HALF_OPEN → CLOSED
 from __future__ import annotations
 
-import time
-import threading
 import logging
-from enum import Enum
+import threading
+import time
 from dataclasses import dataclass, field
+from enum import Enum
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,9 @@ class CircuitBreaker:
     _failure_count: int = field(default=0, init=False, repr=False)
     _state: CircuitState = field(default=CircuitState.CLOSED, init=False, repr=False)
     _last_failure_time: float = field(default=0.0, init=False, repr=False)
-    _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
+    _lock: threading.Lock = field(
+        default_factory=threading.Lock, init=False, repr=False
+    )
 
     @property
     def state(self) -> CircuitState:

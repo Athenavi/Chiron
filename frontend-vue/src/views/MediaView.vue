@@ -862,13 +862,29 @@ onUnmounted(() => {
           class="crumb"
           :class="{ active: i === breadcrumbs.length - 1 }"
           @click="goBreadcrumb(i)"
-        >{{ cr.name }}<span v-if="i < breadcrumbs.length - 1" class="crumb-sep">/</span></span>
+        >{{ cr.name }}<span
+          v-if="i < breadcrumbs.length - 1"
+          class="crumb-sep"
+        >/</span></span>
       </div>
       <div class="toolbar-actions">
-        <Input v-model:value="searchQuery" placeholder="搜索文件" allow-clear style="width: 180px" size="small">
-          <template #prefix><SearchOutlined /></template>
+        <Input
+          v-model:value="searchQuery"
+          placeholder="搜索文件"
+          allow-clear
+          style="width: 180px"
+          size="small"
+        >
+          <template #prefix>
+            <SearchOutlined />
+          </template>
         </Input>
-        <Select v-model:value="typeFilter" :options="typeOptions" size="small" style="width: 110px" />
+        <Select
+          v-model:value="typeFilter"
+          :options="typeOptions"
+          size="small"
+          style="width: 110px"
+        />
         <Select
           v-if="allTags.length > 0 || tagFilter.length > 0"
           v-model:value="tagFilter"
@@ -885,27 +901,93 @@ onUnmounted(() => {
           size="small"
           @change="toggleView(($event as any) as 'grid' | 'list')"
         />
-        <Button size="small" @click="newFolderOpen = true">
-          <template #icon><FolderAddOutlined /></template>新建文件夹
+        <Button
+          size="small"
+          @click="newFolderOpen = true"
+        >
+          <template #icon>
+            <FolderAddOutlined />
+          </template>新建文件夹
         </Button>
-        <Button type="primary" size="small" @click="showUpload = true">
-          <template #icon><CloudUploadOutlined /></template>上传
+        <Button
+          type="primary"
+          size="small"
+          @click="showUpload = true"
+        >
+          <template #icon>
+            <CloudUploadOutlined />
+          </template>上传
         </Button>
       </div>
-      <div v-if="total > 0" class="media-total">共 {{ total }} 项</div>
+      <div
+        v-if="total > 0"
+        class="media-total"
+      >
+        共 {{ total }} 项
+      </div>
     </div>
 
-    <div v-if="selectedIds.size > 0" class="batch-bar">
+    <div
+      v-if="selectedIds.size > 0"
+      class="batch-bar"
+    >
       <span class="batch-count">已选择 {{ selectedIds.size }} / {{ items.length }} 项</span>
-      <Button size="small" @click="selectAll">全选</Button>
-      <Button size="small" @click="deselectAll">取消选择</Button>
-      <Button size="small" @click="invertSelection">反选</Button>
-      <Button size="small" danger :loading="batchDeleting" @click="batchDelete">批量删除</Button>
-      <Button size="small" @click="openBatchMove">批量移动</Button>
-      <Button size="small" @click="openBatchRename">批量重命名</Button>
-      <Button size="small" @click="openBatchTags">批量标签</Button>
-      <Button size="small" @click="batchDownload">批量下载</Button>
-      <Button size="small" @click="openKbModal">添加到知识库</Button>
+      <Button
+        size="small"
+        @click="selectAll"
+      >
+        全选
+      </Button>
+      <Button
+        size="small"
+        @click="deselectAll"
+      >
+        取消选择
+      </Button>
+      <Button
+        size="small"
+        @click="invertSelection"
+      >
+        反选
+      </Button>
+      <Button
+        size="small"
+        danger
+        :loading="batchDeleting"
+        @click="batchDelete"
+      >
+        批量删除
+      </Button>
+      <Button
+        size="small"
+        @click="openBatchMove"
+      >
+        批量移动
+      </Button>
+      <Button
+        size="small"
+        @click="openBatchRename"
+      >
+        批量重命名
+      </Button>
+      <Button
+        size="small"
+        @click="openBatchTags"
+      >
+        批量标签
+      </Button>
+      <Button
+        size="small"
+        @click="batchDownload"
+      >
+        批量下载
+      </Button>
+      <Button
+        size="small"
+        @click="openKbModal"
+      >
+        添加到知识库
+      </Button>
     </div>
 
     <!-- 加载骨架（替代 Spin 空白） -->
@@ -925,7 +1007,12 @@ onUnmounted(() => {
       description="加载失败"
       hint="无法连接媒体服务，请检查网络后重试"
     >
-      <Button type="primary" @click="fetchItems">重试</Button>
+      <Button
+        type="primary"
+        @click="fetchItems"
+      >
+        重试
+      </Button>
     </EmptyState>
 
     <!-- 空状态 -->
@@ -936,15 +1023,23 @@ onUnmounted(() => {
       description="暂无文件"
       hint="拖拽文件到此处或点击上传，开始管理你的媒体库"
     >
-      <Button type="primary" @click="showUpload = true">
-        <template #icon><CloudUploadOutlined /></template>
+      <Button
+        type="primary"
+        @click="showUpload = true"
+      >
+        <template #icon>
+          <CloudUploadOutlined />
+        </template>
         上传文件
       </Button>
     </EmptyState>
 
     <!-- 数据视图 -->
     <template v-else>
-      <div v-if="viewMode === 'grid'" class="file-grid">
+      <div
+        v-if="viewMode === 'grid'"
+        class="file-grid"
+      >
         <div
           v-for="item in items"
           :key="item.id"
@@ -963,12 +1058,28 @@ onUnmounted(() => {
               :src="itemUrl(item)"
               loading="lazy"
               @error="onImgError($event, item)"
+            >
+            <FolderOutlined
+              v-else-if="isFolder(item)"
+              class="thumb-icon folder"
             />
-            <FolderOutlined v-else-if="isFolder(item)" class="thumb-icon folder" />
-            <FileOutlined v-else class="thumb-icon" />
+            <FileOutlined
+              v-else
+              class="thumb-icon"
+            />
           </div>
-          <div class="card-name" :title="item.name">{{ item.name }}</div>
-          <div v-if="!isFolder(item)" class="card-meta">{{ formatSize(item.size) }}</div>
+          <div
+            class="card-name"
+            :title="item.name"
+          >
+            {{ item.name }}
+          </div>
+          <div
+            v-if="!isFolder(item)"
+            class="card-meta"
+          >
+            {{ formatSize(item.size) }}
+          </div>
         </div>
       </div>
       <Table
@@ -984,12 +1095,15 @@ onUnmounted(() => {
       />
     </template>
 
-    <div v-if="total > pageSize" class="pagination-bar">
+    <div
+      v-if="total > pageSize"
+      class="pagination-bar"
+    >
       <Pagination
         v-model:current="page"
-        v-model:pageSize="pageSize"
+        v-model:page-size="pageSize"
         :total="total"
-        :pageSizeOptions="['20', '50', '100', '200']"
+        :page-size-options="['20', '50', '100', '200']"
         show-size-changer
       />
     </div>
@@ -1007,22 +1121,48 @@ onUnmounted(() => {
             v-if="isImage(detailItem) && !isFolder(detailItem)"
             :src="itemUrl(detailItem)"
             @error="onImgError($event, detailItem)"
+          >
+          <FolderOutlined
+            v-else-if="isFolder(detailItem)"
+            class="thumb-icon folder"
           />
-          <FolderOutlined v-else-if="isFolder(detailItem)" class="thumb-icon folder" />
-          <FileOutlined v-else class="thumb-icon" />
+          <FileOutlined
+            v-else
+            class="thumb-icon"
+          />
         </div>
         <div class="detail-info">
-          <div class="detail-row"><span class="label">类型</span><span>{{ detailItem.type }}</span></div>
-          <div class="detail-row"><span class="label">大小</span><span>{{ formatSize(detailItem.size) }}</span></div>
-          <div class="detail-row"><span class="label">MIME</span><span>{{ detailItem.mime_type || '—' }}</span></div>
-          <div class="detail-row"><span class="label">上传时间</span><span>{{ detailItem.created_at }}</span></div>
-          <div class="detail-row"><span class="label">URL</span><span class="url-text">{{ itemUrl(detailItem) }}</span></div>
+          <div class="detail-row">
+            <span class="label">类型</span><span>{{ detailItem.type }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">大小</span><span>{{ formatSize(detailItem.size) }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">MIME</span><span>{{ detailItem.mime_type || '—' }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">上传时间</span><span>{{ detailItem.created_at }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">URL</span><span class="url-text">{{ itemUrl(detailItem) }}</span>
+          </div>
           <!-- 标签编辑 -->
           <div class="detail-row">
             <span class="label"><TagOutlined /> 标签</span>
             <div class="tag-list">
-              <Tag v-for="t in detailItem.tags || []" :key="t" closable @close="removeTag(t)">{{ t }}</Tag>
-              <span v-if="!(detailItem.tags || []).length" class="no-tags">暂无标签</span>
+              <Tag
+                v-for="t in detailItem.tags || []"
+                :key="t"
+                closable
+                @close="removeTag(t)"
+              >
+                {{ t }}
+              </Tag>
+              <span
+                v-if="!(detailItem.tags || []).length"
+                class="no-tags"
+              >暂无标签</span>
             </div>
             <div class="tag-add">
               <Input
@@ -1035,34 +1175,104 @@ onUnmounted(() => {
             </div>
           </div>
           <!-- 分享展示 -->
-          <div v-if="shareUrl" class="detail-row">
+          <div
+            v-if="shareUrl"
+            class="detail-row"
+          >
             <span class="label">分享链接</span>
             <span class="url-text">{{ shareUrl }}</span>
-            <div v-if="shareExpires" class="share-expires">有效期至 {{ shareExpires }}</div>
+            <div
+              v-if="shareExpires"
+              class="share-expires"
+            >
+              有效期至 {{ shareExpires }}
+            </div>
           </div>
         </div>
         <div class="detail-actions">
-          <Button v-if="!isFolder(detailItem) && isImage(detailItem)" block @click="openLightbox(detailItem)">大图查看</Button>
-          <Button v-if="!isFolder(detailItem)" block @click="openPreview(detailItem)">预览</Button>
-          <Button v-if="!isFolder(detailItem)" block @click="downloadItem(detailItem)">下载</Button>
-          <Button v-if="!isFolder(detailItem)" block @click="copyUrl(detailItem)">复制 URL</Button>
-          <Button v-if="!isFolder(detailItem)" block :loading="shareLoading" @click="shareItem">生成分享链接</Button>
-          <Button block @click="openRename">重命名</Button>
-          <Button block @click="openMove">移动到</Button>
-          <Popconfirm title="确认删除？文件夹将连同子项一并删除" @confirm="detailItem && deleteItem(detailItem.id)">
-            <Button block danger>删除</Button>
+          <Button
+            v-if="!isFolder(detailItem) && isImage(detailItem)"
+            block
+            @click="openLightbox(detailItem)"
+          >
+            大图查看
+          </Button>
+          <Button
+            v-if="!isFolder(detailItem)"
+            block
+            @click="openPreview(detailItem)"
+          >
+            预览
+          </Button>
+          <Button
+            v-if="!isFolder(detailItem)"
+            block
+            @click="downloadItem(detailItem)"
+          >
+            下载
+          </Button>
+          <Button
+            v-if="!isFolder(detailItem)"
+            block
+            @click="copyUrl(detailItem)"
+          >
+            复制 URL
+          </Button>
+          <Button
+            v-if="!isFolder(detailItem)"
+            block
+            :loading="shareLoading"
+            @click="shareItem"
+          >
+            生成分享链接
+          </Button>
+          <Button
+            block
+            @click="openRename"
+          >
+            重命名
+          </Button>
+          <Button
+            block
+            @click="openMove"
+          >
+            移动到
+          </Button>
+          <Popconfirm
+            title="确认删除？文件夹将连同子项一并删除"
+            @confirm="detailItem && deleteItem(detailItem.id)"
+          >
+            <Button
+              block
+              danger
+            >
+              删除
+            </Button>
           </Popconfirm>
         </div>
       </template>
     </Drawer>
 
     <!-- 重命名 -->
-    <Modal v-model:open="showRename" title="重命名" :width="360" @ok="submitRename">
-      <Input v-model:value="renameName" @press-enter="submitRename" />
+    <Modal
+      v-model:open="showRename"
+      title="重命名"
+      :width="360"
+      @ok="submitRename"
+    >
+      <Input
+        v-model:value="renameName"
+        @press-enter="submitRename"
+      />
     </Modal>
 
     <!-- 移动 -->
-    <Modal v-model:open="showMove" title="移动到" :width="400" @ok="submitMove">
+    <Modal
+      v-model:open="showMove"
+      title="移动到"
+      :width="400"
+      @ok="submitMove"
+    >
       <div class="move-tree">
         <Tree
           :tree-data="[{ key: '', title: '根目录', children: moveTreeData }]"
@@ -1074,9 +1284,21 @@ onUnmounted(() => {
     </Modal>
 
     <!-- 新建文件夹 -->
-    <Modal v-model:open="newFolderOpen" title="新建文件夹" :width="360" :confirm-loading="folderCreating" @ok="createFolder">
-      <Input v-model:value="newFolderName" placeholder="文件夹名称" @press-enter="createFolder" />
-      <div class="folder-hint">将创建在当前目录：{{ breadcrumbs[breadcrumbs.length - 1]?.name || '根目录' }}</div>
+    <Modal
+      v-model:open="newFolderOpen"
+      title="新建文件夹"
+      :width="360"
+      :confirm-loading="folderCreating"
+      @ok="createFolder"
+    >
+      <Input
+        v-model:value="newFolderName"
+        placeholder="文件夹名称"
+        @press-enter="createFolder"
+      />
+      <div class="folder-hint">
+        将创建在当前目录：{{ breadcrumbs[breadcrumbs.length - 1]?.name || '根目录' }}
+      </div>
     </Modal>
 
     <!-- 图片灯箱 -->
@@ -1087,25 +1309,70 @@ onUnmounted(() => {
       :width="'90vw'"
       wrap-class-name="lightbox-modal"
     >
-      <div v-if="lightboxItem" class="lightbox">
-        <button type="button" class="lb-btn lb-prev" title="上一张" @click="lbPrev"><LeftOutlined /></button>
-        <img :src="itemUrl(lightboxItem)" :alt="lightboxItem.name" class="lb-img" @error="onImgError($event, lightboxItem)" />
-        <button type="button" class="lb-btn lb-next" title="下一张" @click="lbNext"><RightOutlined /></button>
+      <div
+        v-if="lightboxItem"
+        class="lightbox"
+      >
+        <button
+          type="button"
+          class="lb-btn lb-prev"
+          title="上一张"
+          @click="lbPrev"
+        >
+          <LeftOutlined />
+        </button>
+        <img
+          :src="itemUrl(lightboxItem)"
+          :alt="lightboxItem.name"
+          class="lb-img"
+          @error="onImgError($event, lightboxItem)"
+        >
+        <button
+          type="button"
+          class="lb-btn lb-next"
+          title="下一张"
+          @click="lbNext"
+        >
+          <RightOutlined />
+        </button>
         <div class="lb-meta">
           <span class="lb-name">{{ lightboxItem.name }}</span>
           <span class="lb-count">{{ lightboxIndex + 1 }} / {{ lightboxList.length }}</span>
         </div>
-        <button type="button" class="lb-close" title="关闭" aria-label="关闭" @click="lightboxOpen = false">✕</button>
+        <button
+          type="button"
+          class="lb-close"
+          title="关闭"
+          aria-label="关闭"
+          @click="lightboxOpen = false"
+        >
+          ✕
+        </button>
       </div>
     </Modal>
 
     <!-- 分享 -->
-    <Modal v-model:open="showShare" title="分享链接" :width="480" :footer="null">
+    <Modal
+      v-model:open="showShare"
+      title="分享链接"
+      :width="480"
+      :footer="null"
+    >
       <div class="share-row">
-        <Input :value="shareUrl" read-only />
-        <Button @click="copyShareUrl">复制</Button>
+        <Input
+          :value="shareUrl"
+          read-only
+        />
+        <Button @click="copyShareUrl">
+          复制
+        </Button>
       </div>
-      <div v-if="shareExpires" class="share-expires">有效期至 {{ shareExpires }}</div>
+      <div
+        v-if="shareExpires"
+        class="share-expires"
+      >
+        有效期至 {{ shareExpires }}
+      </div>
     </Modal>
 
     <!-- 预览 -->
@@ -1117,7 +1384,10 @@ onUnmounted(() => {
       :footer="null"
       @cancel="showPreview = false"
     >
-      <div class="preview-shell" v-if="previewItem">
+      <div
+        v-if="previewItem"
+        class="preview-shell"
+      >
         <file-viewer
           :url="itemUrl(previewItem)"
           :options="{ preset: allPreset, rendererMode: 'replace', theme: 'light', toolbar: { position: 'auto' } }"
@@ -1125,7 +1395,13 @@ onUnmounted(() => {
       </div>
     </Modal>
     <!-- 上传（拖拽 + 多文件 + 进度） -->
-    <Modal v-model:open="showUpload" title="上传文件" :width="640" :footer="null" destroy-on-close>
+    <Modal
+      v-model:open="showUpload"
+      title="上传文件"
+      :width="640"
+      :footer="null"
+      destroy-on-close
+    >
       <div class="upload-container">
         <Upload
           :file-list="uploadFileList"
@@ -1134,14 +1410,25 @@ onUnmounted(() => {
           drag
           style="width: 100%"
         >
-          <p class="ant-upload-drag-icon"><CloudUploadOutlined /></p>
-          <p class="ant-upload-text">拖拽文件到此处，或点击选择</p>
-          <p class="ant-upload-hint">支持多文件上传，单文件不超过 50MB</p>
+          <p class="ant-upload-drag-icon">
+            <CloudUploadOutlined />
+          </p>
+          <p class="ant-upload-text">
+            拖拽文件到此处，或点击选择
+          </p>
+          <p class="ant-upload-hint">
+            支持多文件上传，单文件不超过 50MB
+          </p>
         </Upload>
         
         <!-- 上传进度列表 -->
-        <div v-if="uploadingFiles.size > 0" class="upload-progress-list">
-          <h4 style="margin: 16px 0 8px; font-size: 14px;">上传进度</h4>
+        <div
+          v-if="uploadingFiles.size > 0"
+          class="upload-progress-list"
+        >
+          <h4 style="margin: 16px 0 8px; font-size: 14px;">
+            上传进度
+          </h4>
           <div 
             v-for="[fileId, state] in uploadingFiles" 
             :key="fileId"
@@ -1154,8 +1441,8 @@ onUnmounted(() => {
                 :class="state.status"
               >
                 {{ state.status === 'uploading' ? `${state.progress}%` : 
-                   state.status === 'success' ? '✓ 完成' : 
-                   `✗ ${state.error}` }}
+                  state.status === 'success' ? '✓ 完成' : 
+                  `✗ ${state.error}` }}
               </span>
             </div>
             <Progress 
@@ -1164,22 +1451,44 @@ onUnmounted(() => {
               :stroke-color="state.progress < 30 ? '#ff4d4f' : state.progress < 70 ? '#faad14' : '#52c41a'"
               size="small"
             />
-            <div v-else-if="state.status === 'error'" class="upload-error-detail">
+            <div
+              v-else-if="state.status === 'error'"
+              class="upload-error-detail"
+            >
               {{ state.error }}
             </div>
           </div>
           
           <!-- 批量操作按钮 -->
-          <div class="upload-actions" style="margin-top: 12px; display: flex; gap: 8px; justify-content: flex-end;">
-            <Button size="small" @click="clearCompletedUploads">清除已完成</Button>
-            <Button size="small" type="primary" @click="retryFailedUploads">重试失败</Button>
+          <div
+            class="upload-actions"
+            style="margin-top: 12px; display: flex; gap: 8px; justify-content: flex-end;"
+          >
+            <Button
+              size="small"
+              @click="clearCompletedUploads"
+            >
+              清除已完成
+            </Button>
+            <Button
+              size="small"
+              type="primary"
+              @click="retryFailedUploads"
+            >
+              重试失败
+            </Button>
           </div>
         </div>
       </div>
     </Modal>
 
     <!-- 添加到知识库 -->
-    <Modal v-model:open="showKbModal" title="添加到知识库" :width="420" :footer="null">
+    <Modal
+      v-model:open="showKbModal"
+      title="添加到知识库"
+      :width="420"
+      :footer="null"
+    >
       <p>已选择 <strong>{{ selectedIds.size }}</strong> 个文件</p>
       <Select
         v-model:value="selectedKbId"
@@ -1189,15 +1498,28 @@ onUnmounted(() => {
         style="width: 100%; margin-top: 12px"
       />
       <div class="modal-footer">
-        <Button @click="showKbModal = false">取消</Button>
-        <Button type="primary" :loading="uploadingToKb" :disabled="!selectedKbId" @click="uploadToKnowledgeBase">
+        <Button @click="showKbModal = false">
+          取消
+        </Button>
+        <Button
+          type="primary"
+          :loading="uploadingToKb"
+          :disabled="!selectedKbId"
+          @click="uploadToKnowledgeBase"
+        >
           开始上传
         </Button>
       </div>
     </Modal>
 
     <!-- 批量移动 -->
-    <Modal v-model:open="showBatchMove" title="批量移动到" :width="400" :confirm-loading="batchMoving" @ok="submitBatchMove">
+    <Modal
+      v-model:open="showBatchMove"
+      title="批量移动到"
+      :width="400"
+      :confirm-loading="batchMoving"
+      @ok="submitBatchMove"
+    >
       <p>将移动 <strong>{{ selectedIds.size }}</strong> 个选中项</p>
       <div class="move-tree">
         <Tree
@@ -1210,24 +1532,42 @@ onUnmounted(() => {
     </Modal>
 
     <!-- 批量重命名 -->
-    <Modal v-model:open="showBatchRename" title="批量重命名" :width="500" :confirm-loading="batchRenaming" @ok="submitBatchRename">
+    <Modal
+      v-model:open="showBatchRename"
+      title="批量重命名"
+      :width="500"
+      :confirm-loading="batchRenaming"
+      @ok="submitBatchRename"
+    >
       <p>将为 <strong>{{ selectedIds.size }}</strong> 个文件应用以下规则：</p>
       <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 12px;">
         <div>
           <label style="display: block; margin-bottom: 4px; font-size: 13px; color: var(--text-muted);">前缀</label>
-          <Input v-model:value="renamePrefix" placeholder="例如: [项目A]_" />
+          <Input
+            v-model:value="renamePrefix"
+            placeholder="例如: [项目A]_"
+          />
         </div>
         <div>
           <label style="display: block; margin-bottom: 4px; font-size: 13px; color: var(--text-muted);">后缀</label>
-          <Input v-model:value="renameSuffix" placeholder="例如: _v2" />
+          <Input
+            v-model:value="renameSuffix"
+            placeholder="例如: _v2"
+          />
         </div>
         <div>
           <label style="display: block; margin-bottom: 4px; font-size: 13px; color: var(--text-muted);">查找文本</label>
-          <Input v-model:value="renameFindText" placeholder="要替换的文本（支持正则）" />
+          <Input
+            v-model:value="renameFindText"
+            placeholder="要替换的文本（支持正则）"
+          />
         </div>
         <div>
           <label style="display: block; margin-bottom: 4px; font-size: 13px; color: var(--text-muted);">替换为</label>
-          <Input v-model:value="renameReplaceText" placeholder="替换后的文本" />
+          <Input
+            v-model:value="renameReplaceText"
+            placeholder="替换后的文本"
+          />
         </div>
       </div>
       <div style="margin-top: 12px; padding: 8px; background: var(--bg-secondary); border-radius: 4px; font-size: 12px; color: var(--text-tertiary);">
@@ -1236,7 +1576,13 @@ onUnmounted(() => {
     </Modal>
 
     <!-- 批量标签 -->
-    <Modal v-model:open="showBatchTags" title="批量添加标签" :width="400" :confirm-loading="batchTagging" @ok="submitBatchTags">
+    <Modal
+      v-model:open="showBatchTags"
+      title="批量添加标签"
+      :width="400"
+      :confirm-loading="batchTagging"
+      @ok="submitBatchTags"
+    >
       <p>将为 <strong>{{ selectedIds.size }}</strong> 个文件添加标签：</p>
       <div style="margin-top: 16px;">
         <Input

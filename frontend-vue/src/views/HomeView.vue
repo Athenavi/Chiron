@@ -130,8 +130,14 @@ function scrollToTop() {
   <div class="home">
     <!-- Hero：Three.js 粒子场 + 渐变光晕 + 网格纹理 + 入场动画 -->
     <section class="hero">
-      <div class="hero-glow" aria-hidden />
-      <div class="hero-grid-bg" aria-hidden />
+      <div
+        class="hero-glow"
+        aria-hidden
+      />
+      <div
+        class="hero-grid-bg"
+        aria-hidden
+      />
       <HomeScene3D />
       <div class="hero-content">
         <span class="hero-badge">
@@ -140,18 +146,33 @@ function scrollToTop() {
         <h1 class="hero-title">
           让 Agent
           <span class="hero-title-accent">持续工作</span>
-          <br />在真实场景中
+          <br>在真实场景中
         </h1>
         <p class="hero-sub">
           对话、Agent、工作流、技能、知识库与插件一体化，全栈能力自由组合；
-          <br class="hero-br" />轨迹可循、过程可见，你的本地智能工作台。
+          <br class="hero-br">轨迹可循、过程可见，你的本地智能工作台。
         </p>
         <div class="hero-actions">
-          <Button type="primary" size="large" class="hero-cta glow" @mousemove="onCtaMove" @mouseleave="onCtaLeave" @click="router.push('/chat')">
+          <Button
+            type="primary"
+            size="large"
+            class="hero-cta glow"
+            @mousemove="onCtaMove"
+            @mouseleave="onCtaLeave"
+            @click="router.push('/chat')"
+          >
             开始对话
             <ArrowRightOutlined />
           </Button>
-          <Button size="large" class="hero-cta ghost" @mousemove="onCtaMove" @mouseleave="onCtaLeave" @click="scrollToFeatures">浏览功能</Button>
+          <Button
+            size="large"
+            class="hero-cta ghost"
+            @mousemove="onCtaMove"
+            @mouseleave="onCtaLeave"
+            @click="scrollToFeatures"
+          >
+            浏览功能
+          </Button>
         </div>
       </div>
     </section>
@@ -159,16 +180,23 @@ function scrollToTop() {
     <!-- 六大工作台统一入口：快速命令 + 工作台网格 + 最近活动（互联互通） -->
     <WorkstationNav />
 
-    <section id="features" class="features">
-      <h2 class="section-title">六大能力，一个控制台</h2>
-      <p class="section-sub">每一块能力都可以独立使用，也可以自由组合</p>
+    <section
+      id="features"
+      class="features"
+    >
+      <h2 class="section-title">
+        六大能力，一个控制台
+      </h2>
+      <p class="section-sub">
+        每一块能力都可以独立使用，也可以自由组合
+      </p>
       <div class="feature-grid">
         <div
           v-for="(f, i) in features"
           :key="f.title"
+          :ref="(el: any) => setCardRef(el as HTMLElement | null, i)"
           class="feature-card"
           :style="{ '--card-delay': `${i * 60}ms` }"
-          :ref="(el: any) => setCardRef(el as HTMLElement | null, i)"
           role="link"
           tabindex="0"
           @mousemove="onCardMove"
@@ -177,11 +205,18 @@ function scrollToTop() {
           @keydown.enter="router.push(f.path)"
         >
           <span class="feature-icon-wrap">
-            <component :is="f.icon" class="feature-icon" />
+            <component
+              :is="f.icon"
+              class="feature-icon"
+            />
           </span>
           <span class="feature-en">{{ f.en }}</span>
-          <div class="feature-title">{{ f.title }}</div>
-          <div class="feature-desc">{{ f.desc }}</div>
+          <div class="feature-title">
+            {{ f.title }}
+          </div>
+          <div class="feature-desc">
+            {{ f.desc }}
+          </div>
           <span class="feature-go">进入 <ArrowRightOutlined /></span>
         </div>
       </div>
@@ -189,8 +224,12 @@ function scrollToTop() {
 
     <!-- 产品展示：真实工作台窗口预览（玻璃拟态） -->
     <section class="showcase">
-      <h2 class="section-title">真实工作台，一次看透</h2>
-      <p class="section-sub">对话、轨迹、工具调用，过程全程可见</p>
+      <h2 class="section-title">
+        真实工作台，一次看透
+      </h2>
+      <p class="section-sub">
+        对话、轨迹、工具调用，过程全程可见
+      </p>
       <div class="showcase-grid">
         <!-- 窗口 1：对话界面 -->
         <div class="window-card">
@@ -200,16 +239,26 @@ function scrollToTop() {
           </div>
           <div class="window-body chat-preview">
             <div class="pv-msg assistant">
-              <div class="pv-bubble">我来帮你分析这份数据，先把需求拆解成几步…</div>
+              <div class="pv-bubble">
+                我来帮你分析这份数据，先把需求拆解成几步…
+              </div>
             </div>
             <div class="pv-msg user">
-              <div class="pv-bubble user">请用 Python 生成季度趋势图</div>
+              <div class="pv-bubble user">
+                请用 Python 生成季度趋势图
+              </div>
             </div>
             <div class="pv-msg assistant">
-              <div class="pv-tool"><span class="pv-tool-dot" />python_exec · 运行中</div>
-              <div class="pv-bubble">已生成趋势图：Q2 环比 +23%。下面是代码与图表…</div>
+              <div class="pv-tool">
+                <span class="pv-tool-dot" />python_exec · 运行中
+              </div>
+              <div class="pv-bubble">
+                已生成趋势图：Q2 环比 +23%。下面是代码与图表…
+              </div>
             </div>
-            <div class="pv-input"><span>发送消息…</span></div>
+            <div class="pv-input">
+              <span>发送消息…</span>
+            </div>
           </div>
         </div>
         <!-- 窗口 2：历史导航（轨迹 + 会话） -->
@@ -219,18 +268,37 @@ function scrollToTop() {
             <span class="win-title">chiron · 历史导航</span>
           </div>
           <div class="window-body panel-preview">
-            <div class="pv-panel-head"><span class="pv-panel-title">会话：数据分析</span><span class="pv-panel-caret">▶</span></div>
+            <div class="pv-panel-head">
+              <span class="pv-panel-title">会话：数据分析</span><span class="pv-panel-caret">▶</span>
+            </div>
             <div class="pv-timeline">
               <div class="pv-timeline-track">
-                <span class="pv-span" style="left: 0%; width: 26%" />
-                <span class="pv-span" style="left: 34%; width: 18%" />
-                <span class="pv-span" style="left: 60%; width: 32%" />
+                <span
+                  class="pv-span"
+                  style="left: 0%; width: 26%"
+                />
+                <span
+                  class="pv-span"
+                  style="left: 34%; width: 18%"
+                />
+                <span
+                  class="pv-span"
+                  style="left: 60%; width: 32%"
+                />
               </div>
             </div>
-            <div class="pv-row"><span class="pv-dot" />分析这份数据的趋势</div>
-            <div class="pv-row active"><span class="pv-dot" />生成季度趋势图</div>
-            <div class="pv-row"><span class="pv-dot" />对比去年同期表现</div>
-            <div class="pv-row"><span class="pv-dot" />汇总为周报</div>
+            <div class="pv-row">
+              <span class="pv-dot" />分析这份数据的趋势
+            </div>
+            <div class="pv-row active">
+              <span class="pv-dot" />生成季度趋势图
+            </div>
+            <div class="pv-row">
+              <span class="pv-dot" />对比去年同期表现
+            </div>
+            <div class="pv-row">
+              <span class="pv-dot" />汇总为周报
+            </div>
           </div>
         </div>
       </div>
@@ -238,19 +306,37 @@ function scrollToTop() {
 
     <!-- 快速开始：终端代码块 -->
     <section class="quickstart">
-      <h2 class="section-title">快速开始</h2>
-      <p class="section-sub">一条命令启动依赖，三行进入工作台</p>
+      <h2 class="section-title">
+        快速开始
+      </h2>
+      <p class="section-sub">
+        一条命令启动依赖，三行进入工作台
+      </p>
       <div class="terminal-card">
         <div class="window-chrome">
           <span class="win-dot red" /><span class="win-dot yellow" /><span class="win-dot green" />
           <span class="win-title">zsh · chiron</span>
-          <button type="button" class="term-copy" @click="copyQuickstart">{{ copied ? '已复制' : '复制' }}</button>
+          <button
+            type="button"
+            class="term-copy"
+            @click="copyQuickstart"
+          >
+            {{ copied ? '已复制' : '复制' }}
+          </button>
         </div>
         <div class="terminal-body">
-          <div class="term-line"><span class="term-prompt">$</span> docker compose up -d postgres redis</div>
-          <div class="term-line"><span class="term-prompt">$</span> cp .env.example .env</div>
-          <div class="term-line"><span class="term-prompt">$</span> python run.py start</div>
-          <div class="term-line term-out">→ chiron 已启动：http://localhost:5173</div>
+          <div class="term-line">
+            <span class="term-prompt">$</span> docker compose up -d postgres redis
+          </div>
+          <div class="term-line">
+            <span class="term-prompt">$</span> cp .env.example .env
+          </div>
+          <div class="term-line">
+            <span class="term-prompt">$</span> python run.py start
+          </div>
+          <div class="term-line term-out">
+            → chiron 已启动：http://localhost:5173
+          </div>
         </div>
       </div>
     </section>

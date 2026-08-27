@@ -11,17 +11,18 @@ SaaS 安全:
 - 资源配额: 每租户最多启动 N 个并发 Agent
 - 链路追踪: 跨 Agent 请求传递 trace_id
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
 import time
-from typing import AsyncIterator, Optional
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import AsyncIterator, Optional
 
-from app.agent.runtime import AgentRuntime, AgentEvent, CompactionConfig
+from app.agent.runtime import AgentEvent, AgentRuntime, CompactionConfig
 from app.gateway.router import GatewayRouter
 from app.trace import record_span
 
@@ -30,16 +31,18 @@ logger = logging.getLogger(__name__)
 
 class AgentRole(str, Enum):
     """Agent 角色定义"""
-    RESEARCHER = "researcher"      # 信息收集与研究
-    CODER = "coder"                # 代码生成与实现
-    REVIEWER = "reviewer"          # 代码审查与测试
-    PLANNER = "planner"            # 任务规划与拆解
+
+    RESEARCHER = "researcher"  # 信息收集与研究
+    CODER = "coder"  # 代码生成与实现
+    REVIEWER = "reviewer"  # 代码审查与测试
+    PLANNER = "planner"  # 任务规划与拆解
     ORCHESTRATOR = "orchestrator"  # 编排协调(主 Agent)
 
 
 @dataclass
 class AgentSpec:
     """Agent 角色规格定义"""
+
     role: AgentRole
     description: str
     system_prompt: str
@@ -52,6 +55,7 @@ class AgentSpec:
 @dataclass
 class CollaborativeTask:
     """协同任务定义"""
+
     task_id: str
     original_query: str
     tenant_id: str  # SaaS 安全: 租户隔离
@@ -63,31 +67,31 @@ class CollaborativeTask:
 
 class AgentContextStore:
     """共享上下文存储 (SaaS 租户隔离)
-    
+
     实现方式:
     - Redis (分布式场景): key = "chiron:context:{tenant_id}:{context_id}"
     - 内存 (单实例降级): dict[tenant_id][context_id] = data
     """
-    
+
     def __init__(self, tenant_id: str):
         self.tenant_id = tenant_id
         self._local_store: dict[str, dict] = {}
         self._redis_client = None  # Lazy load
-    
+
     async def set(self, context_id: str, data: dict, ttl: int = 3600) -> None:
         """设置上下文 (带 TTL 自动过期)"""
         data["_ttl"] = time.time() + ttl
         data["_tenant_id"] = self.tenant_id  # SaaS 安全: 元数据标记
-        
+
         if self._redis_client:
             await self._redis_client.setex(
                 f"chiron:context:{self.tenant_id}:{context_id}",
                 ttl,
-                json.dumps(data, ensure_ascii=False)
+                json.dumps(data, ensure_ascii=False),
             )
         else:
             self._local_store[context_id] = data
-    
+
     async def get(self, context_id: str) -> Optional[dict]:
         """获取上下文"""
         if self._redis_client:
@@ -97,7 +101,7 @@ class AgentContextStore:
             return json.loads(data) if data else None
         else:
             return self._local_store.get(context_id)
-    
+
     async def delete(self, context_id: str) -> None:
         """删除上下文"""
         if self._redis_client:
@@ -106,13 +110,11 @@ class AgentContextStore:
             )
         else:
             self._local_store.pop(context_id, None)
-    
+
     async def list_keys(self) -> list[str]:
         """列出该租户下的所有 context_id"""
         if self._redis_client:
-            keys = await self._redis_client.keys(
-                f"chiron:context:{self.tenant_id}:*"
-            )
+            keys = await self._redis_client.keys(f"chiron:context:{self.tenant_id}:*")
             return [k.split(":")[-1] for k in keys]
         else:
             return list(self._local_store.keys())
@@ -120,19 +122,19 @@ class AgentContextStore:
 
 class AgentHub:
     """Agent 协同中枢
-    
+
     功能:
     1. 接收复杂任务,拆解为子任务分配给专业 Agent
     2. 管理 Agent 生命周期与并发度
     3. 聚合各 Agent 输出到共享上下文
     4. 统一 trace 记录
-    
+
     SaaS 安全:
     - 每租户并发 Agent 数限制 (默认 3)
     - 所有 Agent 共享同一 trace_id
     - Context Store 按租户隔离
     """
-    
+
     # 预定义 Agent 角色配置
     AGENT_ROLES: dict[AgentRole, AgentSpec] = {
         AgentRole.RESEARCHER: AgentSpec(
@@ -187,19 +189,19 @@ class AgentHub:
             max_turns=10,
         ),
     }
-    
+
     def __init__(self, gateway: GatewayRouter):
         self.gateway = gateway
         self._runtime_pool: dict[AgentRole, AgentRuntime] = {}
         self._max_concurrent_per_tenant = 3  # SaaS 配额
         self._tenant_running_agents: dict[str, int] = {}  # tenant_id -> count
-    
+
     async def run_collaborative_task(
         self,
         task: CollaborativeTask,
     ) -> AsyncIterator[AgentEvent]:
         """执行协同任务
-        
+
         流程:
         1. Planner 拆解任务 (如果尚未拆解)
         2. 并行执行无依赖的子任务
@@ -207,10 +209,10 @@ class AgentHub:
         4. Orchestrator 聚合输出
         """
         import uuid as uuid_mod
-        
+
         # ── 生成 trace_id (如果不存在) ───────────────────────────────
         trace_id = task.trace_id or uuid_mod.uuid4().hex[:12]
-        
+
         # ── SaaS 安全: 检查租户并发配额 ─────────────────────────────
         tenant_id = task.tenant_id
         current_count = self._tenant_running_agents.get(tenant_id, 0)
@@ -221,15 +223,15 @@ class AgentHub:
                 trace_id=trace_id,
             )
             return
-        
+
         self._tenant_running_agents[tenant_id] = current_count + 1
-        
+
         try:
             # ── 阶段 1: 任务规划 (如果需要) ─────────────────────────────
             if not task.subtasks:
                 planner_spec = self.AGENT_ROLES[AgentRole.PLANNER]
                 planner_runtime = self._get_or_create_runtime(planner_spec)
-                
+
                 planning_query = f"""请为以下需求拆解任务:
 {task.original_query}
 
@@ -241,7 +243,7 @@ class AgentHub:
     "dependencies": ["<依赖的子任务id>"]
   }}
 ]"""
-                
+
                 async for event in planner_runtime.run(
                     task=self._make_agent_task(
                         spec=planner_spec,
@@ -252,22 +254,22 @@ class AgentHub:
                 ):
                     event.trace_id = trace_id
                     yield event
-                    
+
                     # 解析 Planner 输出,提取 subtasks
                     if event.type == "text":
                         task.subtasks = self._parse_planner_output(event.content)
-            
+
             # ── 阶段 2: DAG 调度执行子任务 ───────────────────────────
             task.status = "running"
 
             async for event in self._execute_subtask_dag(task, trace_id, tenant_id):
                 event.trace_id = trace_id
                 yield event
-            
+
             # ── 阶段 3: Orchestrator 聚合 ──────────────────────────────
             orchestrator_spec = self.AGENT_ROLES[AgentRole.ORCHESTRATOR]
             orchestrator_runtime = self._get_or_create_runtime(orchestrator_spec)
-            
+
             aggregation_query = f"""请根据以下各专业 Agent 的输出,生成最终回答:
 
 【原始需求】
@@ -277,13 +279,13 @@ class AgentHub:
 {json.dumps(task.shared_context, ensure_ascii=False, indent=2)}
 
 请综合整理,提供清晰、准确、完整的回答。"""
-            
+
             final_event = AgentEvent(
                 type="done",
                 content="协同任务完成",
                 trace_id=trace_id,
             )
-            
+
             async for event in orchestrator_runtime.run(
                 task=self._make_agent_task(
                     spec=orchestrator_spec,
@@ -294,22 +296,24 @@ class AgentHub:
             ):
                 event.trace_id = trace_id
                 yield event
-            
+
             task.status = "completed"
             final_event.trace_id = trace_id
             yield final_event
-            
+
             logger.info(
                 "Collaborative task done (task=%s, trace_id=%s, subtasks=%d)",
-                task.task_id, trace_id, len(task.subtasks),
+                task.task_id,
+                trace_id,
+                len(task.subtasks),
             )
-            
+
         finally:
             # 释放配额
             self._tenant_running_agents[tenant_id] = max(
                 0, self._tenant_running_agents.get(tenant_id, 1) - 1
             )
-    
+
     # ── DAG 调度器 ──────────────────────────────────────────────────
 
     def _topological_waves(self, subtasks: list[dict]) -> list[list[int]]:
@@ -344,7 +348,8 @@ class AgentHub:
         while len(completed) < n:
             # 找出所有依赖已满足的未执行节点
             ready = [
-                i for i in range(n)
+                i
+                for i in range(n)
                 if i not in completed and deps[i].issubset(completed)
             ]
             if not ready:
@@ -410,7 +415,9 @@ class AgentHub:
 
             logger.debug(
                 "DAG wave %d/%d completed (%d subtasks)",
-                wave_idx + 1, len(waves), len(wave),
+                wave_idx + 1,
+                len(waves),
+                len(wave),
             )
 
     async def _run_single_subtask(
@@ -460,7 +467,9 @@ class AgentHub:
             ):
                 # 将输出写入共享上下文
                 if event.type == "text" and event.content:
-                    task.shared_context.setdefault(role_str, {})[f"subtask_{subtask_idx}"] = event.content
+                    task.shared_context.setdefault(role_str, {})[
+                        f"subtask_{subtask_idx}"
+                    ] = event.content
 
                 # 推入事件队列
                 await event_queue.put(event)
@@ -491,6 +500,7 @@ class AgentHub:
         """
         if spec.role not in self._runtime_pool:
             from app.agent.runtime import AgentRuntime
+
             self._runtime_pool[spec.role] = AgentRuntime(gateway=self.gateway)
         return self._runtime_pool[spec.role]
 
@@ -508,6 +518,7 @@ class AgentHub:
         AttributeError；且调用过不存在的 run_single_turn。
         """
         from dataclasses import asdict
+
         from app.agent.runtime import AgentTask
 
         llm_config: dict = {"mode": spec.mode, "model": spec.model}
@@ -525,19 +536,19 @@ class AgentHub:
             llm_config=llm_config,
             max_turns=spec.max_turns,
         )
-    
+
     def _parse_planner_output(self, output: str) -> list[dict]:
         """解析 Planner 的 JSON 输出"""
         import re
-        
+
         # 尝试提取 JSON 数组
-        match = re.search(r'\[.*\]', output, re.DOTALL)
+        match = re.search(r"\[.*\]", output, re.DOTALL)
         if match:
             try:
                 subtasks = json.loads(match.group())
                 return subtasks
             except json.JSONDecodeError:
                 logger.warning("Failed to parse planner output as JSON")
-        
+
         # 降级: 返回单任务
         return [{"role": "researcher", "description": output, "dependencies": []}]

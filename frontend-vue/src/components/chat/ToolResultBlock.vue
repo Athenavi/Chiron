@@ -59,17 +59,34 @@ const searchFiles = computed(() => {
 </script>
 
 <template>
-  <div class="tool-result" :class="{ error: item.isError }">
-    <img v-if="isImageData" :src="item.content" class="result-image" alt="tool result" loading="lazy" decoding="async" />
+  <div
+    class="tool-result"
+    :class="{ error: item.isError }"
+  >
+    <img
+      v-if="isImageData"
+      :src="item.content"
+      class="result-image"
+      alt="tool result"
+      loading="lazy"
+      decoding="async"
+    >
 
     <!-- read 卡片：banner + 行号 gutter（deepseek ReadBlock） -->
-    <div v-else-if="parsed.kind === 'read'" class="read-block">
+    <div
+      v-else-if="parsed.kind === 'read'"
+      class="read-block"
+    >
       <div class="read-banner">
         <span class="read-path">{{ parsed.read.path }}</span>
         <span class="read-count">{{ parsed.read.total_lines }} 行</span>
       </div>
       <div class="read-body">
-        <div v-for="row in readLines" :key="row.n" class="read-line">
+        <div
+          v-for="row in readLines"
+          :key="row.n"
+          class="read-line"
+        >
           <span class="line-no">{{ row.n }}</span>
           <span class="line-text">{{ row.line || ' ' }}</span>
         </div>
@@ -77,23 +94,41 @@ const searchFiles = computed(() => {
     </div>
 
     <!-- 终端卡片（deepseek TerminalBlock 语义） -->
-    <div v-else-if="parsed.kind === 'terminal'" class="terminal-block">
+    <div
+      v-else-if="parsed.kind === 'terminal'"
+      class="terminal-block"
+    >
       <div class="terminal-banner">
         <span class="terminal-label">终端输出</span>
-        <span class="terminal-exit" :class="{ nonzero: parsed.terminal.exit_code }">exit {{ parsed.terminal.exit_code ?? '?' }}</span>
+        <span
+          class="terminal-exit"
+          :class="{ nonzero: parsed.terminal.exit_code }"
+        >exit {{ parsed.terminal.exit_code ?? '?' }}</span>
       </div>
       <pre class="terminal-body">{{ parsed.terminal.stdout || parsed.terminal.output || '' }}{{ parsed.terminal.stderr ? '\n[stderr] ' + parsed.terminal.stderr : '' }}</pre>
     </div>
 
     <!-- 搜索卡片（deepseek SearchBlock：banner + 行号 + pre 水平滚动） -->
-    <div v-else-if="parsed.kind === 'search'" class="search-block">
+    <div
+      v-else-if="parsed.kind === 'search'"
+      class="search-block"
+    >
       <div class="search-header">
         <span class="search-summary">{{ parsed.search.count ?? searchFiles.length }} 个匹配 · {{ searchFiles.length }} 个文件</span>
       </div>
       <div class="search-body">
-        <template v-for="file in searchFiles" :key="file.path">
-          <div class="search-file">{{ file.path }}</div>
-          <div v-for="m in file.matches" :key="m.line" class="search-line">
+        <template
+          v-for="file in searchFiles"
+          :key="file.path"
+        >
+          <div class="search-file">
+            {{ file.path }}
+          </div>
+          <div
+            v-for="m in file.matches"
+            :key="m.line"
+            class="search-line"
+          >
             <span class="search-line-no">{{ m.line }}</span>
             <span class="search-line-text">{{ m.text }}</span>
           </div>
@@ -103,14 +138,32 @@ const searchFiles = computed(() => {
 
     <!-- JSON / 代码 / 文本：可折叠 -->
     <template v-else>
-      <button class="result-head" type="button" @click="expanded = !expanded">
-        <CaretRightOutlined class="chevron" :class="{ open: expanded }" />
+      <button
+        class="result-head"
+        type="button"
+        @click="expanded = !expanded"
+      >
+        <CaretRightOutlined
+          class="chevron"
+          :class="{ open: expanded }"
+        />
         <span class="result-label">{{ item.isError ? '结果（失败）' : '结果' }}</span>
       </button>
       <template v-if="expanded">
-        <pre v-if="parsed.kind === 'json'" class="result-code">{{ parsed.text }}</pre>
-        <pre v-else-if="parsed.kind === 'text' && parsed.text.includes('\n')" class="result-code">{{ parsed.text }}</pre>
-        <div v-else class="result-text">{{ parsed.text }}</div>
+        <pre
+          v-if="parsed.kind === 'json'"
+          class="result-code"
+        >{{ parsed.text }}</pre>
+        <pre
+          v-else-if="parsed.kind === 'text' && parsed.text.includes('\n')"
+          class="result-code"
+        >{{ parsed.text }}</pre>
+        <div
+          v-else
+          class="result-text"
+        >
+          {{ parsed.text }}
+        </div>
       </template>
     </template>
   </div>
