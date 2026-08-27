@@ -1636,6 +1636,7 @@ models:
       chunks_received:
         type: array
         description: 已接收分块
+        db_type: text
         default: '[]'
       status:
         type: string

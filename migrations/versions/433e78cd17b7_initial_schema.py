@@ -683,7 +683,7 @@ def upgrade() -> None:
     sa.Column('category', sa.String(length=64), nullable=True),
     sa.Column('chunk_size', sa.Integer(), nullable=True),
     sa.Column('chunk_count', sa.Integer(), nullable=True),
-    sa.Column('chunks_received', sa.String(length=255), nullable=True),
+    sa.Column('chunks_received', sa.Text, nullable=True),
     sa.Column('status', sa.String(length=16), nullable=True),
     sa.Column('created_at', sa.String(length=255), nullable=True),
     sa.Column('updated_at', sa.String(length=255), nullable=True),
