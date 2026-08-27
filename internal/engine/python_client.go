@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -28,6 +29,21 @@ type PythonClient struct {
 	cooldownUntil []int64
 }
 
+// RetryConfig 请求重试配置
+type RetryConfig struct {
+	MaxRetries     int
+	InitialBackoff time.Duration
+	MaxBackoff     time.Duration
+	Multiplier     float64
+}
+
+var defaultRetryConfig = RetryConfig{
+	MaxRetries:     3,
+	InitialBackoff: 100 * time.Millisecond,
+	MaxBackoff:     2 * time.Second,
+	Multiplier:     2.0,
+}
+
 // NewPythonClient creates a client for the Python engine HTTP API.
 // Accepts one or more base URLs (comma-separated or variadic).
 // Requests are distributed across addresses using round-robin.
@@ -45,15 +61,16 @@ func NewPythonClient(addresses ...string) *PythonClient {
 
 	// Configure transport with sensible timeouts to prevent resource leaks
 	transport := &http.Transport{
-		MaxIdleConns:        10,
-		MaxIdleConnsPerHost: 5,
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
 		IdleConnTimeout:     90 * time.Second,
+		TLSHandshakeTimeout: 10 * time.Second,
 	}
 
 	return &PythonClient{
 		addresses: addrs,
 		client: &http.Client{
-			Timeout:   0, // No overall timeout; individual requests use their own context
+			Timeout:   60 * time.Second, // Overall timeout protection
 			Transport: transport,
 		},
 		cooldownUntil: make([]int64, len(addrs)),
@@ -100,16 +117,54 @@ func (c *PythonClient) markSuccess(addr string) {
 	}
 }
 
-// do 统一请求出口：记录成功/失败并更新熔断状态
+// do 统一请求出口：记录成功/失败并更新熔断状态，支持重试
 func (c *PythonClient) do(req *http.Request) (*http.Response, error) {
 	addr := req.URL.Scheme + "://" + req.URL.Host
-	resp, err := c.client.Do(req)
-	if err != nil {
+	var lastErr error
+
+	for attempt := 0; attempt <= defaultRetryConfig.MaxRetries; attempt++ {
+		if attempt > 0 {
+			// 指数退避
+			backoff := time.Duration(
+				float64(defaultRetryConfig.InitialBackoff) *
+					math.Pow(defaultRetryConfig.Multiplier, float64(attempt-1)),
+			)
+			if backoff > defaultRetryConfig.MaxBackoff {
+				backoff = defaultRetryConfig.MaxBackoff
+			}
+
+			slog.Info("retrying request",
+				"addr", addr,
+				"attempt", attempt+1,
+				"backoff", backoff,
+				"last_error", lastErr)
+
+			select {
+			case <-req.Context().Done():
+				return nil, req.Context().Err()
+			case <-time.After(backoff):
+			}
+		}
+
+		resp, err := c.client.Do(req)
+		if err == nil {
+			// 检查是否是可重试的错误状态码
+			if resp.StatusCode >= 500 || resp.StatusCode == 429 {
+				resp.Body.Close()
+				lastErr = fmt.Errorf("server error %d", resp.StatusCode)
+				c.markFailure(addr)
+				continue
+			}
+			c.markSuccess(addr)
+			return resp, nil
+		}
+
+		lastErr = err
 		c.markFailure(addr)
-		return nil, err
 	}
-	c.markSuccess(addr)
-	return resp, nil
+
+	return nil, fmt.Errorf("request failed after %d retries: %w",
+		defaultRetryConfig.MaxRetries+1, lastErr)
 }
 
 // pickAddress returns the next address using round-robin.

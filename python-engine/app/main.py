@@ -81,6 +81,23 @@ async def lifespan(app: FastAPI):
     """应用生命周期：启动初始化 + 关闭清理"""
     global _redis, _gateway, _queue_worker, _key_pool
 
+    # ── 0. 全局异常处理 ──
+    import sys
+    import traceback
+
+    def global_exception_handler(exc_type, exc_value, exc_tb):
+        if issubclass(exc_type, KeyboardInterrupt):
+            return
+        logger.critical(
+            "Unhandled exception",
+            exc_info=(exc_type, exc_value, exc_tb),
+            extra={
+                "traceback": "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
+            },
+        )
+
+    sys.excepthook = global_exception_handler
+
     # ── 1. 可观测性 ──
     from app.observability.logging import configure_logging
     from app.observability.metrics import ENGINE_INFO

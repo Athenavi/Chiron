@@ -185,15 +185,39 @@ func (m *Manager) Deduct(userID, reason string, amount int) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("insufficient credits or user not found: %w", err)
 	}
+
+	// 先更新缓存，再发布事件（缓存失败不影响扣费，只影响读取性能）
 	m.setBalanceCache(userID, newBalance)
-	m.publish(CreditEvent{
+
+	// 使用带超时的context发布事件，避免阻塞
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	evt := CreditEvent{
 		UserID:    userID,
 		Amount:    -amount,
 		Balance:   newBalance,
 		Reason:    reason,
 		Timestamp: time.Now(),
-	})
+	}
+
+	select {
+	case m.eventCh <- evt:
+		// 成功发布
+	case <-ctx.Done():
+		slog.Warn("billing event publish timeout, event may be lost",
+			"user_id", userID, "reason", reason)
+		// 关键事件丢失需要告警，可以考虑写入WAL日志
+	}
+
 	return newBalance, nil
+}
+
+// setBalanceCache 安全地更新缓存
+func (m *Manager) setBalanceCache(userID string, balance int) {
+	ptr := new(int64)
+	*ptr = int64(balance)
+	m.balances.Store(userID, ptr)
 }
 
 // AddCredits adds credits to a user's balance (for recharge or admin grants).
