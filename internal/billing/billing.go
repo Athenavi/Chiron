@@ -242,13 +242,6 @@ func (m *Manager) AddCredits(userID, reason string, amount int) (int, error) {
 	return newBalance, nil
 }
 
-// setBalanceCache 更新内存读缓存（不改变 DB 事实源）。
-func (m *Manager) setBalanceCache(userID string, balance int) {
-	ptr := new(int64)
-	*ptr = int64(balance)
-	m.balances.Store(userID, ptr)
-}
-
 // GetHistory returns the user's credit transaction history.
 func (m *Manager) GetHistory(ctx context.Context, userID string, limit int) ([]CreditChange, error) {
 	return m.store.GetHistory(ctx, userID, limit)

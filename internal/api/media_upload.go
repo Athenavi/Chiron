@@ -96,12 +96,12 @@ func (h *MediaHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	fileURL := h.objectURL(objectKey)
 
-	// 更新 file_url
+	// 更新 file_url 和 file_path（签名URL服务需要）
 	_, err = db.GlobalDBManager.Exec(r.Context(),
-		`UPDATE media_assets SET file_url = $1 WHERE id = $2 AND tenant_id = $3`,
-		fileURL, assetID, tenantID)
+		`UPDATE media_assets SET file_url = $1, file_path = $2 WHERE id = $3 AND tenant_id = $4`,
+		fileURL, objectKey, assetID, tenantID)
 	if err != nil {
-		slog.Warn("update file_url", "error", err)
+		slog.Warn("update file_url/file_path", "error", err)
 	}
 
 	OK(w, map[string]string{

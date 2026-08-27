@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -291,7 +290,7 @@ func NewGatewayRouter(
 
 	// Media
 	mediaHandler := NewMediaHandler(fileStore, authenticator)
-	mediaHandler.SetMediaRoot(cfg.StorageRoot)
+	mediaHandler.SetMediaRoot(cfg.StorageRoot + "/media")
 
 	// 通用分片上传（断点续传）
 	uploadHandler := NewUploadHandler(authenticator, cfg.StorageRoot)
@@ -617,7 +616,7 @@ func registerSystemRoutes(
 	mux.Handle("GET /v1/system/spans", authMW(rlMW(RequirePermission(auth.PermAdminRead)(http.HandlerFunc(systemHandler.Spans)))))
 	mux.Handle("GET /v1/system/traces", authMW(rlMW(RequirePermission(auth.PermAdminRead)(http.HandlerFunc(systemHandler.Traces)))))
 	mux.Handle("GET /v1/metrics", authMW(rlMW(http.HandlerFunc(systemHandler.Metrics))))
-	mux.Handle("POST /v1/admin/log-level", authMW(adminWriteMW(http.HandlerFunc(systemHandler.SetLogLevel))))
+	mux.Handle("POST /v1/admin/log-level", authMW(rlMW(RequirePermission(auth.PermAdminWrite)(http.HandlerFunc(systemHandler.SetLogLevel)))))
 
 	// Trace (user-level call chain tracing, tenant-isolated)
 	if traceHandler != nil {
@@ -669,19 +668,10 @@ func registerMediaRoutes(
 	mux.Handle("POST /v1/media/{id}/share", authMW(rlMW(http.HandlerFunc(mediaHandler.Share))))
 	mux.Handle("DELETE /v1/media/{id}", authMW(rlMW(http.HandlerFunc(mediaHandler.Delete))))
 
-	// Media file serving（P0 存储型 XSS 防护：html/xml 直接拒服务；svg 以 CSP sandbox 输出；全量 nosniff）
-	mediaFileServer := http.StripPrefix("/media/", http.FileServer(http.Dir(storageRoot+"/media")))
-	mux.Handle("GET /media/", rlMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch strings.ToLower(filepath.Ext(r.URL.Path)) {
-		case ".html", ".htm", ".xml", ".xhtml", ".swf":
-			http.NotFound(w, r)
-			return
-		case ".svg":
-			w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")
-		}
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		mediaFileServer.ServeHTTP(w, r)
-	})))
+	// Media file serving（P0 安全修复：禁止目录遍历，仅允许签名URL访问）
+	// 原代码允许通过 /media/ 直接浏览所有用户文件，现已移除
+	// 所有媒体访问必须通过签名URL (/media/s/{assetID}) 或 API端点 (/v1/media/{id}/download)
+	
 	// 签名 URL（P0 修复）：签发 + 校验后服务
 	mux.Handle("POST /v1/media/{id}/sign", authMW(rlMW(http.HandlerFunc(mediaHandler.SignMedia))))
 	mux.Handle("GET /media/s/{assetID}", rlMW(http.HandlerFunc(mediaHandler.ServeSignedMedia)))

@@ -156,7 +156,7 @@ async def lifespan(app: FastAPI):
             logger.warning("PostgreSQL not available: %s", e)
 
     # Initialize unified DB client (optional, controlled by env var)
-    from app.config import settings
+    import os
 
     use_unified_db = os.getenv("USE_UNIFIED_DB_CLIENT", "false").lower() == "true"
     if use_unified_db:
