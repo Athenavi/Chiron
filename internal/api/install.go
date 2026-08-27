@@ -38,8 +38,11 @@ func SetInstallLockPath(cfg *config.Config) {
 	} else if installLockPath == "" {
 		installLockPath = filepath.Join(config.GetDefaultDataDir(), "install.lock")
 	}
+	// 转换为绝对路径，避免 Windows 上 rename 失败
+	if abs, err := filepath.Abs(installLockPath); err == nil {
+		installLockPath = abs
+	}
 }
-
 // ── 安装令牌（Jenkins 模式）───────────────────────────────────────────────
 //
 // 所有 /v1/install/* 端点必须携带安装令牌（X-Install-Token header 或 ?token= 查询参数）：
@@ -132,7 +135,11 @@ func LoadInstallLock() (*InstallLock, error) {
 // SaveInstallLock 原子写入安装状态：随机临时文件 + rename。
 // Windows 的 os.Rename 不覆盖已存在目标，写入前先移除旧文件（本地数据文件，可接受短暂窗口）。
 func SaveInstallLock(lk *InstallLock) error {
-	dir := filepath.Dir(installLockPath)
+	absPath, err := filepath.Abs(installLockPath)
+	if err != nil {
+		return err
+	}
+	dir := filepath.Dir(absPath)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
@@ -157,12 +164,12 @@ func SaveInstallLock(lk *InstallLock) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	if _, err := os.Stat(installLockPath); err == nil {
-		if err := os.Remove(installLockPath); err != nil {
+	if _, err := os.Stat(absPath); err == nil {
+		if err := os.Remove(absPath); err != nil {
 			return err
 		}
 	}
-	return os.Rename(tmpName, installLockPath)
+	return os.Rename(tmpName, absPath)
 }
 
 // lockEncryptKey 由 APP_SECRET 派生 install.lock 的 AES-256-GCM 密钥（域分离）。
