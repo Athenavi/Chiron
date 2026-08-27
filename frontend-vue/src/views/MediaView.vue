@@ -1617,7 +1617,7 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.media-page { padding: 16px 24px; display: flex; flex-direction: column; gap: 12px; height: 100%; overflow: hidden; }
+.media-page { padding: 72px 24px 16px; display: flex; flex-direction: column; gap: 12px; height: 100%; overflow: hidden; }
 .media-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .breadcrumb { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .crumb { font-size: 14px; color: var(--text-secondary); cursor: pointer; white-space: nowrap; }

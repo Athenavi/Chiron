@@ -105,7 +105,7 @@ func (h *MediaHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	query := `SELECT id, type, name, COALESCE(file_url, ''), COALESCE(mime_type, ''),
-		COALESCE(thumbnail, ''), COALESCE(metadata_data, '{}'::jsonb), COALESCE(tags, ''), COALESCE(category, ''), size, created_at, updated_at
+		COALESCE(thumbnail, ''), COALESCE(metadata_data, '{}'), COALESCE(tags, ''), COALESCE(category, ''), COALESCE(size, 0), created_at, updated_at
 		FROM media_assets` + where +
 		" ORDER BY (type = 'folder') DESC, name ASC LIMIT $%d OFFSET $%d"
 	args = append(args, pageSize, (page-1)*pageSize)
