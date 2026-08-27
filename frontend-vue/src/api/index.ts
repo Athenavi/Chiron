@@ -287,7 +287,9 @@ const signedMediaCache = new Map<string, { url: string; exp: number }>()
 
 export async function signMediaUrl(id: string): Promise<string> {
   const resp = await api.post(`/v1/media/${id}/sign`)
-  return resp.data?.url || ''
+  console.log('[signMediaUrl] response for', id, ':', resp.data)
+  // 后端返回格式: { success: true, data: { url: "..." } }
+  return resp.data?.data?.url || resp.data?.url || ''
 }
 
 /**
@@ -296,10 +298,11 @@ export async function signMediaUrl(id: string): Promise<string> {
  */
 export async function resolveMediaUrl(asset: { id?: string; file_url?: string }): Promise<string> {
   const f = asset?.file_url || ''
+  console.log('[resolveMediaUrl] called with asset:', asset)
   if (f && !f.startsWith('/media/')) return f
   if (!asset?.id) return f
   
-  // 清除过期缓存，确保使用最新的签名URL
+  // 清除过期缓存
   const now = Date.now()
   for (const [key, value] of signedMediaCache.entries()) {
     if (value.exp <= now) {
@@ -308,12 +311,19 @@ export async function resolveMediaUrl(asset: { id?: string; file_url?: string })
   }
   
   const cached = signedMediaCache.get(asset.id)
-  if (cached && cached.exp > Date.now()) return cached.url
+  if (cached && cached.exp > Date.now()) {
+    console.log('[resolveMediaUrl] using cached URL for', asset.id, ':', cached.url)
+    return cached.url
+  }
+  
   try {
+    console.log('[resolveMediaUrl] calling signMediaUrl for', asset.id)
     const url = await signMediaUrl(asset.id)
+    console.log('[resolveMediaUrl] got URL from signMediaUrl:', url, 'for', asset.id)
     signedMediaCache.set(asset.id, { url, exp: Date.now() + 12 * 60 * 1000 })
     return url
-  } catch {
+  } catch (e) {
+    console.error('[resolveMediaUrl] error calling signMediaUrl:', e, 'for', asset.id)
     return f
   }
 }

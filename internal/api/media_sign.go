@@ -24,16 +24,28 @@ const mediaSignTTL = 15 * time.Minute
 
 // signMediaURL 为资产生成签名下载 URL（校验归属后签发）。
 func signMediaURL(ctx context.Context, assetID, secret, tenantID, userID string) (string, error) {
-	// 归属校验
+	// 归属校验并获取文件扩展名
 	var filePath string
 	if err := db.GlobalDBManager.QueryRow(ctx,
 		`SELECT COALESCE(file_path, '') FROM media_assets WHERE id = $1 AND tenant_id = $2 AND user_id = $3`,
 		assetID, tenantID, userID).Scan(&filePath); err != nil {
 		return "", err
 	}
+	
+	// 从 file_path 提取文件扩展名
+	ext := filepath.Ext(filePath)
+	
 	exp := time.Now().Add(mediaSignTTL).Unix()
 	sig := mediaHMAC(secret, assetID, exp)
-	return "/media/s/" + assetID + "?exp=" + strconv.FormatInt(exp, 10) + "&sig=" + sig, nil
+	
+	// 如果有扩展名，附加到 URL 中（flyfish-viewer 需要）
+	url := "/media/s/" + assetID
+	if ext != "" {
+		url += ext
+	}
+	url += "?exp=" + strconv.FormatInt(exp, 10) + "&sig=" + sig
+	
+	return url, nil
 }
 
 func mediaHMAC(secret, assetID string, exp int64) string {
@@ -62,9 +74,12 @@ func (h *MediaHandler) SignMedia(w http.ResponseWriter, r *http.Request) {
 	OK(w, map[string]interface{}{"url": url})
 }
 
-// ServeSignedMedia GET /media/s/{assetID}?exp=&sig= —— 校验签名后流式返回文件。
+// ServeSignedMedia GET /media/s/{assetID}{ext}?exp=&sig= —— 校验签名后流式返回文件。
 func (h *MediaHandler) ServeSignedMedia(w http.ResponseWriter, r *http.Request) {
-	assetID := r.PathValue("assetID")
+	// 从路径中提取 assetID（去掉可能的文件扩展名）
+	rawAssetID := r.PathValue("assetID")
+	assetID := strings.TrimSuffix(rawAssetID, filepath.Ext(rawAssetID))
+	
 	expStr := r.URL.Query().Get("exp")
 	sig := r.URL.Query().Get("sig")
 	if assetID == "" || expStr == "" || sig == "" {
@@ -95,9 +110,9 @@ func (h *MediaHandler) ServeSignedMedia(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		
-		// 从 file_url 推导 file_path: /media/xxx -> media/xxx
+		// 从 file_url 推导 file_path: /media/xxx -> xxx
 		if strings.HasPrefix(fileURL, "/media/") {
-			filePath = strings.TrimPrefix(fileURL, "/")
+			filePath = strings.TrimPrefix(fileURL, "/media/")
 			slog.Debug("ServeSignedMedia: derived file_path from file_url", 
 				"assetID", assetID, "fileURL", fileURL, "filePath", filePath)
 		} else {
@@ -115,6 +130,38 @@ func (h *MediaHandler) ServeSignedMedia(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "invalid path", http.StatusForbidden)
 		return
 	}
+	
+	// 设置正确的响应头以支持音频/视频流式播放
+	w.Header().Set("Accept-Ranges", "bytes")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	
+	// 根据文件扩展名设置 Content-Type（flyfish-viewer 需要）
+	ext := strings.ToLower(filepath.Ext(clean))
+	switch ext {
+	case ".mp3":
+		w.Header().Set("Content-Type", "audio/mpeg")
+	case ".wav":
+		w.Header().Set("Content-Type", "audio/wav")
+	case ".ogg":
+		w.Header().Set("Content-Type", "audio/ogg")
+	case ".flac":
+		w.Header().Set("Content-Type", "audio/flac")
+	case ".m4a":
+		w.Header().Set("Content-Type", "audio/mp4")
+	case ".mp4":
+		w.Header().Set("Content-Type", "video/mp4")
+	case ".webm":
+		w.Header().Set("Content-Type", "video/webm")
+	case ".pdf":
+		w.Header().Set("Content-Type", "application/pdf")
+	case ".jpg", ".jpeg":
+		w.Header().Set("Content-Type", "image/jpeg")
+	case ".png":
+		w.Header().Set("Content-Type", "image/png")
+	case ".gif":
+		w.Header().Set("Content-Type", "image/gif")
+	}
+	
 	http.ServeFile(w, r, clean)
 }
 
