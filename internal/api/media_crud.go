@@ -105,7 +105,7 @@ func (h *MediaHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	query := `SELECT id, type, name, COALESCE(file_url, ''), COALESCE(mime_type, ''),
-		COALESCE(thumbnail, ''), metadata_data, COALESCE(tags, ''), COALESCE(category, ''), size, created_at, updated_at
+		COALESCE(thumbnail, ''), COALESCE(metadata_data, '{}'::jsonb), COALESCE(tags, ''), COALESCE(category, ''), size, created_at, updated_at
 		FROM media_assets` + where +
 		" ORDER BY (type = 'folder') DESC, name ASC LIMIT $%d OFFSET $%d"
 	args = append(args, pageSize, (page-1)*pageSize)
@@ -125,6 +125,7 @@ func (h *MediaHandler) List(w http.ResponseWriter, r *http.Request) {
 		var tagsStr string
 		if err := rows.Scan(&a.ID, &a.Type, &a.Name, &a.FileURL, &a.MimeType,
 			&a.Thumbnail, &metadataJSON, &tagsStr, &a.Category, &a.Size, &a.CreatedAt, &a.UpdatedAt); err != nil {
+			slog.Error("scan media asset row failed", "error", err, "id", a.ID, "type", a.Type)
 			continue
 		}
 		if len(metadataJSON) > 0 && string(metadataJSON) != "{}" && string(metadataJSON) != "null" {
@@ -136,6 +137,7 @@ func (h *MediaHandler) List(w http.ResponseWriter, r *http.Request) {
 		items = append(items, a)
 	}
 	if err := rows.Err(); err != nil {
+		slog.Error("iterate media assets failed", "error", err)
 		InternalError(w, "iterate media assets")
 		return
 	}
