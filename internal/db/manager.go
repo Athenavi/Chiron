@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -101,6 +102,143 @@ func (m *DBManager) IsAvailable() bool {
 	p := Pool
 	PoolMu.RUnlock()
 	return p != nil
+}
+
+// FetchOne 执行查询并返回第一行结果（用于 Python 引擎调用）
+func (m *DBManager) FetchOne(ctx context.Context, sql string, args ...interface{}) (map[string]interface{}, error) {
+	pool, err := m.GetReadPool()
+	if err != nil {
+		return nil, fmt.Errorf("db manager: %w", err)
+	}
+
+	row := pool.QueryRow(ctx, sql, args...)
+	
+	var values []interface{}
+	err = row.Scan(&values)
+	if err != nil {
+		return nil, fmt.Errorf("scan failed: %w", err)
+	}
+
+	// 简化实现：返回原始值映射
+	result := make(map[string]interface{})
+	for i, v := range values {
+		result[fmt.Sprintf("col_%d", i)] = v
+	}
+
+	return result, nil
+}
+
+// FetchAll 执行查询并返回所有结果（用于 Python 引擎调用）
+func (m *DBManager) FetchAll(ctx context.Context, sql string, args ...interface{}) ([]map[string]interface{}, error) {
+	pool, err := m.GetReadPool()
+	if err != nil {
+		return nil, fmt.Errorf("db manager: %w", err)
+	}
+
+	rows, err := pool.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query failed: %w", err)
+	}
+	defer rows.Close()
+
+	var results []map[string]interface{}
+	columns := rows.FieldDescriptions()
+
+	for rows.Next() {
+		values := make([]interface{}, len(columns))
+		valuePtrs := make([]interface{}, len(columns))
+		for i := range values {
+			valuePtrs[i] = &values[i]
+		}
+
+		if err := rows.Scan(valuePtrs...); err != nil {
+			return nil, fmt.Errorf("scan failed: %w", err)
+		}
+
+		row := make(map[string]interface{})
+		for i, col := range columns {
+			row[col.Name] = values[i]
+		}
+		results = append(results, row)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows iteration failed: %w", err)
+	}
+
+	return results, nil
+}
+
+// Execute 执行 SQL 并返回影响行数（用于 Python 引擎调用）
+func (m *DBManager) Execute(ctx context.Context, sql string, args ...interface{}) (int64, error) {
+	pool, err := m.GetPool()
+	if err != nil {
+		return 0, fmt.Errorf("db manager: %w", err)
+	}
+
+	tag, err := pool.Exec(ctx, sql, args...)
+	if err != nil {
+		return 0, fmt.Errorf("exec failed: %w", err)
+	}
+
+	return tag.RowsAffected(), nil
+}
+
+// BatchExecute 批量执行 SQL（用于 Python 引擎调用）
+func (m *DBManager) BatchExecute(ctx context.Context, queries []string) error {
+	pool, err := m.GetPool()
+	if err != nil {
+		return fmt.Errorf("db manager: %w", err)
+	}
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction failed: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	for _, query := range queries {
+		if _, err := tx.Exec(ctx, query); err != nil {
+			return fmt.Errorf("batch exec failed: %w", err)
+		}
+	}
+
+	return tx.Commit(ctx)
+}
+
+// HealthCheck 健康检查（包含详细统计信息）
+func (m *DBManager) HealthCheck(ctx context.Context) map[string]interface{} {
+	result := map[string]interface{}{
+		"available": m.IsAvailable(),
+		"timestamp": time.Now().Unix(),
+	}
+
+	if !m.IsAvailable() {
+		return result
+	}
+
+	pool, _ := m.GetPool()
+	if pool != nil {
+		stats := pool.Stat()
+		result["stats"] = map[string]interface{}{
+			"total_conns":      stats.TotalConns(),
+			"idle_conns":       stats.IdleConns(),
+			"acquired_conns":   stats.AcquiredConns(),
+			"empty_acquire":    stats.EmptyAcquireCount(),
+			"acquire_duration": stats.AcquireDuration().Milliseconds(),
+		}
+
+		// 测试连接
+		pingCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		defer cancel()
+		err := pool.Ping(pingCtx)
+		result["ping_ok"] = err == nil
+		if err != nil {
+			result["ping_error"] = err.Error()
+		}
+	}
+
+	return result
 }
 
 // errorRow 实现 pgx.Row 接口，用于返回错误
