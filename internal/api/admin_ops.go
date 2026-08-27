@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"context"
@@ -190,12 +190,12 @@ func (h *AdminHandler) SuspendTenant(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) TenantUsage(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	type usage struct {
-		Users        int `json:"users"`
-		Sessions     int `json:"sessions"`
-		AgentSessions int `json:"agent_sessions"`
+		Users          int `json:"users"`
+		Sessions       int `json:"sessions"`
+		AgentSessions  int `json:"agent_sessions"`
 		KnowledgeBases int `json:"knowledge_bases"`
-		Agents       int `json:"agents"`
-		MediaAssets  int `json:"media_assets"`
+		Agents         int `json:"agents"`
+		MediaAssets    int `json:"media_assets"`
 	}
 	var u usage
 	ctx := r.Context()
@@ -645,8 +645,8 @@ func (h *AdminHandler) UpdateModel(w http.ResponseWriter, r *http.Request) {
 	}
 	// S 安全修复：列名白名单，防止 SQL 注入
 	modelColumnMap := map[string]string{
-		"display_name":  "display_name",
-		"enabled":       "enabled",
+		"display_name":   "display_name",
+		"enabled":        "enabled",
 		"context_window": "context_window",
 	}
 	sets, args := []string{}, []interface{}{}
@@ -727,15 +727,15 @@ func ListUserModels(w http.ResponseWriter, r *http.Request) {
 // ── 定时任务 ──
 
 type cronRow struct {
-	ID         string     `json:"id"`
-	Name       string     `json:"name"`
-	Schedule   string     `json:"schedule"`
-	Task       string     `json:"task"`
-	Enabled    bool       `json:"enabled"`
-	LastRunAt  *time.Time `json:"last_run_at"`
-	LastStatus string     `json:"last_status"`
-	WebhookToken string   `json:"webhook_token"`
-	CreatedAt  time.Time  `json:"created_at"`
+	ID           string     `json:"id"`
+	Name         string     `json:"name"`
+	Schedule     string     `json:"schedule"`
+	Task         string     `json:"task"`
+	Enabled      bool       `json:"enabled"`
+	LastRunAt    *time.Time `json:"last_run_at"`
+	LastStatus   string     `json:"last_status"`
+	WebhookToken string     `json:"webhook_token"`
+	CreatedAt    time.Time  `json:"created_at"`
 }
 
 func (h *AdminHandler) ListCronJobs(w http.ResponseWriter, r *http.Request) {

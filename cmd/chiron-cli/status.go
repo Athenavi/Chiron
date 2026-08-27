@@ -1,4 +1,4 @@
-﻿package main
+package main
 
 import (
 	"encoding/json"
@@ -60,4 +60,3 @@ func runStatus(cmd *cobra.Command, args []string) error {
 
 	return nil
 }
-

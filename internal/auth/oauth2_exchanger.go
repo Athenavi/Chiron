@@ -246,8 +246,8 @@ func (e *OAuth2Exchanger) exchangeQQ(ctx context.Context, p *OIDCProviderConfig,
 		return "", err
 	}
 	var resp struct {
-		AccessToken    string `json:"access_token"`
-		Error          int    `json:"error"`
+		AccessToken      string `json:"access_token"`
+		Error            int    `json:"error"`
 		ErrorDescription string `json:"error_description"`
 	}
 	if err := json.Unmarshal(data, &resp); err != nil {

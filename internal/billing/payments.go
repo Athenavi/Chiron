@@ -17,10 +17,10 @@ const (
 
 // 订单状态
 const (
-	PayStatusPending  = "pending"  // 已创建，等待支付
-	PayStatusPaid     = "paid"     // 支付成功且已入账
-	PayStatusFailed   = "failed"   // 支付失败
-	PayStatusExpired  = "expired"  // 超时未支付
+	PayStatusPending = "pending" // 已创建，等待支付
+	PayStatusPaid    = "paid"    // 支付成功且已入账
+	PayStatusFailed  = "failed"  // 支付失败
+	PayStatusExpired = "expired" // 超时未支付
 )
 
 // Payment 是一笔充值订单（支付宝/微信/PayPal 共用）。

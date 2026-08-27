@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"context"
@@ -26,15 +26,15 @@ func NewConversationHandler(a *auth.Authenticator, sm *session.Manager) *Convers
 
 // Conversation is a chat session returned to the frontend.
 type Conversation struct {
-	ID        string      `json:"id"`
-	Title     string      `json:"title"`
-	Pinned    bool        `json:"pinned"`
-	CreatedAt time.Time   `json:"created_at"`
-	UpdatedAt time.Time   `json:"updated_at"`
-	Messages  []Message   `json:"messages,omitempty"`
-	ToolCalls []ToolCall  `json:"tool_calls,omitempty"` // S 修复：工具调用过程落库，刷新后还原
-	Cursor    string      `json:"cursor,omitempty"`     // P 性能修复：分页游标（加载更早消息）
-	HasMore   bool        `json:"has_more"`             // P 性能修复：是否还有更早的消息
+	ID        string     `json:"id"`
+	Title     string     `json:"title"`
+	Pinned    bool       `json:"pinned"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
+	Messages  []Message  `json:"messages,omitempty"`
+	ToolCalls []ToolCall `json:"tool_calls,omitempty"` // S 修复：工具调用过程落库，刷新后还原
+	Cursor    string     `json:"cursor,omitempty"`     // P 性能修复：分页游标（加载更早消息）
+	HasMore   bool       `json:"has_more"`             // P 性能修复：是否还有更早的消息
 }
 
 // Message is a single chat message returned to the frontend.
@@ -245,7 +245,6 @@ func (h *ConversationHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	OK(w, map[string]string{"status": "deleted"})
 }
-
 
 // Update updates a session's title and/or pinned flag (session menu: 重命名/置顶).
 func (h *ConversationHandler) Update(w http.ResponseWriter, r *http.Request) {

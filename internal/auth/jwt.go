@@ -146,11 +146,11 @@ var (
 	PermToolsExec   = "tools:execute"
 	PermUsersManage = "users:manage"
 	// 企业功能权限点（owner/admin 默认拥有）
-	PermAuditRead   = "audit:read"
-	PermEntManage   = "ent:manage"
+	PermAuditRead    = "audit:read"
+	PermEntManage    = "ent:manage"
 	PermPolicyManage = "policy:manage"
 	PermMarketManage = "market:manage"
-	PermSSOManage   = "sso:manage"
+	PermSSOManage    = "sso:manage"
 )
 
 // RolePermissions maps roles to permission sets

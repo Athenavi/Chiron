@@ -4,6 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"math"
+	"runtime"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -15,7 +19,16 @@ import (
 var ErrDatabaseNotAvailable = errors.New("database not available")
 
 // DBManager 统一数据库管理器，集中处理所有数据库操作和 nil 检查
-type DBManager struct{}
+type DBManager struct {
+	// 自动调优相关
+	mu                sync.RWMutex
+	lastTuneTime      time.Time
+	tuneInterval      time.Duration
+	minConns          int32
+	maxConns          int32
+	targetUtilization float64 // 目标连接使用率 (0.7 = 70%)
+	autoTunerRunning  bool
+}
 
 // NewDBManager 创建数据库管理器实例
 func NewDBManager() *DBManager {
@@ -112,7 +125,7 @@ func (m *DBManager) FetchOne(ctx context.Context, sql string, args ...interface{
 	}
 
 	row := pool.QueryRow(ctx, sql, args...)
-	
+
 	var values []interface{}
 	err = row.Scan(&values)
 	if err != nil {
@@ -312,4 +325,157 @@ func (m *DBManager) BeginTx(ctx context.Context) (pgx.Tx, error) {
 		return nil, fmt.Errorf("db manager: %w", err)
 	}
 	return pool.Begin(ctx)
+}
+
+// SetTuneInterval 设置自动调优检查间隔
+func (m *DBManager) SetTuneInterval(interval time.Duration) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.tuneInterval = interval
+}
+
+// AutoTuneConnectionPool 根据当前负载自动调整连接池大小
+func (m *DBManager) AutoTuneConnectionPool(ctx context.Context) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if time.Since(m.lastTuneTime) < m.tuneInterval {
+		return nil // 未到调优时间
+	}
+
+	pool, err := m.GetPool()
+	if err != nil {
+		return err
+	}
+
+	stats := pool.Stat()
+	totalConns := stats.TotalConns()
+	usedConns := stats.AcquiredConns()
+
+	if totalConns == 0 {
+		return nil
+	}
+
+	utilization := float64(usedConns) / float64(totalConns)
+
+	slog.Info("connection pool stats",
+		"total", totalConns,
+		"used", usedConns,
+		"utilization", fmt.Sprintf("%.2f%%", utilization*100),
+		"idle", stats.IdleConns(),
+		"max_conns", stats.MaxConns())
+
+	// 动态调整逻辑
+	currentMax := m.maxConns
+	if currentMax == 0 {
+		currentMax = stats.MaxConns()
+	}
+
+	newMax := currentMax
+
+	if utilization > 0.85 {
+		// 使用率过高，增加20%
+		increase := int32(math.Ceil(float64(currentMax) * 0.2))
+		newMax = currentMax + increase
+		if newMax > 200 { // 硬上限
+			newMax = 200
+		}
+		slog.Warn("connection pool under high load, increasing max connections",
+			"from", currentMax, "to", newMax,
+			"cpu_goroutines", runtime.NumGoroutine())
+	} else if utilization < 0.3 && currentMax > m.minConns {
+		// 使用率过低，减少20%
+		decrease := int32(math.Ceil(float64(currentMax-m.minConns) * 0.2))
+		newMax = currentMax - decrease
+		if newMax < m.minConns {
+			newMax = m.minConns
+		}
+		slog.Info("connection pool underutilized, decreasing max connections",
+			"from", currentMax, "to", newMax)
+	}
+
+	if newMax != currentMax {
+		// 注意：pgxpool不支持运行时修改MaxConns
+		// 这里记录日志和监控指标，实际调整需要重启或通过配置热更新
+		slog.Info("connection pool tuning recommendation",
+			"current_max", currentMax,
+			"recommended_max", newMax,
+			"action", "update POSTGRES_MAX_CONNS env var and restart")
+
+		// 记录到监控系统
+		recordTuningRecommendation(newMax, utilization)
+	}
+
+	m.lastTuneTime = time.Now()
+	return nil
+}
+
+// StartAutoTuner 启动定期自动调优协程
+func (m *DBManager) StartAutoTuner(ctx context.Context) {
+	m.mu.Lock()
+	if m.autoTunerRunning {
+		m.mu.Unlock()
+		return
+	}
+	m.autoTunerRunning = true
+	m.mu.Unlock()
+
+	if m.tuneInterval == 0 {
+		m.tuneInterval = 5 * time.Minute // 默认5分钟
+	}
+
+	go func() {
+		ticker := time.NewTicker(m.tuneInterval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				m.mu.Lock()
+				m.autoTunerRunning = false
+				m.mu.Unlock()
+				slog.Info("connection pool auto-tuner stopped")
+				return
+			case <-ticker.C:
+				if err := m.AutoTuneConnectionPool(ctx); err != nil {
+					slog.Error("auto-tune connection pool failed", "error", err)
+				}
+			}
+		}
+	}()
+
+	slog.Info("connection pool auto-tuner started", "interval", m.tuneInterval)
+}
+
+// GetPoolStats 获取连接池统计信息
+func (m *DBManager) GetPoolStats() map[string]interface{} {
+	pool, err := m.GetPool()
+	if err != nil {
+		return map[string]interface{}{"error": err.Error()}
+	}
+
+	stats := pool.Stat()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return map[string]interface{}{
+		"acquired_conns":      stats.AcquiredConns(),
+		"idle_conns":          stats.IdleConns(),
+		"total_conns":         stats.TotalConns(),
+		"max_conns":           stats.MaxConns(),
+		"empty_acquire_count": stats.EmptyAcquireCount(),
+		"acquire_duration_ms": stats.AcquireDuration().Milliseconds(),
+		"tune_interval":       m.tuneInterval.String(),
+		"last_tune_time":      m.lastTuneTime,
+		"auto_tuner_running":  m.autoTunerRunning,
+	}
+}
+
+// recordTuningRecommendation 记录调优建议到监控系统
+func recordTuningRecommendation(newMax int32, utilization float64) {
+	// 可以将建议写入监控指标或配置文件
+	slog.Debug("pool tuning recommendation recorded",
+		"recommended_max", newMax,
+		"current_utilization", utilization,
+		"timestamp", time.Now().Unix())
 }

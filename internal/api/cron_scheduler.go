@@ -177,13 +177,13 @@ func (s *CronScheduler) runAgent(ctx context.Context, tenantID, userID, agentID,
 		return fmt.Errorf("load agent: %w", err)
 	}
 	body := map[string]interface{}{
-		"task":          prompt,
-		"session_id":    fmt.Sprintf("cron_%s_%d", agentID, time.Now().Unix()),
-		"agent_name":    name,
-		"system_prompt": systemPrompt,
-		"tools":         tools,
-		"llm_config":    llmConfig,
-		"max_turns":     maxTurns,
+		"task":            prompt,
+		"session_id":      fmt.Sprintf("cron_%s_%d", agentID, time.Now().Unix()),
+		"agent_name":      name,
+		"system_prompt":   systemPrompt,
+		"tools":           tools,
+		"llm_config":      llmConfig,
+		"max_turns":       maxTurns,
 		"timeout_seconds": timeout,
 	}
 	var resp map[string]interface{}

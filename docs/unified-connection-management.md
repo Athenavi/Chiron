@@ -99,7 +99,7 @@ USE_UNIFIED_REDIS_CLIENT=false  # 或 unset
 ```json
 POST /v1/internal/db/query
 {
-  "sql": "SELECT * FROM users WHERE tenant_id = $1",
+  "sql": "SELECT id, name, email FROM users WHERE tenant_id = $1",
   "args": ["tenant-123"]
 }
 ```
@@ -147,7 +147,8 @@ POST /v1/internal/redis/set
 from app.db import get_pool
 
 pool = get_pool()  # 自动根据 USE_UNIFIED_DB_CLIENT 选择模式
-rows = await pool.fetch("SELECT * FROM users")
+# P0-3: 明确指定需要的列，避免 SELECT *
+rows = await pool.fetch("SELECT id, name, email FROM users")
 ```
 
 ```python

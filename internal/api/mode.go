@@ -130,9 +130,9 @@ func (pm *PermissionManager) Reject(taskID string) bool {
 // ── HTTP Handlers ──
 
 type ModeHandler struct {
-	store    *ModeStore
-	permMgr  *PermissionManager
-	hub      *broadcast.Hub
+	store   *ModeStore
+	permMgr *PermissionManager
+	hub     *broadcast.Hub
 }
 
 func NewModeHandler(store *ModeStore, permMgr *PermissionManager, hub *broadcast.Hub) *ModeHandler {

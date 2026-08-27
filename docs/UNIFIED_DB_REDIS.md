@@ -68,7 +68,8 @@ from app.db import get_pool
 
 # 旧代码无需修改,get_pool() 自动路由
 pool = get_pool()
-rows = await pool.fetch("SELECT * FROM users WHERE id = $1", user_id)
+# P0-3: 明确指定需要的列，避免 SELECT *
+rows = await pool.fetch("SELECT id, name, email FROM users WHERE id = $1", user_id)
 ```
 
 ### 直接使用统一客户端
@@ -78,9 +79,9 @@ from app.db_client import get_db_client
 
 db = get_db_client()
 
-# 查询
-user = await db.fetch_one("SELECT * FROM users WHERE id = $1", [user_id])
-users = await db.fetch_all("SELECT * FROM users")
+# 查询 - P0-3: 明确指定需要的列
+user = await db.fetch_one("SELECT id, name, email FROM users WHERE id = $1", [user_id])
+users = await db.fetch_all("SELECT id, name, email FROM users")
 
 # 写入
 affected = await db.execute("UPDATE users SET name = $1 WHERE id = $2", ["New Name", user_id])

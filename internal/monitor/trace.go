@@ -56,17 +56,17 @@ var traceCounter atomic.Uint64
 
 // Span represents a single operation within a trace.
 type Span struct {
-	TraceID    TraceID              `json:"trace_id"`
-	SpanID     SpanID               `json:"span_id"`
-	ParentID   SpanID               `json:"parent_span_id,omitempty"`
-	Name       string               `json:"name"`
-	Kind       string               `json:"kind"` // internal / server / client
-	StartTime  time.Time            `json:"start_time"`
-	EndTime    time.Time            `json:"end_time,omitempty"`
+	TraceID    TraceID                `json:"trace_id"`
+	SpanID     SpanID                 `json:"span_id"`
+	ParentID   SpanID                 `json:"parent_span_id,omitempty"`
+	Name       string                 `json:"name"`
+	Kind       string                 `json:"kind"` // internal / server / client
+	StartTime  time.Time              `json:"start_time"`
+	EndTime    time.Time              `json:"end_time,omitempty"`
 	Tags       map[string]interface{} `json:"tags,omitempty"`
-	Events     []SpanEvent          `json:"events,omitempty"`
-	StatusCode string               `json:"status_code,omitempty"` // OK / ERROR
-	StatusMsg  string               `json:"status_msg,omitempty"`
+	Events     []SpanEvent            `json:"events,omitempty"`
+	StatusCode string                 `json:"status_code,omitempty"` // OK / ERROR
+	StatusMsg  string                 `json:"status_msg,omitempty"`
 	mu         sync.Mutex
 }
 

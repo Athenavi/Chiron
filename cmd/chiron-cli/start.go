@@ -1,4 +1,4 @@
-﻿package main
+package main
 
 import (
 	"fmt"
@@ -146,4 +146,3 @@ func startMicroservices(exePath string, baseEnv []string) error {
 
 	return nil
 }
-

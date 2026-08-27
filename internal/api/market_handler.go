@@ -19,15 +19,15 @@ import (
 
 // MarketItem 对应 ent_catalog_items 表（市场目录条目：plugin/skill）。
 type MarketItem struct {
-	ID         string          `json:"id"`
-	Type       string          `json:"type"` // plugin / skill
-	Name       string          `json:"name"`
-	Version    string          `json:"version"`
-	Manifest   json.RawMessage `json:"manifest"`
-	Status     string          `json:"status"` // draft / published / retired
-	CreatedBy  *string         `json:"created_by,omitempty"`
-	CreatedAt  time.Time       `json:"created_at"`
-	UpdatedAt  time.Time       `json:"updated_at"`
+	ID        string          `json:"id"`
+	Type      string          `json:"type"` // plugin / skill
+	Name      string          `json:"name"`
+	Version   string          `json:"version"`
+	Manifest  json.RawMessage `json:"manifest"`
+	Status    string          `json:"status"` // draft / published / retired
+	CreatedBy *string         `json:"created_by,omitempty"`
+	CreatedAt time.Time       `json:"created_at"`
+	UpdatedAt time.Time       `json:"updated_at"`
 }
 
 // MarketGrant 对应 ent_catalog_installs 表（租户安装/启用记录）。

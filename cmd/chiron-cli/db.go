@@ -1,4 +1,4 @@
-﻿package main
+package main
 
 import (
 	"context"
@@ -9,16 +9,13 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"os/user"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/athenavi/chiron/config"
 	"github.com/athenavi/chiron/internal/db"
 	"github.com/spf13/cobra"
-	"github.com/xo/dburl"
 )
 
 var dbCmd = &cobra.Command{
@@ -34,8 +31,8 @@ var dbStatusCmd = &cobra.Command{
 }
 
 var dbMigrateCmd = &cobra.Command{
-	Use:   "migrate",
-	RunE:  runDBMigrate,
+	Use:  "migrate",
+	RunE: runDBMigrate,
 }
 
 func init() {

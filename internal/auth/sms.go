@@ -214,7 +214,7 @@ func (s *HTTPSmsSender) sendTencent(ctx context.Context, cfg *SmsConfig, phone, 
 	tel := strings.TrimPrefix(phone, "+")
 	payload, err := json.Marshal(map[string]any{
 		"PhoneNumberSet":   []string{tel},
-		"SmsSdkAppId":     cfg.AccessKeyID, // 腾讯云侧 AppID 复用 AccessKeyID 字段传递
+		"SmsSdkAppId":      cfg.AccessKeyID, // 腾讯云侧 AppID 复用 AccessKeyID 字段传递
 		"SignName":         cfg.SignName,
 		"TemplateId":       cfg.TemplateID,
 		"TemplateParamSet": []string{code},

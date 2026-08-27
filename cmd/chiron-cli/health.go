@@ -1,4 +1,4 @@
-﻿package main
+package main
 
 import (
 	"fmt"
@@ -65,4 +65,3 @@ func checkServiceHealth(client *http.Client, addr, service string) {
 		fmt.Printf("%s: status %d\n", service, resp.StatusCode)
 	}
 }
-

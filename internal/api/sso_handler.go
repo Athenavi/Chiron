@@ -98,7 +98,7 @@ func sanitizeProvider(p *ssoProvider) map[string]any {
 
 type scanner interface{ Scan(dest ...any) error }
 
-// 可空列统一 COALESCE 为空串：未覆盖（''）即"用模板缺省值"，语义与 OAuth2 端点覆盖一致。
+// 可空列统一 COALESCE 为空串：未覆盖（”）即"用模板缺省值"，语义与 OAuth2 端点覆盖一致。
 const ssoProviderColumns = `id, tenant_id, name, COALESCE(issuer, ''), client_id, client_secret_enc,
        scopes, enabled, auto_provision, role_mapping,
        COALESCE(protocol, 'oidc'), COALESCE(provider_type, 'custom'),
@@ -147,13 +147,13 @@ func scanSSOProvider(row scanner) (*ssoProvider, error) {
 // SSOHandler 负责 OIDC/OAuth2 SSO 公开流程、用户自助绑定与管理端 CRUD。
 // db 抽象为 entQuerier 便于测试注入 fake；exchanger 抽象 IdP 交互。
 type SSOHandler struct {
-	auth       *auth.Authenticator
-	cfg        *config.Config
-	db         entQuerier
-	exchanger  auth.OIDCExchanger // OIDC 协议交换器（go-oidc）
-	oauth2     auth.OIDCExchanger // OAuth2 协议交换器（github/微信/钉钉/飞书/qq）
-	codec      *auth.StateCodec
-	encKey     []byte
+	auth        *auth.Authenticator
+	cfg         *config.Config
+	db          entQuerier
+	exchanger   auth.OIDCExchanger // OIDC 协议交换器（go-oidc）
+	oauth2      auth.OIDCExchanger // OAuth2 协议交换器（github/微信/钉钉/飞书/qq）
+	codec       *auth.StateCodec
+	encKey      []byte
 	redirectURL string // OAuth2 redirect_uri（授权回调地址）
 	successURL  string // 登录成功后 302 回前端的目标
 	bindURL     string // 绑定成功后 302 回前端的目标

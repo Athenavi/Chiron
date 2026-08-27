@@ -1,4 +1,4 @@
-﻿package main
+package main
 
 import (
 	"context"
@@ -10,10 +10,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/athenavi/chiron/config"
 	"github.com/athenavi/chiron/internal/api"
 	"github.com/athenavi/chiron/internal/auth"
 	"github.com/athenavi/chiron/internal/broadcast"
-	"github.com/athenavi/chiron/config"
 	"github.com/athenavi/chiron/internal/db"
 	"github.com/athenavi/chiron/internal/engine"
 	"github.com/athenavi/chiron/internal/monitor"
@@ -248,6 +248,15 @@ func main() {
 
 		// ── Background Maintenance ──
 		api.StartBlacklistCleaner(ctx)
+		// P0-1: 启动JWT黑名单跨实例同步
+		api.StartBlacklistPubSub(ctx)
+
+		// P1-1: 启动数据库连接池自动调优（每5分钟检查一次）
+		if db.GlobalDBManager != nil {
+			db.GlobalDBManager.SetTuneInterval(5 * time.Minute)
+			db.GlobalDBManager.StartAutoTuner(ctx)
+			slog.Info("database connection pool auto-tuner started")
+		}
 
 		router = api.NewGatewayRouter(cfg, pythonClient, eventHub, sessionMgr, atomicStore, atomicRedis, rpaHub)
 	}

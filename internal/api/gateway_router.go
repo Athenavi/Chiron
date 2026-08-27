@@ -8,8 +8,8 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"path/filepath"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -238,6 +238,7 @@ func NewGatewayRouter(
 			MonitoringMiddleware,
 			requestIDHeader,
 			realIPHeader(cfg.TrustedProxyCIDRs),
+			SanitizeResponseMiddleware, // P0-4: 敏感信息脱敏
 		)
 	}
 

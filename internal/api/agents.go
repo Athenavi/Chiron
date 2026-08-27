@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"context"
@@ -69,12 +69,12 @@ type AgentSession struct {
 // ── 预置 Agent 播种（DB agents 表为空时插入内置 3 类） ──
 
 type presetAgent struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	Prompt      string         `json:"prompt"`
+	Name        string           `json:"name"`
+	Description string           `json:"description"`
+	Prompt      string           `json:"prompt"`
 	Tools       []map[string]any `json:"tools"`
-	LLM         map[string]any `json:"llm"`
-	Turns       int            `json:"turns"`
+	LLM         map[string]any   `json:"llm"`
+	Turns       int              `json:"turns"`
 }
 
 // loadPresetAgents 从 configs/preset_agents.json 加载预置 Agent 定义。

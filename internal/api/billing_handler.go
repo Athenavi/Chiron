@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"context"
@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/athenavi/chiron/config"
 	"github.com/athenavi/chiron/internal/auth"
 	"github.com/athenavi/chiron/internal/billing"
-	"github.com/athenavi/chiron/config"
 	"github.com/athenavi/chiron/internal/db"
 )
 
@@ -149,10 +149,10 @@ func (h *BillingHandler) GetUsage(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	type dailyUsage struct {
-		Day           string `json:"day"`
-		TxCount       int    `json:"tx_count"`
-		CreditsSpent  int    `json:"credits_spent"`
-		CreditsAdded  int    `json:"credits_added"`
+		Day          string `json:"day"`
+		TxCount      int    `json:"tx_count"`
+		CreditsSpent int    `json:"credits_spent"`
+		CreditsAdded int    `json:"credits_added"`
 	}
 
 	var daily []dailyUsage
@@ -179,10 +179,10 @@ func (h *BillingHandler) GetUsage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	OK(w, map[string]interface{}{
-		"daily":        daily,
-		"total_spent":  totalSpent,
-		"total_added":  totalAdded,
-		"period_days":  30,
+		"daily":       daily,
+		"total_spent": totalSpent,
+		"total_added": totalAdded,
+		"period_days": 30,
 	})
 }
 
@@ -461,13 +461,13 @@ func (h *BillingHandler) WechatCallback(w http.ResponseWriter, r *http.Request) 
 // paymentResponse 序列化订单（不暴露内部字段）。
 func (h *BillingHandler) paymentResponse(p *billing.Payment) map[string]interface{} {
 	resp := map[string]interface{}{
-		"id":          p.ID,
-		"channel":     p.Channel,
-		"credits":     p.Credits,
+		"id":           p.ID,
+		"channel":      p.Channel,
+		"credits":      p.Credits,
 		"amount_cents": p.AmountCents,
-		"currency":    p.Currency,
-		"status":      p.Status,
-		"created_at":  p.CreatedAt,
+		"currency":     p.Currency,
+		"status":       p.Status,
+		"created_at":   p.CreatedAt,
 	}
 	if p.QRCode != "" {
 		resp["qr_code"] = p.QRCode
@@ -518,7 +518,9 @@ func (h *BillingHandler) PayPalCapture(w http.ResponseWriter, r *http.Request) {
 		Unauthorized(w, ErrAuthRequired)
 		return
 	}
-	var body struct{ OrderID string `json:"order_id"` }
+	var body struct {
+		OrderID string `json:"order_id"`
+	}
 	if err := DecodeJSON(w, r, &body); err != nil || body.OrderID == "" {
 		BadRequest(w, "order_id required")
 		return
@@ -581,7 +583,9 @@ func (h *BillingHandler) payPalAccessToken(ctx context.Context) (string, error) 
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		return "", fmt.Errorf("paypal token: HTTP %d: %s", resp.StatusCode, string(bodyBytes))
 	}
-	var r struct{ AccessToken string `json:"access_token"` }
+	var r struct {
+		AccessToken string `json:"access_token"`
+	}
 	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
 		return "", fmt.Errorf("paypal token decode: %w", err)
 	}
@@ -604,8 +608,8 @@ func (h *BillingHandler) payPalCreateOrder(ctx context.Context, credits int, amo
 			"paypal": map[string]interface{}{
 				"experience_context": map[string]string{
 					"payment_method_preference": "IMMEDIATE_PAYMENT_REQUIRED",
-					"return_url":               fmt.Sprintf("%s/billing?success=1&provider=paypal", h.firstOrigin()),
-					"cancel_url":               fmt.Sprintf("%s/billing?canceled=1", h.firstOrigin()),
+					"return_url":                fmt.Sprintf("%s/billing?success=1&provider=paypal", h.firstOrigin()),
+					"cancel_url":                fmt.Sprintf("%s/billing?canceled=1", h.firstOrigin()),
 				},
 			},
 		},
@@ -626,7 +630,7 @@ func (h *BillingHandler) payPalCreateOrder(ctx context.Context, credits int, amo
 		return "", "", fmt.Errorf("paypal create: HTTP %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 	var r struct {
-		ID    string `json:"id"`
+		ID    string                       `json:"id"`
 		Links []struct{ Rel, Href string } `json:"links"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
@@ -666,8 +670,3 @@ func (h *BillingHandler) payPalCaptureOrder(ctx context.Context, orderID string)
 	}
 	return r, nil
 }
-
-
-
-
-

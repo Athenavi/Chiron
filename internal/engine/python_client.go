@@ -25,7 +25,8 @@ type PythonClient struct {
 	internalToken string // Go↔Python 共享内部 token，用于网关代理身份校验
 
 	// 熔断：每个地址的冷却截止时间（Unix 秒），0 = 正常
-	cooldownUntil []int64}
+	cooldownUntil []int64
+}
 
 // NewPythonClient creates a client for the Python engine HTTP API.
 // Accepts one or more base URLs (comma-separated or variadic).
@@ -130,14 +131,14 @@ func (c *PythonClient) pickAddress() string {
 
 // PythonRunRequest matches the Python engine's Pydantic RunRequest model.
 type PythonRunRequest struct {
-	SessionID    string            `json:"session_id"`
-	UserID       string            `json:"user_id"`
-	Content      string            `json:"content"`
-	SystemPrompt string            `json:"system_prompt"`
-	History      []PythonMessage   `json:"history"`
-	Tools        []PythonToolDef   `json:"tools"`
-	LLMConfig    *PythonLLMConfig  `json:"llm_config,omitempty"`
-	MaxTurns     int               `json:"max_turns"`
+	SessionID    string           `json:"session_id"`
+	UserID       string           `json:"user_id"`
+	Content      string           `json:"content"`
+	SystemPrompt string           `json:"system_prompt"`
+	History      []PythonMessage  `json:"history"`
+	Tools        []PythonToolDef  `json:"tools"`
+	LLMConfig    *PythonLLMConfig `json:"llm_config,omitempty"`
+	MaxTurns     int              `json:"max_turns"`
 }
 
 // PythonMessage is a message in the conversation history.

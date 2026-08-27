@@ -75,13 +75,13 @@ type entCostSummary struct {
 }
 
 type entGroupCostRow struct {
-	ID           string     `json:"id"`
-	UserID       string     `json:"user_id"`
-	SessionID    *string    `json:"session_id"`
-	InputTokens  int64      `json:"input_tokens"`
-	OutputTokens int64      `json:"output_tokens"`
-	CostCents    int64      `json:"cost_cents"`
-	CreatedAt    time.Time  `json:"created_at"`
+	ID           string    `json:"id"`
+	UserID       string    `json:"user_id"`
+	SessionID    *string   `json:"session_id"`
+	InputTokens  int64     `json:"input_tokens"`
+	OutputTokens int64     `json:"output_tokens"`
+	CostCents    int64     `json:"cost_cents"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 type entGroupCost struct {

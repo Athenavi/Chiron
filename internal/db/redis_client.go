@@ -450,17 +450,17 @@ func (f *FailoverRedis) Publish(ctx context.Context, channel string, message int
 
 // RedisConfig holds the configuration for Redis connection.
 type RedisConfig struct {
-	Mode     string   `json:"mode"`     // "single", "cluster", "sentinel"
-	
+	Mode string `json:"mode"` // "single", "cluster", "sentinel"
+
 	// Single mode config
-	Addr     string   `json:"addr"`
-	Password string   `json:"password"`
-	DB       int      `json:"db"`
-	PoolSize int      `json:"pool_size"`
-	
+	Addr     string `json:"addr"`
+	Password string `json:"password"`
+	DB       int    `json:"db"`
+	PoolSize int    `json:"pool_size"`
+
 	// Cluster mode config
-	Addrs    []string `json:"addrs"`
-	
+	Addrs []string `json:"addrs"`
+
 	// Sentinel mode config
 	MasterName    string   `json:"master_name"`
 	SentinelAddrs []string `json:"sentinel_addrs"`

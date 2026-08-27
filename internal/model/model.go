@@ -65,7 +65,7 @@ type ToolCall struct {
 type Task struct {
 	ID        string    `json:"id"`
 	UserID    string    `json:"user_id"`
-	Type      string    `json:"type"` // llm / tool / batch
+	Type      string    `json:"type"`   // llm / tool / batch
 	Status    string    `json:"status"` // pending / running / completed / failed
 	Payload   string    `json:"payload"`
 	Result    string    `json:"result"`

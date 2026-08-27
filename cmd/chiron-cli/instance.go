@@ -1,4 +1,4 @@
-﻿package main
+package main
 
 import (
 	"fmt"
@@ -116,4 +116,3 @@ func runInstanceRemove(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Removed instance: %s\n", name)
 	return nil
 }
-

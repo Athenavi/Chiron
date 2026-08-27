@@ -27,15 +27,15 @@ import (
 //  4. 验证码尝试次数：错 5 次作废，需重新获取；登录失败计入 IP 失败计数。
 
 const (
-	smsMaxTries         = 5                // 验证码最大尝试次数，超过作废
-	smsCodeKeyPrefix    = "sms:code:"      // 验证码
-	smsTriesKeyPrefix   = "sms:tries:"     // 尝试计数
-	smsCoolKeyPrefix    = "sms:cool:"      // 发送冷却标记
-	smsDailyKeyPrefix   = "sms:day:"       // 每日发送计数
-	smsCodeDigits       = 6                // 验证码位数
-	smsDailyWindow      = 24 * time.Hour   // 每日计数窗口
-	smsMaxDailyLimit    = 100              // 每日上限配置上限
-	smsMaxCodeTTL       = 15 * time.Minute // 验证码有效期上限
+	smsMaxTries       = 5                // 验证码最大尝试次数，超过作废
+	smsCodeKeyPrefix  = "sms:code:"      // 验证码
+	smsTriesKeyPrefix = "sms:tries:"     // 尝试计数
+	smsCoolKeyPrefix  = "sms:cool:"      // 发送冷却标记
+	smsDailyKeyPrefix = "sms:day:"       // 每日发送计数
+	smsCodeDigits     = 6                // 验证码位数
+	smsDailyWindow    = 24 * time.Hour   // 每日计数窗口
+	smsMaxDailyLimit  = 100              // 每日上限配置上限
+	smsMaxCodeTTL     = 15 * time.Minute // 验证码有效期上限
 )
 
 // smsCodeStore 抽象验证码存取（生产 Redis，测试内存 fake）。
@@ -621,35 +621,35 @@ func (h *SmsHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 
 func (h *SmsHandler) configResponse(row *smsConfigRow, exists bool) map[string]any {
 	return map[string]any{
-		"provider":             row.Provider,
-		"sign_name":            row.SignName,
-		"template_id":          row.TemplateID,
-		"access_key_id":        row.AccessKeyID,
-		"secret":               maskedSecret,
-		"endpoint":             row.Endpoint,
-		"code_ttl_seconds":     row.CodeTTLSeconds,
+		"provider":              row.Provider,
+		"sign_name":             row.SignName,
+		"template_id":           row.TemplateID,
+		"access_key_id":         row.AccessKeyID,
+		"secret":                maskedSecret,
+		"endpoint":              row.Endpoint,
+		"code_ttl_seconds":      row.CodeTTLSeconds,
 		"send_interval_seconds": row.SendIntervalSecs,
-		"daily_limit":          row.DailyLimit,
-		"login_enabled":        row.LoginEnabled,
-		"auto_register":        row.AutoRegister,
-		"enabled":              row.Enabled,
-		"exists":               exists,
+		"daily_limit":           row.DailyLimit,
+		"login_enabled":         row.LoginEnabled,
+		"auto_register":         row.AutoRegister,
+		"enabled":               row.Enabled,
+		"exists":                exists,
 	}
 }
 
 type updateSmsConfigRequest struct {
-	Provider          *string `json:"provider"`
-	SignName          *string `json:"sign_name"`
-	TemplateID        *string `json:"template_id"`
-	AccessKeyID       *string `json:"access_key_id"`
-	Secret            *string `json:"secret"` // 空串/脱敏占位 = 保留原值
-	Endpoint          *string `json:"endpoint"`
-	CodeTTLSeconds    *int    `json:"code_ttl_seconds"`
-	SendIntervalSecs  *int    `json:"send_interval_seconds"`
-	DailyLimit        *int    `json:"daily_limit"`
-	LoginEnabled      *bool   `json:"login_enabled"`
-	AutoRegister      *bool   `json:"auto_register"`
-	Enabled           *bool   `json:"enabled"`
+	Provider         *string `json:"provider"`
+	SignName         *string `json:"sign_name"`
+	TemplateID       *string `json:"template_id"`
+	AccessKeyID      *string `json:"access_key_id"`
+	Secret           *string `json:"secret"` // 空串/脱敏占位 = 保留原值
+	Endpoint         *string `json:"endpoint"`
+	CodeTTLSeconds   *int    `json:"code_ttl_seconds"`
+	SendIntervalSecs *int    `json:"send_interval_seconds"`
+	DailyLimit       *int    `json:"daily_limit"`
+	LoginEnabled     *bool   `json:"login_enabled"`
+	AutoRegister     *bool   `json:"auto_register"`
+	Enabled          *bool   `json:"enabled"`
 }
 
 // UpdateConfig PUT /v1/ent/sms/config（单租户单行 upsert）。

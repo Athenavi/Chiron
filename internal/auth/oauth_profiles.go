@@ -29,13 +29,13 @@ const (
 
 // Provider 类型常量。
 const (
-	ProviderGoogle  = "google"
-	ProviderGitHub  = "github"
-	ProviderWeChat  = "wechat"
+	ProviderGoogle   = "google"
+	ProviderGitHub   = "github"
+	ProviderWeChat   = "wechat"
 	ProviderDingTalk = "dingtalk"
-	ProviderFeishu  = "feishu"
-	ProviderQQ      = "qq"
-	ProviderCustom  = "custom"
+	ProviderFeishu   = "feishu"
+	ProviderQQ       = "qq"
+	ProviderCustom   = "custom"
 )
 
 // providerProfiles 内置模板（端点以各平台公开文档为准）。

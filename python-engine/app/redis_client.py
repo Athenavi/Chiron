@@ -13,8 +13,10 @@ Usage:
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
+import threading
 from typing import Any, Optional
 
 import redis.asyncio as aioredis
@@ -28,6 +30,7 @@ USE_UNIFIED = os.getenv("USE_UNIFIED_REDIS_CLIENT", "false").lower() == "true"
 
 _redis_instance: Optional[aioredis.Redis] = None
 _unified_client = None
+_redis_lock = asyncio.Lock()  # P0-2: Thread-safe initialization
 
 
 def _get_unified_client():
@@ -40,7 +43,7 @@ def _get_unified_client():
 
 
 async def get_redis() -> aioredis.Redis:
-    """Get Redis connection (direct or unified)."""
+    """Get Redis connection (direct or unified) with thread-safe initialization."""
     global _redis_instance
     
     if USE_UNIFIED:
@@ -49,15 +52,33 @@ async def get_redis() -> aioredis.Redis:
             raise RuntimeError("Unified Redis client not initialized")
         return _UnifiedRedisWrapper(client)
     
+    # Double-checked locking pattern for thread safety
     if _redis_instance is None:
-        if not settings.redis_url:
-            raise RuntimeError("Redis URL not configured")
-        _redis_instance = aioredis.from_url(
-            settings.redis_url,
-            decode_responses=True,
-            max_connections=settings.redis_pool_size,
-        )
-        logger.info("Redis connected directly")
+        async with _redis_lock:
+            # Re-check after acquiring lock
+            if _redis_instance is None:
+                if not settings.redis_url:
+                    raise RuntimeError("Redis URL not configured")
+                
+                # P0-2: Add timeout parameters to prevent hanging connections
+                redis_url_with_timeout = settings.redis_url
+                if '?' not in redis_url_with_timeout:
+                    redis_url_with_timeout += "?socket_timeout=5&socket_connect_timeout=3&retry_on_timeout=true"
+                else:
+                    # Ensure timeout params are present
+                    if 'socket_timeout' not in redis_url_with_timeout:
+                        redis_url_with_timeout += "&socket_timeout=5"
+                    if 'socket_connect_timeout' not in redis_url_with_timeout:
+                        redis_url_with_timeout += "&socket_connect_timeout=3"
+                
+                _redis_instance = aioredis.from_url(
+                    redis_url_with_timeout,
+                    decode_responses=True,
+                    max_connections=settings.redis_pool_size,
+                    socket_keepalive=True,  # Enable TCP keepalive
+                )
+                logger.info("Redis connected with timeouts: %s (pool=%d)", 
+                           settings.redis_url, settings.redis_max_connections)
     
     return _redis_instance
 

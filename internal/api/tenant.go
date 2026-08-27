@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"context"
@@ -11,7 +11,7 @@ type contextKey string
 
 const (
 	CtxKeyTenantID contextKey = "tenant_id"
-	CtxKeyUserID contextKey = "user_id"
+	CtxKeyUserID   contextKey = "user_id"
 )
 
 func TenantMiddleware(next http.Handler) http.Handler {

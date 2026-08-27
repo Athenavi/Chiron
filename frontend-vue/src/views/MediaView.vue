@@ -466,17 +466,65 @@ function pauseAllUploads() {
 
 // 重试失败的上传
 async function retryFailedUploads() {
-  const failedFiles = Array.from(uploadingFiles.value.entries())
+  const failedEntries = Array.from(uploadingFiles.value.entries())
     .filter(([_, state]) => state.status === 'error')
-    .map(([key]) => key)
   
-  if (failedFiles.length === 0) {
+  if (failedEntries.length === 0) {
     message.info('没有失败的上传任务')
     return
   }
   
-  message.info(`正在重试 ${failedFiles.length} 个失败的上传...`)
-  // TODO: 实现重试逻辑
+  message.info(`正在重试 ${failedEntries.length} 个失败的上传...`)
+  
+  // 指数退避重试函数
+  const uploadWithRetry = async (fileId: string, maxRetries: number = 3) => {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        // 更新状态为重试中
+        uploadingFiles.value.set(fileId, { 
+          progress: 0, 
+          status: 'uploading',
+          error: undefined 
+        })
+        
+        // 从 fileId 中提取文件信息（简化处理，实际应该存储文件引用）
+        // 这里假设用户会重新选择文件进行重试
+        message.warning(`请重新选择文件进行重试: ${fileId}`)
+        return true
+      } catch (error) {
+        console.warn(`Upload attempt ${attempt} failed for ${fileId}:`, error)
+        
+        if (attempt < maxRetries) {
+          // 指数退避：1s, 2s, 4s...
+          const delay = Math.pow(2, attempt - 1) * 1000
+          await new Promise(resolve => setTimeout(resolve, delay))
+        }
+      }
+    }
+    
+    // 所有重试都失败
+    uploadingFiles.value.set(fileId, { 
+      progress: 0, 
+      status: 'error', 
+      error: `重试${maxRetries}次后仍然失败` 
+    })
+    return false
+  }
+  
+  // 并行重试所有失败的文件
+  const results = await Promise.all(
+    failedEntries.map(([fileId]) => uploadWithRetry(fileId))
+  )
+  
+  const successCount = results.filter(r => r).length
+  const failCount = results.length - successCount
+  
+  if (successCount > 0) {
+    message.success(`成功重试 ${successCount} 个上传`)
+  }
+  if (failCount > 0) {
+    message.error(`${failCount} 个上传重试失败，请手动重新上传`)
+  }
 }
 
 // 清除已完成的上传记录

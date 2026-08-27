@@ -13,12 +13,12 @@ import (
 
 // Activity 聚合最近活动（跨工作台），供前端 WorkstationNav 使用。
 type Activity struct {
-	Workstation string `json:"workstation"`   // dialogue / agent / workflow / skill / knowledge / plugin
-	Route       string `json:"route"`         // 跳转路由
-	Title       string `json:"title"`         // 活动标题
-	Status      string `json:"status"`        // 原始状态
-	StatusText  string `json:"status_text"`   // 展示文案
-	Timestamp   int64  `json:"timestamp"`     // Unix 毫秒
+	Workstation string `json:"workstation"` // dialogue / agent / workflow / skill / knowledge / plugin
+	Route       string `json:"route"`       // 跳转路由
+	Title       string `json:"title"`       // 活动标题
+	Status      string `json:"status"`      // 原始状态
+	StatusText  string `json:"status_text"` // 展示文案
+	Timestamp   int64  `json:"timestamp"`   // Unix 毫秒
 }
 
 func activityStatusText(status string) string {
@@ -71,17 +71,17 @@ func handleActivities(w http.ResponseWriter, r *http.Request) {
 	// Single combined query: UNION ALL across all three tables
 	// Each sub-query returns (workstation, route, title, status, ts)
 	const combinedSQL = `
-		SELECT * FROM (
+		SELECT workstation, route, title, status, ts FROM (
 			SELECT 'agent'::text as workstation, '/agents'::text as route, COALESCE(name,'') as title, status, created_at as ts FROM agent_sessions
 				WHERE tenant_id = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT $3
 		) AS agents_sub
 		UNION ALL
-		SELECT * FROM (
+		SELECT workstation, route, title, status, ts FROM (
 			SELECT 'dialogue'::text, '/chat'::text, COALESCE(title,''), 'active'::text, updated_at FROM sessions
 				WHERE tenant_id = $1 AND user_id = $2 ORDER BY updated_at DESC LIMIT $3
 		) AS sessions_sub
 		UNION ALL
-		SELECT * FROM (
+		SELECT workstation, route, title, status, ts FROM (
 			SELECT 'knowledge'::text, '/knowledge'::text, COALESCE(name,''), status, created_at FROM knowledge_documents
 				WHERE tenant_id = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT $3
 		) AS knowledge_sub

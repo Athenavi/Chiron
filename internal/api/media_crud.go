@@ -504,7 +504,7 @@ func (h *MediaHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	for _, aid := range ids {
 		if key, ok := keys[aid]; ok && key != "" {
 			if err := h.store.Delete(ctx, key); err != nil {
-			slog.Warn("failed to delete media object", "key", key, "error", err)
+				slog.Warn("failed to delete media object", "key", key, "error", err)
 			}
 		}
 	}
@@ -557,7 +557,7 @@ func (h *MediaHandler) BatchDelete(w http.ResponseWriter, r *http.Request) {
 	for _, id := range allIDs {
 		if key, ok := keys[id]; ok && key != "" {
 			if err := h.store.Delete(r.Context(), key); err != nil {
-			slog.Warn("failed to delete media object", "key", key, "error", err)
+				slog.Warn("failed to delete media object", "key", key, "error", err)
 			}
 		}
 	}

@@ -118,7 +118,40 @@ class _RowDict(dict):
 
 
 async def ensure_tables():
-    """Ensure database tables exist (placeholder for migration)."""
-    # TODO: Implement table check/migration logic
-    logger.info("Table check skipped in unified mode")
+    """确保必要的表存在，不存在则提示需要运行迁移"""
+    pool = get_pool()
+    
+    required_tables = [
+        'users', 'sessions', 'agents', 'conversations', 'messages',
+        'knowledge_bases', 'knowledge_documents', 'knowledge_chunks',
+        'media_assets', 'uploads', 'workflows', 'workflow_instances',
+        'cron_jobs', 'audit_logs', 'billing_records', 'credit_transactions',
+        'payments', 'ent_oidc_providers', 'ent_user_identities',
+        'ent_captcha_config', 'ent_quota_pools', 'ent_quota_allocations',
+    ]
+    
+    try:
+        # 查询所有已存在的表
+        existing = await pool.fetch("""
+            SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_schema = 'public'
+        """)
+        existing_names = {row['table_name'] for row in existing}
+        
+        missing = [t for t in required_tables if t not in existing_names]
+        
+        if missing:
+            logger.warning(
+                f"Missing database tables: {', '.join(missing)}. "
+                f"Please run: alembic upgrade head"
+            )
+            return False
+        
+        logger.info("All required database tables exist")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to check database tables: {e}")
+        return False
 

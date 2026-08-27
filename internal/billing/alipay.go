@@ -22,12 +22,12 @@ import (
 // AlipayClient 对接支付宝开放平台（当面付 trade.precreate + 异步通知验签）。
 // 自研 RSA2 签名，不依赖第三方 SDK。
 type AlipayClient struct {
-	appID       string
-	privateKey  *rsa.PrivateKey
-	publicKey   *rsa.PublicKey // 支付宝公钥（用于响应/回调验签）
-	gateway     string
-	notifyURL   string
-	httpClient  *http.Client
+	appID      string
+	privateKey *rsa.PrivateKey
+	publicKey  *rsa.PublicKey // 支付宝公钥（用于响应/回调验签）
+	gateway    string
+	notifyURL  string
+	httpClient *http.Client
 }
 
 // NewAlipayClient 用 PEM 私钥/公钥构造客户端。gateway 为空时使用生产网关。

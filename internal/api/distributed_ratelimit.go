@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"context"
@@ -16,9 +16,9 @@ type DistributedRateLimiter struct {
 	rdb db.RedisClient
 
 	// 限流配置
-	globalLimit  int // 全局每分钟请求数
-	tenantLimit  int // 每租户每分钟请求数
-	userLimit    int // 每用户每分钟请求数
+	globalLimit int // 全局每分钟请求数
+	tenantLimit int // 每租户每分钟请求数
+	userLimit   int // 每用户每分钟请求数
 }
 
 // NewDistributedRateLimiter 创建分布式限流器
@@ -129,14 +129,14 @@ func DistributedRateLimitMiddleware(limiter *DistributedRateLimiter) func(http.H
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// 提取 tenant_id 与 user_id（多租户隔离键）
-		var tenantID, userID string
-		claims := auth.GetClaims(r.Context())
-		if claims != nil {
-			tenantID = claims.TenantID
-			userID = claims.UserID
-		}
+			var tenantID, userID string
+			claims := auth.GetClaims(r.Context())
+			if claims != nil {
+				tenantID = claims.TenantID
+				userID = claims.UserID
+			}
 
-		allowed, err := limiter.Allow(r.Context(), tenantID, userID)
+			allowed, err := limiter.Allow(r.Context(), tenantID, userID)
 			if err != nil {
 				slog.Warn("限流触发",
 					"error", err,

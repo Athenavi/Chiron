@@ -1,5 +1,4 @@
-﻿package main
-
+package main
 
 import (
 	"fmt"
@@ -97,4 +96,3 @@ func clearState() error {
 	state := &State{Instances: []InstanceState{}}
 	return saveState(state)
 }
-

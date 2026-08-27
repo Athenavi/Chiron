@@ -251,7 +251,7 @@ func (h *SystemHandler) DBQuery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	OK(w, map[string]interface{}{
-		"rows": results,
+		"rows":  results,
 		"count": len(results),
 	})
 }

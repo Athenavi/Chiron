@@ -35,13 +35,13 @@ type EntTenantPolicy struct {
 // EntModelPolicy 对应 ent_model_policies 表（模型白名单与每模型限速）。
 // RoleID 为 nil 表示租户级兜底策略。
 type EntModelPolicy struct {
-	ID               string                    `json:"id"`
-	TenantID         string                    `json:"tenant_id"`
-	RoleID           *string                   `json:"role_id"`
-	AllowedModels    []string                  `json:"allowed_models"`
-	PerModelLimits   map[string]map[string]int `json:"per_model_limits"`
-	CreatedAt        time.Time                 `json:"created_at"`
-	UpdatedAt        time.Time                 `json:"updated_at"`
+	ID             string                    `json:"id"`
+	TenantID       string                    `json:"tenant_id"`
+	RoleID         *string                   `json:"role_id"`
+	AllowedModels  []string                  `json:"allowed_models"`
+	PerModelLimits map[string]map[string]int `json:"per_model_limits"`
+	CreatedAt      time.Time                 `json:"created_at"`
+	UpdatedAt      time.Time                 `json:"updated_at"`
 }
 
 // ── Handler ──────────────────────────────────────────────────────────────

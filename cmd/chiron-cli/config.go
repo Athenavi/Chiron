@@ -1,4 +1,4 @@
-﻿package main
+package main
 
 import (
 	"encoding/json"
@@ -165,4 +165,3 @@ func loadConfig() map[string]interface{} {
 		"LOG_LEVEL":       os.Getenv("LOG_LEVEL"),
 	}
 }
-

@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"bufio"
@@ -25,6 +25,7 @@ type responseWriter struct {
 	bytes   int
 	flusher http.Flusher
 }
+
 // ── JWT 黑名单本地 TTL 缓存（P1 优化：减少热路径每次请求的 Redis 往返）──
 // 正缓存（已拉黑）15 分钟有效；负缓存（未拉黑）仅 30 秒，确保登出撤销
 // 在 ≤30s 内全局生效（多副本仍以 Redis 为最终事实源）。
@@ -100,6 +101,53 @@ func StartBlacklistCleaner(ctx context.Context) {
 	}()
 }
 
+// StartBlacklistPubSub 启动 Redis Pub/Sub 监听器，实现跨实例黑名单同步。
+// 当任一实例将 token 加入黑名单时，通过 Redis channel 广播给所有其他实例。
+func StartBlacklistPubSub(ctx context.Context) {
+	if db.Redis == nil {
+		slog.Warn("Redis not available, JWT blacklist cross-instance sync disabled")
+		return
+	}
+
+	go func() {
+		pubsub := db.Redis.Subscribe(ctx, "jwt:blacklist:sync")
+		defer pubsub.Close()
+
+		ch := pubsub.Channel()
+		slog.Info("JWT blacklist Pub/Sub listener started")
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case msg, ok := <-ch:
+				if !ok {
+					slog.Warn("JWT blacklist Pub/Sub channel closed")
+					return
+				}
+				// 消息格式: "jti"
+				jti := msg.Payload
+				if jti != "" {
+					slog.Debug("received cross-instance blacklist notification", "jti", jti)
+					markJWTBlacklisted(jti)
+				}
+			}
+		}
+	}()
+}
+
+// broadcastBlacklistSync 向其他实例广播 token 黑名单事件
+func broadcastBlacklistSync(jti string) {
+	if db.Redis == nil || jti == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	if err := db.Redis.Publish(ctx, "jwt:blacklist:sync", jti).Err(); err != nil {
+		slog.Warn("failed to broadcast JWT blacklist sync", "jti", jti, "error", err)
+	}
+}
 
 func (rw *responseWriter) WriteHeader(status int) {
 	rw.status = status
@@ -264,43 +312,43 @@ func AuthMiddleware(a *auth.Authenticator) func(http.Handler) http.Handler {
 			}
 
 			// 2. Try X-API-Key header
-		if tokenStr == "" {
-			if key := r.Header.Get("X-API-Key"); key != "" {
-				// Validate API key against PostgreSQL（含 tenant_id 与 revoked 状态校验，多租户隔离）
-				var userID, role, tenantID string
-				keyHash := sha256.Sum256([]byte(key))
-				err := db.GlobalDBManager.QueryRow(r.Context(),
-					`SELECT u.id, u.role, COALESCE(u.tenant_id, '') AS tenant_id
+			if tokenStr == "" {
+				if key := r.Header.Get("X-API-Key"); key != "" {
+					// Validate API key against PostgreSQL（含 tenant_id 与 revoked 状态校验，多租户隔离）
+					var userID, role, tenantID string
+					keyHash := sha256.Sum256([]byte(key))
+					err := db.GlobalDBManager.QueryRow(r.Context(),
+						`SELECT u.id, u.role, COALESCE(u.tenant_id, '') AS tenant_id
 					 FROM users u
 					 JOIN api_keys ak ON ak.user_id = u.id
 					 WHERE ak.key_hash = $1
 					   AND COALESCE(ak.revoked, false) = false
 					   AND (ak.expires_at IS NULL OR ak.expires_at > NOW())`,
-					hex.EncodeToString(keyHash[:])).Scan(&userID, &role, &tenantID)
-				if err == nil {
-				// P1-5: tenant_id 为空直接拒绝，不再回退 DefaultTenantID。
-				// 历史数据中 tenant_id=NULL 的 user 走 DefaultTenantID 会落到默认租户，
-				// 造成跨租户数据访问；多租户部署必须强制每个用户绑定租户。
-				if tenantID == "" {
-					slog.Warn("API key bound to user with null tenant_id, rejecting",
-						"user_id", userID)
-					Unauthorized(w, "user has no tenant binding; contact admin")
+						hex.EncodeToString(keyHash[:])).Scan(&userID, &role, &tenantID)
+					if err == nil {
+						// P1-5: tenant_id 为空直接拒绝，不再回退 DefaultTenantID。
+						// 历史数据中 tenant_id=NULL 的 user 走 DefaultTenantID 会落到默认租户，
+						// 造成跨租户数据访问；多租户部署必须强制每个用户绑定租户。
+						if tenantID == "" {
+							slog.Warn("API key bound to user with null tenant_id, rejecting",
+								"user_id", userID)
+							Unauthorized(w, "user has no tenant binding; contact admin")
+							return
+						}
+						claims := &auth.Claims{
+							UserID:   userID,
+							Role:     role,
+							TenantID: tenantID,
+							Perms:    auth.RolePermissions[role],
+						}
+						ctx := auth.WithClaims(r.Context(), claims)
+						next.ServeHTTP(w, r.WithContext(ctx))
+						return
+					}
+					Unauthorized(w, "invalid API key")
 					return
 				}
-				claims := &auth.Claims{
-					UserID:   userID,
-					Role:     role,
-					TenantID: tenantID,
-					Perms:    auth.RolePermissions[role],
-				}
-				ctx := auth.WithClaims(r.Context(), claims)
-				next.ServeHTTP(w, r.WithContext(ctx))
-				return
 			}
-			Unauthorized(w, "invalid API key")
-			return
-			}
-		}
 
 			if tokenStr == "" {
 				Unauthorized(w, "missing authorization")

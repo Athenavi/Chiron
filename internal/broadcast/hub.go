@@ -90,7 +90,7 @@ func (h *Hub) Publish(event Event) {
 	for _, ch := range h.subs {
 		select {
 		case ch <- event:
-				default:
+		default:
 			// Slow subscriber: spawn goroutine so fast subscribers aren't blocked
 			select {
 			case slowSubSem <- struct{}{}:

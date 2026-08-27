@@ -39,9 +39,9 @@ func (h *AuthHandler) SetCaptchaHandler(c *CaptchaHandler) {
 }
 
 type LoginRequest struct {
-	Email         string `json:"email"`
-	Password      string `json:"password"`
-	CaptchaToken  string `json:"captcha_token"`
+	Email          string `json:"email"`
+	Password       string `json:"password"`
+	CaptchaToken   string `json:"captcha_token"`
 	CaptchaRandstr string `json:"captcha_randstr"`
 }
 
@@ -301,6 +301,8 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		remaining := time.Until(claims.ExpiresAt.Time)
 		if remaining > 0 {
 			db.Redis.Set(r.Context(), "jwt:blacklist:"+claims.ID, "1", remaining)
+			// P0-1: 跨实例同步黑名单
+			broadcastBlacklistSync(claims.ID)
 		}
 	}
 	// 同步本地正缓存，确保本实例后续请求立即拒绝该 token（P1 优化）

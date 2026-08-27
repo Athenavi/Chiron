@@ -1,4 +1,4 @@
-﻿package config
+package config
 
 import (
 	"bufio"
@@ -63,7 +63,7 @@ type Config struct {
 	// Rate Limit
 	RateLimitRPM       int
 	RateLimitFailClose bool
-	RateLimitGlobal    int  // global requests per minute
+	RateLimitGlobal    int // global requests per minute
 
 	// TrustedProxyCIDRs trusted reverse-proxy CIDRs (comma separated).
 	// X-Forwarded-For / X-Real-IP are only honored when the direct peer
@@ -90,9 +90,9 @@ type Config struct {
 	WechatMchPrivateKey   string
 
 	// Agent behavior
-	AgentMaxTurns     int // max LLM-tool turns per run (default 10)
-	AgentMaxTokens    int // max output tokens per LLM call (default 8192)
-	AgentContextLimit int // max messages before pruning (default 20)
+	AgentMaxTurns       int // max LLM-tool turns per run (default 10)
+	AgentMaxTokens      int // max output tokens per LLM call (default 8192)
+	AgentContextLimit   int // max messages before pruning (default 20)
 	AgentMaxConcurrency int // max concurrent agent runs (default 20)
 
 	// Python AI 寮曟搸
@@ -155,11 +155,11 @@ func loadConfig() *Config {
 	loadDotEnv()     // .env file overrides config file
 	loadConfigFile() // JSON config file (lowest priority)
 	cfg := &Config{
-		AppSecret:       getEnv("APP_SECRET", ""),
-		Port:            getEnv("PORT", "8080"),
-		ReadTimeout:     getDuration("READ_TIMEOUT", 10*time.Second),
-		WriteTimeout:    getDuration("WRITE_TIMEOUT", 60*time.Second),
-		IdleTimeout:     getDuration("IDLE_TIMEOUT", 120*time.Second),
+		AppSecret:           getEnv("APP_SECRET", ""),
+		Port:                getEnv("PORT", "8080"),
+		ReadTimeout:         getDuration("READ_TIMEOUT", 10*time.Second),
+		WriteTimeout:        getDuration("WRITE_TIMEOUT", 60*time.Second),
+		IdleTimeout:         getDuration("IDLE_TIMEOUT", 120*time.Second),
 		PostgresDSN:         getEnv("POSTGRES_DSN", ""),
 		PostgresMaxConn:     getInt("POSTGRES_MAX_CONN", 20),
 		PostgresMinConn:     getInt("POSTGRES_MIN_CONN", 2),

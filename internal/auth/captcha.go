@@ -64,7 +64,7 @@ type CaptchaConfig struct {
 
 // CaptchaToken 是前端提交的验证凭据。
 type CaptchaToken struct {
-	Token  string // turnstile/recaptcha/hcaptcha 的 token；tencent 的 Ticket；custom 的 token
+	Token   string // turnstile/recaptcha/hcaptcha 的 token；tencent 的 Ticket；custom 的 token
 	Randstr string // 腾讯云验证码专用随机串
 }
 
@@ -199,9 +199,9 @@ func (v *HTTPCaptchaVerifier) verifyTencent(ctx context.Context, endpoint string
 // 该契约足以接入任意自建/第三方验证服务（网关侧做适配层即可）。
 func (v *HTTPCaptchaVerifier) verifyCustom(ctx context.Context, endpoint string, cfg *CaptchaConfig, tok *CaptchaToken, remoteIP string) error {
 	payload, err := json.Marshal(map[string]string{
-		"secret":   cfg.Secret,
-		"token":    tok.Token,
-		"randstr":  tok.Randstr,
+		"secret":    cfg.Secret,
+		"token":     tok.Token,
+		"randstr":   tok.Randstr,
 		"remote_ip": remoteIP,
 	})
 	if err != nil {

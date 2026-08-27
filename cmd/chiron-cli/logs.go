@@ -1,4 +1,4 @@
-﻿package main
+package main
 
 import (
 	"bufio"
@@ -195,4 +195,3 @@ func followLogs(paths []string) error {
 		time.Sleep(500 * time.Millisecond)
 	}
 }
-

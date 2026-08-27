@@ -97,8 +97,8 @@ db.GlobalDBManager.Query(...)  // 自动路由到读副本
 
 ### Go 端
 ```go
-// 查询
-rows, err := db.GlobalDBManager.Query(ctx, "SELECT * FROM users WHERE id = $1", userID)
+// 查询 - P0-3: 明确指定需要的列，避免 SELECT *
+rows, err := db.GlobalDBManager.Query(ctx, "SELECT id, name, email FROM users WHERE id = $1", userID)
 
 // 写入
 tag, err := db.GlobalDBManager.Exec(ctx, "UPDATE users SET name = $1 WHERE id = $2", name, userID)
@@ -116,7 +116,8 @@ tx.Commit(ctx)
 from app.db import get_pool
 
 pool = get_pool()  # 返回 _UnifiedPoolWrapper 或真实 asyncpg.Pool
-row = await pool.fetchrow("SELECT * FROM users WHERE id = $1", user_id)
+# P0-3: 明确指定需要的列
+row = await pool.fetchrow("SELECT id, name, email FROM users WHERE id = $1", user_id)
 ```
 
 ## 🔍 验证要点

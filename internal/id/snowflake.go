@@ -1,10 +1,11 @@
 // Package id provides a Snowflake-style unique ID generator.
 //
 // Format (64-bit):
-//   1 bit  : unused (sign bit, always 0)
-//   41 bits: timestamp in milliseconds since custom epoch
-//   10 bits: worker ID (0-1023)
-//   12 bits: sequence number (0-4095)
+//
+//	1 bit  : unused (sign bit, always 0)
+//	41 bits: timestamp in milliseconds since custom epoch
+//	10 bits: worker ID (0-1023)
+//	12 bits: sequence number (0-4095)
 //
 // IDs are returned as compact base62 strings (e.g. "7Jq2r3kLx9").
 package id

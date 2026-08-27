@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"fmt"
@@ -10,7 +10,8 @@ import (
 	"os/exec"
 	"regexp"
 	"time"
-    "github.com/athenavi/chiron/config"
+
+	"github.com/athenavi/chiron/config"
 	"github.com/athenavi/chiron/internal/auth"
 	"github.com/athenavi/chiron/internal/db"
 	"github.com/athenavi/chiron/internal/engine"
@@ -35,7 +36,6 @@ type AdminHandler struct {
 func NewAdminHandler(a *auth.Authenticator, store *storage.AtomicStore, redis *db.AtomicRedis, pythonClient *engine.PythonClient) *AdminHandler {
 	return &AdminHandler{authenticator: a, store: store, redis: redis, pythonClient: pythonClient}
 }
-
 
 // RegisterRoutes adds admin endpoints to the given router under /v1/admin.
 // Caller is responsible for auth middleware.

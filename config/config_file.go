@@ -1,4 +1,4 @@
-﻿package config
+package config
 
 import (
 	"encoding/json"
@@ -8,10 +8,10 @@ import (
 
 // ConfigFile is the JSON-serializable subset of Config for config file.
 type ConfigFile struct {
-	Port         string  `json:"port,omitempty"`
-	ReadTimeout  string  `json:"read_timeout,omitempty"`
-	WriteTimeout string  `json:"write_timeout,omitempty"`
-	IdleTimeout  string  `json:"idle_timeout,omitempty"`
+	Port         string `json:"port,omitempty"`
+	ReadTimeout  string `json:"read_timeout,omitempty"`
+	WriteTimeout string `json:"write_timeout,omitempty"`
+	IdleTimeout  string `json:"idle_timeout,omitempty"`
 
 	PostgresDSN     string `json:"postgres_dsn,omitempty"`
 	PostgresMaxConn *int   `json:"postgres_max_conn,omitempty"`

@@ -26,8 +26,8 @@ import (
 var errCaptchaHandled = errors.New("captcha gate: response already written")
 
 const (
-	captchaFailThreshold = 5   // 连续失败 N 次后强制验证码
-	captchaHardLimit     = 30  // 连续失败 N 次后直接拒绝
+	captchaFailThreshold = 5  // 连续失败 N 次后强制验证码
+	captchaHardLimit     = 30 // 连续失败 N 次后直接拒绝
 	captchaFailWindow    = 15 * time.Minute
 	captchaFailKeyPrefix = "login:fail:"
 )
@@ -130,9 +130,9 @@ func (h *CaptchaHandler) PublicConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	OK(w, map[string]any{
-		"enabled":   true,
-		"provider":  row.Provider,
-		"site_key":  row.SiteKey,
+		"enabled":    true,
+		"provider":   row.Provider,
+		"site_key":   row.SiteKey,
 		"verify_url": row.VerifyURL, // custom 前端组件可能需要；不含 secret
 	})
 }

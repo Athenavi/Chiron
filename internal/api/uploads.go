@@ -131,7 +131,7 @@ func (h *UploadHandler) Init(w http.ResponseWriter, r *http.Request) {
 	}
 	if ext := strings.ToLower(filepath.Ext(body.Name)); ext == ".html" || ext == ".htm" ||
 		ext == ".xml" || ext == ".xhtml" || ext == ".swf" {
-		BadRequest(w, "file type not allowed: " + ext)
+		BadRequest(w, "file type not allowed: "+ext)
 		return
 	}
 	if body.Purpose == "" {

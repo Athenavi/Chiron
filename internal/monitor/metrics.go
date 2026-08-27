@@ -13,12 +13,12 @@ import (
 // Histogram tracks duration percentiles (p50/p95/p99) for operations.
 // Uses a fixed-size ring buffer to avoid slice reallocations on every Record call.
 type Histogram struct {
-	mu   sync.Mutex
-	name string
-	data []time.Duration
-	pos  int // next write position
+	mu    sync.Mutex
+	name  string
+	data  []time.Duration
+	pos   int // next write position
 	count int // number of samples recorded (up to max)
-	max  int // capacity
+	max   int // capacity
 }
 
 func NewHistogram(name string, maxSamples int) *Histogram {
@@ -69,8 +69,8 @@ func (h *Histogram) Snapshot() map[string]interface{} {
 }
 
 var (
-	LLMHistogram   = NewHistogram("llm", 1000)
-	ToolHistogram  = NewHistogram("tool", 1000)
+	LLMHistogram     = NewHistogram("llm", 1000)
+	ToolHistogram    = NewHistogram("tool", 1000)
 	RequestHistogram = NewHistogram("request", 1000)
 )
 
@@ -132,14 +132,14 @@ func RegisterExtraStats(fn func() map[string]interface{}) {
 
 func Snapshot() map[string]interface{} {
 	snap := map[string]interface{}{
-		"requests_total":   Global.RequestsTotal.Load(),
-		"requests_active":  Global.RequestsActive.Load(),
-		"llm_calls":        Global.LLMCallsTotal.Load(),
-		"llm_errors":       Global.LLMErrorsTotal.Load(),
-		"tool_calls":       Global.ToolCallsTotal.Load(),
-		"tool_errors":      Global.ToolErrorsTotal.Load(),
-		"uptime_seconds":   time.Since(Global.StartTime).Seconds(),
-		"started_at":       Global.StartTime.Format(time.RFC3339),
+		"requests_total":  Global.RequestsTotal.Load(),
+		"requests_active": Global.RequestsActive.Load(),
+		"llm_calls":       Global.LLMCallsTotal.Load(),
+		"llm_errors":      Global.LLMErrorsTotal.Load(),
+		"tool_calls":      Global.ToolCallsTotal.Load(),
+		"tool_errors":     Global.ToolErrorsTotal.Load(),
+		"uptime_seconds":  time.Since(Global.StartTime).Seconds(),
+		"started_at":      Global.StartTime.Format(time.RFC3339),
 	}
 	extraStatsMu.RLock()
 	for _, fn := range extraStatsFuncs {
@@ -161,12 +161,12 @@ func Init() {
 // ── Per-session cost tracking (in-memory) ──
 
 var (
-	costMu          sync.Mutex
+	costMu           sync.Mutex
 	costBySession    = make(map[string]*SessionCost)
 	maxSessionCosts  = 10000
 	sessionCostRing  = make([]string, 10000) // ring buffer for FIFO eviction
-	sessionCostHead  = 0                      // next eviction position
-	sessionCostCount = 0                      // number of entries in ring
+	sessionCostHead  = 0                     // next eviction position
+	sessionCostCount = 0                     // number of entries in ring
 )
 
 // SessionCost tracks token usage for a session.

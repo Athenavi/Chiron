@@ -95,10 +95,10 @@ func PoolStats() map[string]interface{} {
 	}
 	s := p.Stat()
 	return map[string]interface{}{
-		"total_conns":     s.TotalConns(),
-		"idle_conns":      s.IdleConns(),
-		"acquired_conns":  s.AcquiredConns(),
-		"empty_acquire":   s.EmptyAcquireCount(),
+		"total_conns":         s.TotalConns(),
+		"idle_conns":          s.IdleConns(),
+		"acquired_conns":      s.AcquiredConns(),
+		"empty_acquire":       s.EmptyAcquireCount(),
 		"acquire_duration_ms": s.AcquireDuration().Milliseconds(),
 	}
 }

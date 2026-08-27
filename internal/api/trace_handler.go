@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"context"
@@ -14,21 +14,21 @@ import (
 
 // TraceSpan represents a single execution span from Redis Stream.
 type TraceSpan struct {
-	TraceID     string             `json:"trace_id"`
-	SpanName    string             `json:"span_name"`
-	DurationMs  int                `json:"duration_ms"`
-	Timestamp   time.Time          `json:"timestamp"`
-	TenantID    string             `json:"tenant_id"`
-	Metadata    map[string]any     `json:"metadata,omitempty"`
+	TraceID    string         `json:"trace_id"`
+	SpanName   string         `json:"span_name"`
+	DurationMs int            `json:"duration_ms"`
+	Timestamp  time.Time      `json:"timestamp"`
+	TenantID   string         `json:"tenant_id"`
+	Metadata   map[string]any `json:"metadata,omitempty"`
 }
 
 // TraceQuery aggregates all spans for a given trace_id.
 type TraceQuery struct {
-	TraceID string      `json:"trace_id"`
-	Tenant  string      `json:"tenant_id"`
-	SpanCount int      `json:"span_count"`
-	TotalDurationMs int   `json:"total_duration_ms"`
-	Spans   []TraceSpan `json:"spans"`
+	TraceID         string      `json:"trace_id"`
+	Tenant          string      `json:"tenant_id"`
+	SpanCount       int         `json:"span_count"`
+	TotalDurationMs int         `json:"total_duration_ms"`
+	Spans           []TraceSpan `json:"spans"`
 }
 
 // TraceHandler provides trace query APIs with tenant isolation.
@@ -92,11 +92,11 @@ func (h *TraceHandler) GetTrace(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result := TraceQuery{
-		TraceID:           traceID,
-		Tenant:            tenantID,
-		SpanCount:         len(spans),
-		TotalDurationMs:   totalDuration,
-		Spans:             spans,
+		TraceID:         traceID,
+		Tenant:          tenantID,
+		SpanCount:       len(spans),
+		TotalDurationMs: totalDuration,
+		Spans:           spans,
 	}
 
 	OK(w, result)
@@ -124,7 +124,7 @@ func (h *TraceHandler) ListTraces(w http.ResponseWriter, r *http.Request) {
 
 	// Scan latest trace entries from Redis Stream (tenant isolated)
 	streamKey := "chiron:traces:" + tenantID
-	
+
 	// XRANGE with ~ operator for approximate scan (performance optimization)
 	rawEntries, err := h.rdb.XRange(r.Context(), streamKey, "+", "-", int64(limit*10)).Result()
 	if err != nil {
@@ -141,14 +141,14 @@ func (h *TraceHandler) ListTraces(w http.ResponseWriter, r *http.Request) {
 		if err := json.Unmarshal([]byte(metaRaw), &span.Metadata); err != nil {
 			continue
 		}
-		
+
 		span.TraceID, _ = entry.Values["trace_id"].(string)
 		span.SpanName, _ = entry.Values["span_name"].(string)
 		durationMs, _ := entry.Values["duration_ms"].(string)
 		span.DurationMs, _ = strconv.Atoi(durationMs)
 		timestamp, _ := entry.Values["timestamp"].(string)
 		span.Timestamp, _ = time.Parse(time.RFC3339, timestamp)
-		
+
 		// Only keep the first occurrence of each trace_id (latest)
 		if _, exists := traceMap[span.TraceID]; !exists {
 			traceMap[span.TraceID] = &span
@@ -166,13 +166,13 @@ func (h *TraceHandler) ListTraces(w http.ResponseWriter, r *http.Request) {
 			)
 			continue
 		}
-		
+
 		traces = append(traces, map[string]any{
-			"trace_id":      span.TraceID,
-			"span_name":     span.SpanName,
-			"duration_ms":   span.DurationMs,
-			"timestamp":     span.Timestamp.Format(time.RFC3339),
-			"metadata":      span.Metadata,
+			"trace_id":    span.TraceID,
+			"span_name":   span.SpanName,
+			"duration_ms": span.DurationMs,
+			"timestamp":   span.Timestamp.Format(time.RFC3339),
+			"metadata":    span.Metadata,
 		})
 	}
 
@@ -189,7 +189,7 @@ func (h *TraceHandler) queryTraces(traceID, tenantID string) ([]TraceSpan, error
 	}
 
 	streamKey := "chiron:traces:" + tenantID
-	
+
 	// XRANGE: get all entries for this tenant's stream
 	queryCtx, queryCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer queryCancel()
@@ -219,7 +219,7 @@ func (h *TraceHandler) queryTraces(traceID, tenantID string) ([]TraceSpan, error
 		span.TenantID, _ = entry.Values["tenant_id"].(string)
 		timestamp, _ := entry.Values["timestamp"].(string)
 		span.Timestamp, _ = time.Parse(time.RFC3339, timestamp)
-		
+
 		spans = append(spans, span)
 	}
 

@@ -16,19 +16,19 @@ type AuditEntry struct {
 	ID        string    `json:"id"`
 	TenantID  string    `json:"tenant_id"`
 	UserID    string    `json:"user_id"`
-	Action    string    `json:"action"`    // "session.create", "tool.execute", "agent.run"
-	Resource  string    `json:"resource"`  // 资源标识
-	Detail    string    `json:"detail"`    // 详细信息
-	IP        string    `json:"ip"`        // 客户端 IP
-	Success   bool      `json:"success"`   // 是否成功
-	Error     string    `json:"error"`     // 错误信息
+	Action    string    `json:"action"`   // "session.create", "tool.execute", "agent.run"
+	Resource  string    `json:"resource"` // 资源标识
+	Detail    string    `json:"detail"`   // 详细信息
+	IP        string    `json:"ip"`       // 客户端 IP
+	Success   bool      `json:"success"`  // 是否成功
+	Error     string    `json:"error"`    // 错误信息
 	Timestamp time.Time `json:"timestamp"`
 }
 
 // Auditor 审计日志记录器
 type Auditor struct {
-	rdb      RedisClient
-	stream   string
+	rdb    RedisClient
+	stream string
 }
 
 // NewAuditor 创建审计日志记录器
@@ -131,12 +131,12 @@ func AuditLog(ctx context.Context, userID, action, resource, detail, ip string, 
 	}
 
 	entry := AuditEntry{
-		UserID:   userID,
-		Action:   action,
-		Resource: resource,
-		Detail:   detail,
-		IP:       ip,
-		Success:  true,
+		UserID:    userID,
+		Action:    action,
+		Resource:  resource,
+		Detail:    detail,
+		IP:        ip,
+		Success:   true,
 		Timestamp: time.Now(),
 	}
 
@@ -162,10 +162,10 @@ func AuditLog(ctx context.Context, userID, action, resource, detail, ip string, 
 
 // AuditConsumer 审计日志消费者
 type AuditConsumer struct {
-	rdb      RedisClient
-	stream   string
-	group    string
-	handler  func(ctx context.Context, entry AuditEntry) error
+	rdb     RedisClient
+	stream  string
+	group   string
+	handler func(ctx context.Context, entry AuditEntry) error
 }
 
 // NewAuditConsumer 创建审计日志消费者

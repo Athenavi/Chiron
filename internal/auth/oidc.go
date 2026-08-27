@@ -172,7 +172,7 @@ type OIDCProviderConfig struct {
 }
 
 // IDTokenResult 是授权码换 token + 身份校验后的结果
-//（OIDC 来自 id_token claims；OAuth2 来自 userinfo 接口）。
+// （OIDC 来自 id_token claims；OAuth2 来自 userinfo 接口）。
 type IDTokenResult struct {
 	Subject string
 	Email   string

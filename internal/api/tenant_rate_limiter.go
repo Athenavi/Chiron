@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"context"
@@ -44,11 +44,11 @@ return tostring(allowed)
 `
 
 type TenantRateLimiter struct {
-	rdb       db.RedisClient
-	maxBurst  int
+	rdb          db.RedisClient
+	maxBurst     int
 	refillPerSec float64
-	mu     sync.Mutex
-	tokens map[string]*tokenBucketLocal
+	mu           sync.Mutex
+	tokens       map[string]*tokenBucketLocal
 }
 
 type tokenBucketLocal struct {
