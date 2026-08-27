@@ -212,7 +212,7 @@ func (h *UserMarketHandler) installMCP(w http.ResponseWriter, r *http.Request, c
 	}
 	dir := h.cfg.PluginDataDir
 	if dir == "" {
-		dir = "./data/plugins"
+		dir = filepath.Join(config.GetDefaultDataDir(), "plugins")
 	}
 	path := userPluginPath(dir, claims.UserID)
 	if err := appendPlugin(dir, claims.UserID, plugin); err != nil {

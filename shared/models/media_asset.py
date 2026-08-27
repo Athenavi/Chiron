@@ -6,6 +6,7 @@ SQLAlchemy 模型定义 - MediaAsset
 
 from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, ForeignKey
 import uuid
+from datetime import datetime
 
 from . import Base  # 使用统一的 Base
 
@@ -46,9 +47,9 @@ class MediaAsset(Base):
     size = Column(BigInteger, default=0, doc='文件大小')
 
 
-    created_at = Column(DateTime, default=now(), doc='创建时间')
+    created_at = Column(DateTime, default=datetime.utcnow, doc='创建时间')
 
-    updated_at = Column(DateTime, default=now(), doc='更新时间')
+    updated_at = Column(DateTime, default=datetime.utcnow, doc='更新时间')
 
     parent_id = Column(String(64), default='', doc='父资源 ID')
 

@@ -109,6 +109,9 @@ type Config struct {
 	// Plugins
 	PluginsConfigPath string // path to plugins.json (MCP server config)
 	PluginDataDir     string // per-user plugin config root: {PluginDataDir}/{user_id}/plugins.json
+
+	// DataDir is the runtime data directory for install.lock, backups, etc.
+	DataDir string
 }
 
 func Load() *Config {
@@ -176,7 +179,7 @@ func loadConfig() *Config {
 		CookieSecure:        isTruthy(getEnv("COOKIE_SECURE", "")),
 		CORSOrigins:         getEnv("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173"),
 		StorageBackend:      getEnv("STORAGE_BACKEND", "local"),
-		StorageRoot:         getEnv("STORAGE_ROOT", "./workspace"),
+		StorageRoot:         getEnv("STORAGE_ROOT", filepath.Join(getDataDirDefault(), "workspace")),
 		S3Endpoint:          getEnv("S3_ENDPOINT", ""),
 		S3Bucket:            getEnv("S3_BUCKET", "chiron"),
 		S3AccessKey:         getEnv("S3_ACCESS_KEY", ""),
@@ -213,11 +216,34 @@ func loadConfig() *Config {
 		PayPalSecret:   getEnv("PAYPAL_SECRET", ""),
 		PayPalSandbox:  isTruthy(getEnv("PAYPAL_SANDBOX", "")),
 
-		PluginsConfigPath: getEnv("PLUGINS_CONFIG_PATH", "./plugins.json"),
-		PluginDataDir:     getEnv("PLUGIN_DATA_DIR", "./data/plugins"),
+		PluginsConfigPath: getEnv("PLUGINS_CONFIG_PATH", filepath.Join(getDataDirDefault(), "config", "plugins.json")),
+		PluginDataDir:     getEnv("PLUGIN_DATA_DIR", filepath.Join(getDataDirDefault(), "plugins")),
+		DataDir:           getEnv("CHIRON_DATA_DIR", getDataDirDefault()),
 	}
 
 	return cfg
+}
+
+// GetDefaultDataDir returns the default data directory based on environment:
+// - CHIRON_DATA_DIR env var (highest priority, set by caller)
+// - ~/.chiron (local development)
+// - data (fallback)
+// This is the canonical implementation; do not duplicate elsewhere.
+func GetDefaultDataDir() string {
+	if v := os.Getenv("CHIRON_DATA_DIR"); v != "" {
+		return v
+	}
+	// Try to detect production vs development
+	home, err := os.UserHomeDir()
+	if err == nil {
+		return filepath.Join(home, ".chiron")
+	}
+	return "data"
+}
+
+// getDataDirDefault is deprecated; use GetDefaultDataDir instead.
+func getDataDirDefault() string {
+	return GetDefaultDataDir()
 }
 
 func (c *Config) ValidateAppSecret() bool {
@@ -231,6 +257,16 @@ func deriveSubsecret(secret, domain string) string {
 	h := hmac.New(sha256.New, []byte(secret))
 	h.Write([]byte(domain))
 	return base64.RawURLEncoding.EncodeToString(h.Sum(nil))
+}
+
+// DeriveLockKey 派生用于加密 install.lock 的 AES 密钥
+func DeriveLockKey(appSecret string) []byte {
+	if appSecret == "" {
+		return nil
+	}
+	h := hmac.New(sha256.New, []byte(appSecret))
+	h.Write([]byte("chiron-install-lock-key"))
+	return h.Sum(nil)
 }
 
 // ValidateJWTSecret returns true if the secret is valid for production use.

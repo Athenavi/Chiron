@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/athenavi/chiron/config"
 	"github.com/athenavi/chiron/internal/db"
 	"github.com/athenavi/chiron/internal/id"
 )
@@ -363,10 +364,17 @@ func (h *AdminHandler) DatabaseConfigs(w http.ResponseWriter, r *http.Request) {
 func backupDir() string {
 	d := os.Getenv("BACKUP_DIR")
 	if d == "" {
-		d = filepath.Join(os.Getenv("STORAGE_ROOT"), "backups")
+		d = os.Getenv("STORAGE_ROOT")
+		if d == "" {
+			d = config.LoadAllowUnconfigured().StorageRoot
+		}
+		if d != "" {
+			d = filepath.Join(d, "backups")
+			return d
+		}
 	}
 	if d == "" {
-		d = "./data/backups"
+		d = filepath.Join(config.GetDefaultDataDir(), "backups")
 	}
 	return d
 }

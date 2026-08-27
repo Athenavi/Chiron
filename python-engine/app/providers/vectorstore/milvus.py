@@ -14,7 +14,7 @@ class MilvusVectorStore:
     
     def __init__(
         self,
-        address: str = "localhost:19530",
+        address: str = "",
         collection_prefix: str = "",
     ):
         self._address = address

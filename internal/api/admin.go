@@ -489,7 +489,7 @@ func (h *AdminHandler) UpdateStorage(w http.ResponseWriter, r *http.Request) {
 	var err error
 	switch body.Backend {
 	case "local":
-		root := "./workspace"
+		root := config.LoadAllowUnconfigured().StorageRoot
 		if ls, ok := h.store.LoadRaw().(*storage.LocalStore); ok {
 			root = ls.Root
 		}

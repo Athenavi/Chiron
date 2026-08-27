@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     http_host: str = "127.0.0.1"
 
     # ── Redis ──
-    redis_url: str = "redis://localhost:6379"
+    redis_url: str = ""
     redis_max_connections: int = 50
 
     # ── PostgreSQL ──
@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     db_pool_max_size: int = 20
 
     # ── Milvus ──
-    milvus_address: str = "localhost:19530"
+    milvus_address: str = ""
     milvus_collection: str = "knowledge_base"
 
     # ── LLM Provider API Keys ──

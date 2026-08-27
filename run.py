@@ -56,9 +56,7 @@ SERVICES = {
     },
 }
 
-DEFAULT_ENV = {
-    "REDIS_ADDR": "localhost:6379",
-}
+DEFAULT_ENV = {}
 
 
 def load_env_file():

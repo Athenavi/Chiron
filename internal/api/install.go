@@ -27,7 +27,18 @@ import (
 
 // installLockPath：安装状态文件。位于运行时数据目录（与 data/media、data/skills 同级），
 // 由安装流程写入；正常模式启动时读取其中的 DSN/Redis 配置覆盖引导连接（重启生效）。
-const installLockPath = "./data/install.lock"
+// 路径由 CHIRON_DATA_DIR 环境变量控制，默认 ~/.chiron。
+var installLockPath string
+
+// SetInstallLockPath must be called early (before any install operations)
+// to configure the data directory. If not set, falls back to config.DataDir.
+func SetInstallLockPath(cfg *config.Config) {
+	if cfg != nil && cfg.DataDir != "" {
+		installLockPath = filepath.Join(cfg.DataDir, "install.lock")
+	} else if installLockPath == "" {
+		installLockPath = filepath.Join(config.GetDefaultDataDir(), "install.lock")
+	}
+}
 
 // ── 安装令牌（Jenkins 模式）───────────────────────────────────────────────
 //

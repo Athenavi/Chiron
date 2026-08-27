@@ -2,14 +2,23 @@
 
 import (
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
+	"os/user"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
+	"github.com/athenavi/chiron/config"
 	"github.com/athenavi/chiron/internal/db"
 	"github.com/spf13/cobra"
+	"github.com/xo/dburl"
 )
 
 var dbCmd = &cobra.Command{
@@ -34,12 +43,21 @@ func init() {
 	dbCmd.AddCommand(dbMigrateCmd)
 }
 
-// getDSN 读取 POSTGRES_DSN，默认与 config 一致
+// getDSN 读取 POSTGRES_DSN，优先从环境变量获取
 func getDSN() string {
 	if dsn := os.Getenv("POSTGRES_DSN"); dsn != "" {
 		return dsn
 	}
-	return "postgres://postgres:123456@localhost:5432/chiron0827?sslmode=disable"
+	// 从 config 加载（config 会读取 .env 和环境变量）
+	cfg := config.LoadAllowUnconfigured()
+	if cfg != nil && cfg.PostgresDSN != "" {
+		return cfg.PostgresDSN
+	}
+	// 最后从 install.lock 尝试恢复（安装时保存的 DSN）
+	if dsn := dsnFromInstallLock(""); dsn != "" {
+		return dsn
+	}
+	return ""
 }
 
 // sanitizeDSN 隐藏连接串中的密码，避免打印泄漏
@@ -60,6 +78,90 @@ func sanitizeDSN(dsn string) string {
 		userinfo = userinfo[:colon] + ":*****"
 	}
 	return dsn[:i] + userinfo + rest[at:]
+}
+
+// dsnFromInstallLock 从 install.lock 文件中读取 DSN（如果存在）
+func dsnFromInstallLock(appSecret string) string {
+	if appSecret == "" {
+		appSecret = os.Getenv("APP_SECRET")
+	}
+	dataDir := config.GetDefaultDataDir()
+	lockPath := filepath.Join(dataDir, "install.lock")
+
+	data, err := os.ReadFile(lockPath)
+	if err != nil {
+		return ""
+	}
+
+	var lock interface{}
+	if err := json.Unmarshal(data, &lock); err != nil {
+		return ""
+	}
+
+	if dsn, ok := extractDSN(lock); ok {
+		if appSecret != "" {
+			// 尝试解密 DSN（需要同样的加解密逻辑）
+			if decrypted := decryptDSN(dsn, appSecret); decrypted != "" {
+				return decrypted
+			}
+		}
+		// 如果 DSN 未加密，直接返回
+		return dsn
+	}
+
+	return ""
+}
+
+// extractDSN 从 install.lock 数据结构中提取 DSN
+func extractDSN(data interface{}) (string, bool) {
+	switch v := data.(type) {
+	case map[string]interface{}:
+		if dsn, ok := v["dsn"].(string); ok {
+			return dsn, true
+		}
+	case string:
+		// 尝试解析 JSON 字符串
+		var m map[string]interface{}
+		if err := json.Unmarshal([]byte(v), &m); err == nil {
+			return extractDSN(m)
+		}
+	}
+	return "", false
+}
+
+// decryptDSN 使用 config 包中的派生密钥解密 DSN
+func decryptDSN(encryptedDSN, appSecret string) string {
+	if encryptedDSN == "" || appSecret == "" {
+		return ""
+	}
+	// DSN 使用 AES-GCM 加密，格式: base64(nonce + ciphertext)
+	sealed, err := base64.StdEncoding.DecodeString(encryptedDSN)
+	if err != nil {
+		return ""
+	}
+	const nonceSize = 12
+	if len(sealed) < nonceSize+16 {
+		return ""
+	}
+	nonce := sealed[:nonceSize]
+	ciphertext := sealed[nonceSize:]
+
+	// 使用与 install.go 相同的密钥派生
+	key := config.DeriveLockKey(appSecret)
+
+	aesgcm, err := aes.NewCipher(key)
+	if err != nil {
+		return ""
+	}
+	gcm, err := cipher.NewGCM(aesgcm)
+	if err != nil {
+		return ""
+	}
+	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		return ""
+	}
+	return string(plaintext)
 }
 
 func runDBStatus(cmd *cobra.Command, args []string) error {
