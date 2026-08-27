@@ -133,17 +133,17 @@ func (h *BillingHandler) GetUsage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := db.GlobalDBManager.Query(r.Context(),
-		`SELECT DATE(created_at) as day,
+		`SELECT DATE(created_at::timestamp) as day,
 			COUNT(*) as tx_count,
 			SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as credits_spent,
 			SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as credits_added
 		 FROM credit_transactions
-		 WHERE user_id = $1 AND created_at >= NOW() - INTERVAL '30 days'
-		 GROUP BY DATE(created_at)
+		 WHERE user_id = $1 AND created_at::timestamp >= NOW() - INTERVAL '30 days'
+		 GROUP BY DATE(created_at::timestamp)
 		 ORDER BY day DESC`, userID)
 	if err != nil {
-		slog.Error("get usage stats failed", "user_id", userID, "error", err)
-		InternalError(w, "failed to get usage stats")
+		slog.Error("get usage stats failed", "user_id", userID, "error", err, "db_available", db.GlobalDBManager.IsAvailable())
+		InternalError(w, fmt.Sprintf("failed to get usage stats: %v", err))
 		return
 	}
 	defer rows.Close()

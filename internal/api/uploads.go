@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -289,14 +290,23 @@ func (h *UploadHandler) Complete(w http.ResponseWriter, r *http.Request) {
 		ChunkCnt  int
 		Received  []string
 	}
+	var receivedJSON string
 	err := db.Pool.QueryRow(r.Context(),
 		`SELECT id, user_id, name, size, mime_type, purpose, parent_id, category, chunk_size, chunk_count, chunks_received
 		 FROM uploads WHERE id = $1 AND tenant_id = $2 AND user_id = $3`, uploadID, claims.TenantID, claims.UserID).
 		Scan(&up.ID, &up.UserID, &up.Name, &up.Size, &up.MimeType, &up.Purpose,
-			&up.ParentID, &up.Category, &up.ChunkSize, &up.ChunkCnt, &up.Received)
+			&up.ParentID, &up.Category, &up.ChunkSize, &up.ChunkCnt, &receivedJSON)
 	if err != nil {
+		slog.Error("query upload failed", "upload_id", uploadID, "error", err)
 		NotFound(w, "upload not found")
 		return
+	}
+	// Parse chunks_received from JSON string to []string
+	if receivedJSON != "" && receivedJSON != "[]" {
+		if parseErr := json.Unmarshal([]byte(receivedJSON), &up.Received); parseErr != nil {
+			slog.Warn("parse chunks_received failed", "upload_id", uploadID, "error", parseErr, "raw", receivedJSON)
+			up.Received = []string{}
+		}
 	}
 	if len(up.Received) != up.ChunkCnt {
 		BadRequest(w, fmt.Sprintf("incomplete upload: %d/%d chunks received", len(up.Received), up.ChunkCnt))
