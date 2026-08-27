@@ -318,6 +318,21 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("Queue worker skipped (Redis not available)")
 
+    # ── 6.5. 启动进程指标收集器 ──
+    from app.observability.metrics import record_process_metrics
+
+    async def metrics_collector():
+        """定期收集进程资源指标"""
+        while True:
+            try:
+                record_process_metrics()
+            except Exception as e:
+                logger.warning(f"Failed to record process metrics: {e}")
+            await asyncio.sleep(10)
+
+    _metrics_task = asyncio.create_task(metrics_collector())
+    logger.info("Process metrics collector started (interval=10s)")
+
     # ── 8. 实例注册 ──
     instance_id = _get_instance_id()
     if _redis is not None:
@@ -350,6 +365,14 @@ async def lifespan(app: FastAPI):
         _queue_worker.cancel()
         try:
             await _queue_worker
+        except asyncio.CancelledError:
+            pass
+
+    # 停止进程指标收集器
+    if '_metrics_task' in locals():
+        _metrics_task.cancel()
+        try:
+            await _metrics_task
         except asyncio.CancelledError:
             pass
 
@@ -1020,6 +1043,33 @@ def _setup_middleware_early(app: FastAPI) -> None:
     from app.middleware.metrics import MetricsMiddleware
     from app.middleware.privacy_middleware import PrivacyModeMiddleware
     from app.middleware.request_context import RequestContextMiddleware
+    from opentelemetry import trace
+    from opentelemetry.propagate import extract
+    from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
+
+    # Trace context propagation middleware
+    @app.middleware("http")
+    async def trace_context_middleware(request: Request, call_next):
+        """从HTTP头提取trace context"""
+        carrier = dict(request.headers)
+        ctx = extract(carrier)
+        
+        tracer = trace.get_tracer(__name__)
+        span = tracer.start_span(
+            request.url.path,
+            context=ctx,
+            kind=trace.SpanKind.SERVER,
+        )
+        
+        try:
+            response = await call_next(request)
+            span.set_status(trace.Status(trace.StatusCode.OK))
+            return response
+        except Exception as e:
+            span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
+            raise
+        finally:
+            span.end()
 
     # 执行顺序: PrivacyMode → RequestContext → Auth → RateLimit → Metrics → ErrorHandler → handler
     app.add_middleware(ErrorHandlerMiddleware)

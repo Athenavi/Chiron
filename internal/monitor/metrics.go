@@ -2,6 +2,7 @@ package monitor
 
 import (
 	"log/slog"
+	"runtime"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -141,6 +142,15 @@ func Snapshot() map[string]interface{} {
 		"uptime_seconds":  time.Since(Global.StartTime).Seconds(),
 		"started_at":      Global.StartTime.Format(time.RFC3339),
 	}
+	
+	// Add Go runtime metrics
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	snap["go_goroutines"] = runtime.NumGoroutine()
+	snap["go_memory_alloc_bytes"] = m.Alloc
+	snap["go_memory_sys_bytes"] = m.Sys
+	snap["go_gc_runs"] = m.NumGC
+	
 	extraStatsMu.RLock()
 	for _, fn := range extraStatsFuncs {
 		if m := fn(); m != nil {

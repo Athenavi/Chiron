@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/athenavi/chiron/internal/auth"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 // PythonClient calls the Python AI engine via HTTP SSE.
@@ -119,6 +120,10 @@ func (c *PythonClient) markSuccess(addr string) {
 
 // do 统一请求出口：记录成功/失败并更新熔断状态，支持重试
 func (c *PythonClient) do(req *http.Request) (*http.Response, error) {
+	// 注入trace context到HTTP头
+	propagator := propagation.TraceContext{}
+	propagator.Inject(req.Context(), propagation.HeaderCarrier(req.Header))
+
 	addr := req.URL.Scheme + "://" + req.URL.Host
 	var lastErr error
 

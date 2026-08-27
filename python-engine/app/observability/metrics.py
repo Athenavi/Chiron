@@ -1,6 +1,9 @@
 # Prometheus 指标定义
 from __future__ import annotations
 
+import os
+
+import psutil
 from prometheus_client import Counter, Gauge, Histogram, Info
 
 # ── HTTP 请求级 ──
@@ -90,3 +93,35 @@ INSTANCE_UPTIME = Gauge(
     "Instance uptime in seconds",
 )
 ENGINE_INFO = Info("engine", "Python AI Engine info")
+
+# ── 系统资源指标 ──
+PROCESS_CPU_PERCENT = Gauge(
+    "process_cpu_percent",
+    "Current CPU usage percentage",
+)
+PROCESS_MEMORY_RSS = Gauge(
+    "process_memory_rss_bytes",
+    "Resident set size in bytes",
+)
+PROCESS_MEMORY_VMS = Gauge(
+    "process_memory_vms_bytes",
+    "Virtual memory size in bytes",
+)
+PROCESS_THREADS = Gauge(
+    "process_threads",
+    "Number of threads",
+)
+
+
+def record_process_metrics():
+    """记录进程资源使用指标"""
+    try:
+        process = psutil.Process(os.getpid())
+        PROCESS_CPU_PERCENT.set(process.cpu_percent(interval=None))
+        mem_info = process.memory_info()
+        PROCESS_MEMORY_RSS.set(mem_info.rss)
+        PROCESS_MEMORY_VMS.set(mem_info.vms)
+        PROCESS_THREADS.set(process.num_threads())
+    except Exception as e:
+        # 静默失败，避免影响主流程
+        pass
