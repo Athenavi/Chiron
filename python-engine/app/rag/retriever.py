@@ -1,8 +1,6 @@
 # RAG 检索实现
 import asyncio
 import logging
-import uuid
-from typing import Optional
 from app.config import settings
 from app.llm.client import llm_client
 

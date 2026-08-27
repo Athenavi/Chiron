@@ -15,9 +15,8 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Callable, Awaitable, Optional
+from typing import Any, AsyncIterator, Callable, Awaitable
 
-from app.gateway.provider import ChatMessage, ChatResponse, ToolCall
 from app.gateway.router import GatewayRouter
 from app.config import settings
 

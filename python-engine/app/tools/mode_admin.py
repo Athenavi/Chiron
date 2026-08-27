@@ -15,7 +15,6 @@ import logging
 from typing import Any
 
 from app.agent.modes import (
-    _BASE_MODES,
     _overrides_path,
     AgentMode,
 )

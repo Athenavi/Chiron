@@ -11,7 +11,6 @@ Benefits:
 """
 from __future__ import annotations
 
-import json
 import logging
 from typing import Any, Optional
 
@@ -24,12 +23,10 @@ logger = logging.getLogger(__name__)
 
 class DBClientError(Exception):
     """Database client error."""
-    pass
 
 
 class RedisClientError(Exception):
     """Redis client error."""
-    pass
 
 
 class UnifiedDBClient:

@@ -11,7 +11,6 @@ web_fetch/web_search/skill_install 等出站 HTTP 的目标 host 解析后，
 """
 from __future__ import annotations
 
-import asyncio
 import ipaddress
 import logging
 import socket

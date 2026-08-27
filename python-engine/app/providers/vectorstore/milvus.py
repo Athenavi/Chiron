@@ -4,7 +4,6 @@ Milvus Vector Store — 连接池化实现，对接 VectorStore Protocol
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 

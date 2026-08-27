@@ -6,12 +6,10 @@ import asyncio
 import json
 import logging
 import signal
-import sys
 import time
 
 import redis.asyncio as aioredis
 
-from app.config import settings
 from app.observability.metrics import (
     QUEUE_DEPTH,
     QUEUE_PROCESSING_DURATION,
@@ -369,7 +367,6 @@ class QueueWorker:
 
         # 调用 Consolidator 进行巩固
         from app.memory.consolidator import Consolidator
-        from app.memory.summary_store import SummaryStore
 
         if self._memory_service._summary_store is None:
             logger.debug("SummaryStore not available, skip consolidate")

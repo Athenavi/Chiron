@@ -8,7 +8,7 @@ chiron 的 registry.execute 只有 (name, params)，工具无法感知 session/�
 from __future__ import annotations
 
 import contextvars
-from typing import Any, Optional
+from typing import Any
 
 _current_context: contextvars.ContextVar[dict[str, Any]] = contextvars.ContextVar(
     "chiron_tool_context", default={}

@@ -21,9 +21,7 @@ from enum import Enum
 
 from app.core.capabilities import (
     get_registry,
-    Capability,
     WorkstationType,
-    CapabilityType,
 )
 
 logger = logging.getLogger(__name__)

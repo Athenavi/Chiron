@@ -25,7 +25,7 @@ try:
     import resource
 except ImportError:
     resource = None  # Windows doesn't have the resource module
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request

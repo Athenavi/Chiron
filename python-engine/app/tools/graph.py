@@ -11,7 +11,6 @@ from __future__ import annotations
 from collections import defaultdict, deque
 from typing import Any
 
-from app.gateway.provider import ChatMessage
 from app.gateway.router import GatewayRouter
 from app.tools.registry import registry
 from app.workflow.engine import run_workflow, WorkflowInstance

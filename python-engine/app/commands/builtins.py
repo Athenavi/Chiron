@@ -4,7 +4,6 @@ Every handler has the signature ``async def handler(args: str, ctx: CommandConte
 """
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from app.commands.registry import CommandContext, registry

@@ -14,9 +14,9 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
-from app.gateway.provider import ChatMessage, ChatResponse, ToolCall
+from app.gateway.provider import ChatMessage, ToolCall
 from app.gateway.router import GatewayRouter
 from app.tools.registry import registry, ToolRegistry
 

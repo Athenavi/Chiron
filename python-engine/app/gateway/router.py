@@ -16,7 +16,6 @@ from app.gateway.provider import (
 from app.gateway.circuit_breaker import CircuitBreaker
 from app.gateway.cache import SemanticCache
 from app.gateway.budget import TokenBudget
-from app.gateway.ratelimit import TenantRateLimiter
 
 logger = logging.getLogger(__name__)
 

@@ -185,7 +185,6 @@ class MCPClient:
 
 async def load_mcp_config(config_path: str) -> list[ServerDef]:
     """Load MCP server definitions from a JSON config file."""
-    import os
     from pathlib import Path
 
     p = Path(config_path)

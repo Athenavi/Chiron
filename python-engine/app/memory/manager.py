@@ -5,13 +5,11 @@ import json
 import logging
 import time
 import uuid
-from typing import Optional
 
 import redis.asyncio as aioredis
 
 from app.config import settings
 from app.gateway.router import GatewayRouter
-from app.interfaces.llm import LLMProvider
 from app.interfaces.vectorstore import VectorStore
 from app.interfaces.cache import CacheClient
 

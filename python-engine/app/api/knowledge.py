@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from app.db import get_pool
@@ -375,9 +375,7 @@ async def delete_doc(
 
 async def _enqueue_rag_build(kb_id: str, user_id: str, estimated_cost: float) -> str:
     """投递 rag_index 异步任务（RAG 知识库构建）"""
-    import redis.asyncio as aioredis
 
-    from app.config import settings
     from app.queue.producer import QueueProducer
     from app.redis_client import get_redis
 

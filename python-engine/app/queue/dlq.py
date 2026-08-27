@@ -1,7 +1,6 @@
 # 死信队列管理
 from __future__ import annotations
 
-import json
 import logging
 
 import redis.asyncio as aioredis

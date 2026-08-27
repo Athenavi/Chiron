@@ -1,9 +1,8 @@
 # Agent 推理循环 — 使用接口注入
 from __future__ import annotations
 
-import json
 import logging
-from typing import AsyncIterator, Optional
+from typing import AsyncIterator
 
 from app.gateway.provider import ChatMessage
 from app.gateway.router import GatewayRouter

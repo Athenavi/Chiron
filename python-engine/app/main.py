@@ -15,7 +15,6 @@ from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.config import settings
-from app.core.container import GlobalContainer, get_container
 from app.session_store import SessionStore
 
 # 全局会话消息缓存（lifespan 中接入 Redis 实现多实例共享）
@@ -84,7 +83,7 @@ async def lifespan(app: FastAPI):
     # ── 1. 可观测性 ──
     from app.observability.logging import configure_logging
     from app.observability.tracing import configure_tracing
-    from app.observability.metrics import ENGINE_INFO, INSTANCE_UPTIME
+    from app.observability.metrics import ENGINE_INFO
 
     configure_logging(settings.log_level)
     configure_tracing(service_name="python-engine", otlp_endpoint=settings.otel_endpoint)
@@ -474,7 +473,6 @@ def _setup_routes(app: FastAPI) -> None:
     """注册所有 HTTP 路由"""
     import time as _time
 
-    from app.observability.metrics import QUEUE_DEPTH
 
     # ── 健康检查 ──
 
@@ -779,7 +777,6 @@ async def admin_list_api_keys(
     _gateway=Depends(_require_gateway_internal),
 ):
     """获取所有 API Key 列表"""
-    import json
     keys = pool.get_all_keys()
     stats = pool.get_stats()
     return {"keys": keys, "stats": stats}

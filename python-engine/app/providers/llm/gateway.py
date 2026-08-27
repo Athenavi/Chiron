@@ -4,11 +4,11 @@ LLM Gateway Provider — 适配 GatewayRouter 到 LLMProvider Protocol
 from __future__ import annotations
 
 import logging
-from typing import AsyncIterator, Optional
+from typing import AsyncIterator
 
-from app.gateway.provider import ChatMessage, ChatResponse
+from app.gateway.provider import ChatMessage
 from app.gateway.router import GatewayRouter
-from app.interfaces.llm import LLMProvider, LLMResponse
+from app.interfaces.llm import LLMResponse
 
 logger = logging.getLogger(__name__)
 
@@ -130,4 +130,3 @@ class GatewayLLMProvider:
     async def close(self) -> None:
         """关闭连接"""
         # GatewayRouter 不需要显式关闭
-        pass

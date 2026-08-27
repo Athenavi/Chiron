@@ -21,10 +21,8 @@ from typing import Any, Optional
 import redis.asyncio as aioredis
 
 from app.memory.layers import (
-    ConflictRef,
     MemoryConflict,
     ProfileItem,
-    ProfileUpdateResult,
     SlotType,
     SourceType,
 )

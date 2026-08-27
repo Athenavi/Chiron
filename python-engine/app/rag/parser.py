@@ -1,7 +1,6 @@
 # 文档解析器 - 支持 PDF/MD/TXT/CSV/DOCX
 import logging
 import io
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 

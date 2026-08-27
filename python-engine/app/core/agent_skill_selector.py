@@ -13,13 +13,11 @@
 """
 from __future__ import annotations
 
-import json
 import logging
 import time
 from typing import Any, Optional
 from dataclasses import dataclass, field
 from enum import Enum
-from collections import defaultdict
 
 from app.core.capabilities import get_registry, Capability, WorkstationType
 

@@ -3,7 +3,7 @@ LLM Provider Protocol — 对标 Go 的 llm.Provider 接口
 """
 from __future__ import annotations
 
-from typing import Protocol, AsyncIterator, Optional, Any
+from typing import Protocol, AsyncIterator
 
 
 class LLMResponse:

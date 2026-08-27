@@ -225,7 +225,6 @@ class RedisContextBus:
         使用独立的 Redis 连接（从连接池获取）避免阻塞主连接。
         当新 channel 加入时重新订阅（重连机制）。
         """
-        import redis.asyncio as aioredis
 
         while True:
             try:

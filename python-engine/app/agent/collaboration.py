@@ -22,7 +22,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from app.agent.runtime import AgentRuntime, AgentEvent, CompactionConfig
-from app.config import settings
 from app.gateway.router import GatewayRouter
 from app.trace import record_span
 
@@ -81,7 +80,6 @@ class AgentContextStore:
         data["_tenant_id"] = self.tenant_id  # SaaS 安全: 元数据标记
         
         if self._redis_client:
-            import redis.asyncio as aioredis
             await self._redis_client.setex(
                 f"chiron:context:{self.tenant_id}:{context_id}",
                 ttl,
@@ -93,7 +91,6 @@ class AgentContextStore:
     async def get(self, context_id: str) -> Optional[dict]:
         """获取上下文"""
         if self._redis_client:
-            import redis.asyncio as aioredis
             data = await self._redis_client.get(
                 f"chiron:context:{self.tenant_id}:{context_id}"
             )
@@ -104,7 +101,6 @@ class AgentContextStore:
     async def delete(self, context_id: str) -> None:
         """删除上下文"""
         if self._redis_client:
-            import redis.asyncio as aioredis
             await self._redis_client.delete(
                 f"chiron:context:{self.tenant_id}:{context_id}"
             )
@@ -114,7 +110,6 @@ class AgentContextStore:
     async def list_keys(self) -> list[str]:
         """列出该租户下的所有 context_id"""
         if self._redis_client:
-            import redis.asyncio as aioredis
             keys = await self._redis_client.keys(
                 f"chiron:context:{self.tenant_id}:*"
             )

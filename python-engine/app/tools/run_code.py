@@ -26,7 +26,6 @@ import json
 import logging
 import subprocess
 import sys
-import threading
 import time
 import types
 from typing import Any

@@ -17,7 +17,6 @@ import logging
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
-from datetime import datetime, timezone
 
 from app.gateway.router import GatewayRouter
 from app.tools.registry import registry as tool_registry

@@ -12,7 +12,7 @@ import asyncio
 import logging
 import time
 import uuid
-from typing import Any, Optional
+from typing import Any
 
 from app.tools.context import get_session_id
 from app.tools.registry import registry

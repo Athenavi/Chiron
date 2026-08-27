@@ -3,7 +3,7 @@ DI 容器 — FastAPI Depends + 全局容器（非 HTTP 场景）
 """
 from __future__ import annotations
 
-from typing import Any, Callable, TypeVar, Type, Optional
+from typing import Any, Callable, TypeVar, Optional
 
 T = TypeVar("T")
 

@@ -1,7 +1,6 @@
 """Glob 工具集 — 文件模式匹配搜索。"""
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 

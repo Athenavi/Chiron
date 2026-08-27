@@ -10,7 +10,7 @@ import os
 from typing import Any, Optional
 
 import httpx
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)

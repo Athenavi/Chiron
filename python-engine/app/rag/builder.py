@@ -5,12 +5,11 @@ import asyncio
 import logging
 import re
 import uuid
-from typing import Optional, AsyncIterator
+from typing import AsyncIterator
 from enum import Enum
 
 from app.config import settings
 from app.gateway.router import GatewayRouter
-from app.interfaces.llm import LLMProvider
 from app.interfaces.vectorstore import VectorStore
 
 logger = logging.getLogger(__name__)
@@ -234,7 +233,6 @@ class RAGBuilder:
     def _parse_pdf_lightweight(self, content: bytes) -> dict:
         """使用 PyMuPDF 解析 PDF"""
         import fitz
-        import io
 
         doc = fitz.open(stream=content, filetype="pdf")
         try:

@@ -3,7 +3,7 @@ VectorStore Protocol — 对标 Go 的 storage.FileStore 模式
 """
 from __future__ import annotations
 
-from typing import Protocol, Optional, Any
+from typing import Protocol
 
 
 class VectorStore(Protocol):
