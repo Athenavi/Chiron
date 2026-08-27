@@ -9,6 +9,7 @@
 - 所有 Python 实例共享同一 Redis Stream
 - Go Gateway 统一读取 stream,不依赖进程内存
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -34,10 +35,10 @@ def get_tenant_stream(tenant_id: str) -> str:
 
 class TraceWriter:
     """异步 trace writer (单例模式,避免重复连接 Redis)."""
-    
+
     _instance: Optional["TraceWriter"] = None
     _redis: Optional[Any] = None
-    
+
     @classmethod
     async def get_instance(cls, redis_url: Optional[str] = None) -> "TraceWriter":
         """获取全局唯一 TraceWriter 实例."""
@@ -45,15 +46,18 @@ class TraceWriter:
             cls._instance = cls()
             # 使用统一的 Redis 客户端
             from app.redis_client import get_redis
+
             try:
                 cls._redis = await get_redis()
                 await cls._redis.ping()
                 logger.info("TraceWriter connected to Redis via unified client")
             except Exception as e:
-                logger.warning("TraceWriter Redis ping failed: %s (traces will be lost)", e)
+                logger.warning(
+                    "TraceWriter Redis ping failed: %s (traces will be lost)", e
+                )
                 cls._redis = None
         return cls._instance
-    
+
     @classmethod
     async def close(cls) -> None:
         """关闭 Redis 连接."""
@@ -61,7 +65,7 @@ class TraceWriter:
             await cls._redis.close()
             cls._redis = None
             cls._instance = None
-    
+
     async def write_span(
         self,
         trace_id: str,
@@ -71,7 +75,7 @@ class TraceWriter:
         tenant_id: Optional[str] = None,  # SaaS: 租户隔离
     ) -> None:
         """写入单个 span 事件到 Redis Stream (按租户隔离).
-        
+
         Args:
             trace_id: 用户请求的唯一标识
             span_name: span 名称 (llm_call / tool_execution / workflow_node)
@@ -85,9 +89,12 @@ class TraceWriter:
             return
 
         if self._redis is None:
-            logger.debug("TraceWriter disabled (Redis not available), skipping span: %s", span_name)
+            logger.debug(
+                "TraceWriter disabled (Redis not available), skipping span: %s",
+                span_name,
+            )
             return
-        
+
         try:
             # SaaS 安全: 按 tenant_id 分 stream
             stream = get_tenant_stream(tenant_id or "anonymous")
@@ -101,11 +108,13 @@ class TraceWriter:
             }
             await self._redis.xadd(stream, entry, maxlen=10000, approximate=True)
         except Exception as e:
-            logger.warning("TraceWriter failed to write span (tenant=%s): %s", tenant_id, e)
-    
+            logger.warning(
+                "TraceWriter failed to write span (tenant=%s): %s", tenant_id, e
+            )
+
     async def write_batch(self, spans: list[dict]) -> None:
         """批量写入多个 span (减少 Redis 往返).
-        
+
         Args:
             spans: 每个 dict 包含 trace_id, span_name, duration_ms, metadata
         """
@@ -114,12 +123,14 @@ class TraceWriter:
 
         # 隐私模式: no_retention 时跳过 trace 写入 (不落盘)
         if is_no_retention():
-            logger.debug("Privacy no_retention: skip trace batch write (%d spans)", len(spans))
+            logger.debug(
+                "Privacy no_retention: skip trace batch write (%d spans)", len(spans)
+            )
             return
 
         if self._redis is None:
             return
-        
+
         try:
             entries = []
             for s in spans:
@@ -131,14 +142,14 @@ class TraceWriter:
                     "metadata": json.dumps(s.get("metadata", {}), ensure_ascii=False),
                 }
                 entries.append(entry)
-            
+
             pipeline = self._redis.pipeline(transaction=False)
             for span, entry in zip(spans, entries):
                 # SaaS 安全: 按 tenant_id 分 stream（与 write_span 一致）
                 stream = get_tenant_stream(span.get("tenant_id") or "anonymous")
                 pipeline.xadd(stream, entry, maxlen=10000, approximate=True)
             await pipeline.execute()
-            
+
             logger.debug("TraceWriter wrote %d spans to Redis", len(entries))
         except Exception as e:
             logger.warning("TraceWriter batch write failed: %s", e)
@@ -159,9 +170,9 @@ async def record_span(
     redis_url: Optional[str] = None,
 ) -> None:
     """便捷函数: 记录单个 span 到 Redis Stream (带租户隔离).
-    
+
     自动初始化 TraceWriter (单例),确保首次调用时建立 Redis 连接.
-    
+
     Example:
         await record_span(
             trace_id="abc123",
@@ -172,10 +183,12 @@ async def record_span(
         )
     """
     global _trace_writer
-    
+
     if _trace_writer is None:
         async with _write_lock:
             if _trace_writer is None:
                 _trace_writer = await TraceWriter.get_instance(redis_url)
-    
-    await _trace_writer.write_span(trace_id, span_name, duration_ms, metadata, tenant_id)
+
+    await _trace_writer.write_span(
+        trace_id, span_name, duration_ms, metadata, tenant_id
+    )
