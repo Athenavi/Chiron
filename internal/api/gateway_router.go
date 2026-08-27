@@ -617,6 +617,7 @@ func registerSystemRoutes(
 	mux.Handle("GET /v1/system/spans", authMW(rlMW(RequirePermission(auth.PermAdminRead)(http.HandlerFunc(systemHandler.Spans)))))
 	mux.Handle("GET /v1/system/traces", authMW(rlMW(RequirePermission(auth.PermAdminRead)(http.HandlerFunc(systemHandler.Traces)))))
 	mux.Handle("GET /v1/metrics", authMW(rlMW(http.HandlerFunc(systemHandler.Metrics))))
+	mux.Handle("POST /v1/admin/log-level", authMW(adminWriteMW(http.HandlerFunc(systemHandler.SetLogLevel))))
 
 	// Trace (user-level call chain tracing, tenant-isolated)
 	if traceHandler != nil {

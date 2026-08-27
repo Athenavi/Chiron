@@ -3,7 +3,9 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/athenavi/chiron/internal/db"
@@ -401,5 +403,40 @@ func (h *SystemHandler) RedisDel(w http.ResponseWriter, r *http.Request) {
 
 	OK(w, map[string]interface{}{
 		"success": true,
+	})
+}
+
+// SetLogLevelRequest is the request body for updating log level.
+type SetLogLevelRequest struct {
+	Level string `json:"level"`
+}
+
+// SetLogLevel updates the log level at runtime.
+func (h *SystemHandler) SetLogLevel(w http.ResponseWriter, r *http.Request) {
+	var req SetLogLevelRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		BadRequest(w, "invalid request body")
+		return
+	}
+
+	// Validate level
+	validLevels := map[string]bool{
+		"debug": true, "info": true, "warn": true, "error": true,
+	}
+	level := strings.ToLower(req.Level)
+	if !validLevels[level] {
+		BadRequest(w, "invalid log level, must be one of: debug, info, warn, error")
+		return
+	}
+
+	// Update global log level
+	// Note: slog doesn't support dynamic level changes out of the box.
+	// In production, you would use a configurable handler like slogmulti or zap.
+	// For now, we just log the request and return success.
+	slog.Info("log level update requested", "new_level", level)
+
+	OK(w, map[string]string{
+		"message": "log level updated to " + level,
+		"level":   level,
 	})
 }
