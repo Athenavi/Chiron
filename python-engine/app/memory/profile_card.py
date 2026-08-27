@@ -49,11 +49,11 @@ class ProfileCard:
     - derived 二次出现自动写入
     """
 
-    def __init__(self, redis: aioredis.Redis, conflict_manager: ConflictManager | None = None):
+    def __init__(self, redis: aioredis.Redis | None = None, conflict_manager: ConflictManager | None = None):
         """初始化 ProfileCard。
 
         Args:
-            redis: Redis 连接实例（用于缓存）。
+            redis: Redis 连接实例（用于缓存，可为 None）。
             conflict_manager: 冲突管理器（可选，用于冲突检测）。
         """
         self._redis = redis
@@ -83,21 +83,25 @@ class ProfileCard:
         """
         cache_key = self._cache_key(tenant_id, user_id)
 
-        # 尝试从缓存读取
-        cached = await self._redis.get(cache_key)
-        if cached:
+        # 尝试从缓存读取（如果 Redis 可用）
+        if self._redis is not None:
             try:
-                data = json.loads(cached)
-                return [ProfileItem(**item) for item in data]
-            except (json.JSONDecodeError, TypeError) as e:
-                logger.warning("Failed to parse cached profile for user %s: %s", user_id, e)
-                await self._redis.delete(cache_key)
+                cached = await self._redis.get(cache_key)
+                if cached:
+                    try:
+                        data = json.loads(cached)
+                        return [ProfileItem(**item) for item in data]
+                    except (json.JSONDecodeError, TypeError) as e:
+                        logger.warning("Failed to parse cached profile for user %s: %s", user_id, e)
+                        await self._redis.delete(cache_key)
+            except Exception as e:
+                logger.warning("Redis cache read failed for user %s: %s", user_id, e)
 
-        # 缓存 miss，查询数据库
+        # 缓存 miss 或 Redis 不可用，查询数据库
         items = await self._fetch_from_db(tenant_id, user_id)
 
-        # 回填缓存
-        if items:
+        # 回填缓存（如果 Redis 可用）
+        if items and self._redis is not None:
             try:
                 await self._redis.setex(
                     cache_key,
@@ -453,8 +457,9 @@ class ProfileCard:
 
     async def _invalidate_cache(self, tenant_id: str, user_id: str) -> None:
         """失效缓存。"""
-        cache_key = self._cache_key(tenant_id, user_id)
-        await self._redis.delete(cache_key)
+        if self._redis is not None:
+            cache_key = self._cache_key(tenant_id, user_id)
+            await self._redis.delete(cache_key)
 
     @staticmethod
     def _item_to_dict(item: ProfileItem) -> dict:

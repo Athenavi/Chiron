@@ -214,7 +214,7 @@ async def lifespan(app: FastAPI):
         )
         mem_svc = MemoryService(
             session_meta_store=ProfileStore(pool),
-            profile_card=ProfileCard(pool),
+            profile_card=ProfileCard(redis=_redis),
             summary_store=consolidator,
         )
         set_memory_service(mem_svc)

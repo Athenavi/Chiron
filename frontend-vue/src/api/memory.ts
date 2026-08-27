@@ -116,7 +116,8 @@ export async function startOrganize(): Promise<{ started: boolean; status: Organ
 /** 整理任务状态 */
 export async function getOrganizeStatus(): Promise<OrganizeStatus> {
   const { data } = await api.get('/v1/memory/organize/status')
-  return data?.status
+  // 兼容两种响应格式：{ success: true, status: {...} } 或 { status: {...} }
+  return data.status ?? data
 }
 
 export const MEMORY_SLOTS: { slot: MemorySlot; label: string }[] = [

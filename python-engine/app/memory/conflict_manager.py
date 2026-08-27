@@ -47,11 +47,11 @@ class ConflictManager:
     4. 提供冲突裁决接口
     """
 
-    def __init__(self, redis: aioredis.Redis):
+    def __init__(self, redis: aioredis.Redis | None = None):
         """初始化冲突管理器。
 
         Args:
-            redis: Redis 连接实例。
+            redis: Redis 连接实例（可为 None，此时冲突管理功能禁用）。
         """
         self._redis = redis
 
@@ -100,6 +100,11 @@ class ConflictManager:
         """
         if not existing_item:
             return False, None  # 无现有条目，直接写入
+
+        # 如果 Redis 不可用，跳过冲突管理，允许直接写入
+        if self._redis is None:
+            logger.debug("Conflict manager disabled (Redis unavailable), allowing write for %s:%s", slot, item_key)
+            return False, None
 
         # user_confirmed 冲突：如果现有条目是 user_confirmed，新条目不是
         if (existing_item.source == SourceType.USER_CONFIRMED
