@@ -298,6 +298,15 @@ export async function resolveMediaUrl(asset: { id?: string; file_url?: string })
   const f = asset?.file_url || ''
   if (f && !f.startsWith('/media/')) return f
   if (!asset?.id) return f
+  
+  // 清除过期缓存，确保使用最新的签名URL
+  const now = Date.now()
+  for (const [key, value] of signedMediaCache.entries()) {
+    if (value.exp <= now) {
+      signedMediaCache.delete(key)
+    }
+  }
+  
   const cached = signedMediaCache.get(asset.id)
   if (cached && cached.exp > Date.now()) return cached.url
   try {
