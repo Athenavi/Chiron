@@ -40,10 +40,16 @@ func (h *SearchHandler) Search(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	pool := db.ReadPool()
+	if pool == nil {
+		ServiceUnavailable(w, "database not available")
+		return
+	}
+
 	var results []SearchResult
 
 	// 1. Search messages (conversations)
-	msgRows, err := db.ReadPool().Query(r.Context(),
+	msgRows, err := pool.Query(r.Context(),
 		`SELECT m.id, m.session_id, m.content, s.title,
 			ts_rank(to_tsvector('simple', m.content), plainto_tsquery('simple', $1)) as rank
 		 FROM messages m
@@ -76,7 +82,7 @@ func (h *SearchHandler) Search(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 2. Search files (from editor file list)
-	fileRows, err := db.ReadPool().Query(r.Context(),
+	fileRows, err := pool.Query(r.Context(),
 		`SELECT id, name, file_path,
 			ts_rank(to_tsvector('simple', COALESCE(name,'')), plainto_tsquery('simple', $1)) as rank
 		 FROM media_assets

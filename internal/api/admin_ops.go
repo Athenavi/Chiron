@@ -695,7 +695,12 @@ func (h *AdminHandler) DeleteModel(w http.ResponseWriter, r *http.Request) {
 
 // ListUserModels 用户侧可用模型（仅 enabled）：GET /v1/models
 func ListUserModels(w http.ResponseWriter, r *http.Request) {
-	rows, err := db.ReadPool().Query(r.Context(),
+	pool := db.ReadPool()
+	if pool == nil {
+		ServiceUnavailable(w, "database not available")
+		return
+	}
+	rows, err := pool.Query(r.Context(),
 		`SELECT provider, name, display_name, context_window FROM llm_models
 		 WHERE enabled = true ORDER BY provider, name`)
 	if err != nil {
@@ -734,7 +739,12 @@ type cronRow struct {
 }
 
 func (h *AdminHandler) ListCronJobs(w http.ResponseWriter, r *http.Request) {
-	rows, err := db.ReadPool().Query(r.Context(),
+	pool := db.ReadPool()
+	if pool == nil {
+		ServiceUnavailable(w, "database not available")
+		return
+	}
+	rows, err := pool.Query(r.Context(),
 		`SELECT id::text, name, schedule, task, enabled, last_run_at, last_status, webhook_token, created_at FROM cron_jobs ORDER BY created_at DESC`)
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "list cron jobs failed")

@@ -61,6 +61,13 @@ func handleActivities(w http.ResponseWriter, r *http.Request) {
 	items := make([]item, 0, limit*3)
 	ctx := r.Context()
 
+	// Check if database pool is available
+	pool := db.ReadPool()
+	if pool == nil {
+		ServiceUnavailable(w, "database not available")
+		return
+	}
+
 	// Single combined query: UNION ALL across all three tables
 	// Each sub-query returns (workstation, route, title, status, ts)
 	const combinedSQL = `
@@ -81,7 +88,7 @@ func handleActivities(w http.ResponseWriter, r *http.Request) {
 		ORDER BY 5 DESC
 		LIMIT $3
 	`
-	if rows, err := db.ReadPool().Query(ctx, combinedSQL, claims.TenantID, claims.UserID, limit*3); err == nil {
+	if rows, err := pool.Query(ctx, combinedSQL, claims.TenantID, claims.UserID, limit*3); err == nil {
 		for rows.Next() {
 			var ws, route, title, status string
 			var ts time.Time

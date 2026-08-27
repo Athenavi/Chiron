@@ -152,7 +152,10 @@ func NewSetupRouter(cfg *config.Config) http.Handler {
 	// 安装端点：必须携带安装令牌（X-Install-Token header 或 ?token= 查询参数）
 	mux.Handle("GET /v1/install/step1", publicMW(installMW(http.HandlerFunc(installHandler.Step1))))
 	mux.Handle("POST /v1/install/step2", publicMW(installMW(http.HandlerFunc(installHandler.Step2))))
-	mux.Handle("POST /v1/install/step3", publicMW(installMW(http.HandlerFunc(installHandler.Step3))))
+	// Step 3: 创建管理员账户，此时数据库和 APP_SECRET 已配置，无需安装令牌
+	mux.Handle("POST /v1/install/step3", publicMW(http.HandlerFunc(installHandler.Step3)))
+	// Setup: 向后兼容旧版前端，也无需安装令牌
+	mux.Handle("POST /v1/install/setup", publicMW(http.HandlerFunc(installHandler.Setup)))
 	mux.Handle("GET /v1/install/status", publicMW(http.HandlerFunc(installHandler.Status)))
 
 	// 健康检查（编排器探活；就绪检查如实反映依赖状态）

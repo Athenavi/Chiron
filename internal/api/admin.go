@@ -106,7 +106,12 @@ func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 		Unauthorized(w, "missing tenant context")
 		return
 	}
-	rows, err := db.ReadPool().Query(r.Context(),
+	pool := db.ReadPool()
+	if pool == nil {
+		ServiceUnavailable(w, "database not available")
+		return
+	}
+	rows, err := pool.Query(r.Context(),
 		`SELECT id, email, name, role, created_at, updated_at
 		 FROM users WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT 100`,
 		tenantID)
@@ -147,9 +152,15 @@ func (h *AdminHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	pool := db.ReadPool()
+	if pool == nil {
+		ServiceUnavailable(w, "database not available")
+		return
+	}
+
 	var u AdminUser
 	var createdAt, updatedAt time.Time
-	err := db.ReadPool().QueryRow(r.Context(),
+	err := pool.QueryRow(r.Context(),
 		`SELECT id, email, name, role, created_at, updated_at
 		 FROM users WHERE id = $1 AND tenant_id = $2`, id, tenantID).
 		Scan(&u.ID, &u.Email, &u.Name, &u.Role, &createdAt, &updatedAt)
