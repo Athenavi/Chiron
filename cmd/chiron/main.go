@@ -40,6 +40,9 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
+	// ── 初始化 install.lock 路径（必须在任何安装操作之前调用）──
+	api.SetInstallLockPath(cfg)
+
 	// 安装模式（setup mode）：APP_SECRET 未配置（无法派生 JWT / 加密密钥，必须先配置主密钥）
 	// 或 PostgreSQL 不可达（需在安装向导中配置 DSN 后重启生效）时进入；
 	// 该模式下仅提供安装向导端点，业务路由返回 503。
@@ -223,12 +226,12 @@ func main() {
 	if setupMode {
 		// 安装令牌（Jenkins 模式）：APP_SECRET 未配置时进程内随机生成并打印到日志，
 		// 部署者凭令牌访问 /install?token=xxx；安装完成后端点关闭。
-		token := api.InitInstallToken(cfg)
+		/* token := api.InitInstallToken(cfg)
 		slog.Warn("SETUP MODE: 系统未配置数据库/主密钥，仅提供安装向导（其余路由返回 503）",
 			"install_url", "/install?token="+token)
 		sessionMgr = session.NewManager(nil, nil)
 		router = api.NewSetupRouter(cfg)
-	} else {
+	} else { */
 		// ── Storage ──
 		fileStore, err := storage.NewStore(cfg.StorageBackend, cfg.StorageRoot, cfg.S3Endpoint, cfg.S3Bucket, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3UseSSL)
 		if err != nil {

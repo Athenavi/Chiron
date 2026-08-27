@@ -203,7 +203,7 @@ async def lifespan(app: FastAPI):
         from app.memory.profile import ProfileStore
         from app.memory.summaries import SummaryStore
         from app.memory.consolidator import Consolidator
-        from app.memory.service import MemoryService, bind_service as bind_memory_service
+        from app.memory.service import MemoryService
         from app.agent.prompt_engine import bind_memory_service as bind_prompt_memory
         pool = get_pool()
         summary_store = SummaryStore(pool)
@@ -217,7 +217,6 @@ async def lifespan(app: FastAPI):
             summary_store=summary_store,
             consolidator=consolidator,
         )
-        bind_memory_service(mem_svc)
         bind_prompt_memory(mem_svc)
         logger.info("Memory service initialized (L2 profile card + L3 summaries)")
     except Exception as e:

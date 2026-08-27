@@ -7,6 +7,7 @@ from typing import Any, Optional
 import asyncpg
 
 from app.config import settings
+from onnxruntime.transformers.fusion_gpt_attention_megatron import is_close
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,8 @@ def get_pool() -> asyncpg.Pool:
     """Get the global connection pool."""
     if _pool is None:
         raise RuntimeError("PostgreSQL pool not initialized")
-    if _pool.is_closed():
+    # Check if pool is closed (using internal attribute)
+    if getattr(_pool, "_closed", False):
         raise RuntimeError("PostgreSQL pool was closed")
     return _pool
 

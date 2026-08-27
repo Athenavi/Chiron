@@ -132,8 +132,6 @@ func LoadInstallLock() (*InstallLock, error) {
 	return &lk, nil
 }
 
-// SaveInstallLock 原子写入安装状态：随机临时文件 + rename。
-// Windows 的 os.Rename 不覆盖已存在目标，写入前先移除旧文件（本地数据文件，可接受短暂窗口）。
 func SaveInstallLock(lk *InstallLock) error {
 	absPath, err := filepath.Abs(installLockPath)
 	if err != nil {
@@ -164,13 +162,10 @@ func SaveInstallLock(lk *InstallLock) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	if _, err := os.Stat(absPath); err == nil {
-		if err := os.Remove(absPath); err != nil {
-			return err
-		}
-	}
+	// 直接 rename 覆盖，不先删除旧文件（Windows 兼容性更好）
 	return os.Rename(tmpName, absPath)
 }
+
 
 // lockEncryptKey 由 APP_SECRET 派生 install.lock 的 AES-256-GCM 密钥（域分离）。
 func lockEncryptKey(appSecret string) []byte {
