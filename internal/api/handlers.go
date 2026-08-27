@@ -27,7 +27,10 @@ func handleReadiness(w http.ResponseWriter, r *http.Request) {
 	ready := true
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
-	if db.Pool == nil || db.Pool.Ping(ctx) != nil {
+	if !db.GlobalDBManager.IsAvailable() {
+		deps["postgres"] = "down"
+		ready = false
+	} else if err := db.GlobalDBManager.Ping(ctx); err != nil {
 		deps["postgres"] = "down"
 		ready = false
 	}

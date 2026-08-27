@@ -43,16 +43,15 @@ class TraceWriter:
         """获取全局唯一 TraceWriter 实例."""
         if cls._instance is None:
             cls._instance = cls()
-            # 延迟初始化 Redis 连接 (避免启动期阻塞)
-            if redis_url:
-                import redis.asyncio as aioredis
-                cls._redis = aioredis.from_url(redis_url, decode_responses=True)
-                try:
-                    await cls._redis.ping()
-                    logger.info("TraceWriter connected to Redis: %s", redis_url)
-                except Exception as e:
-                    logger.warning("TraceWriter Redis ping failed: %s (traces will be lost)", e)
-                    cls._redis = None
+            # 使用统一的 Redis 客户端
+            from app.redis_client import get_redis
+            try:
+                cls._redis = await get_redis()
+                await cls._redis.ping()
+                logger.info("TraceWriter connected to Redis via unified client")
+            except Exception as e:
+                logger.warning("TraceWriter Redis ping failed: %s (traces will be lost)", e)
+                cls._redis = None
         return cls._instance
     
     @classmethod

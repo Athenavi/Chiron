@@ -315,7 +315,7 @@ func (h *InstallHandler) Status(w http.ResponseWriter, r *http.Request) {
 	status.Deps = make([]InstallDep, 0, 2)
 
 	// 依赖 1：PostgreSQL 连通性（真实 ping）
-	dbOK := db.Pool != nil && db.Pool.Ping(ctx) == nil
+	dbOK := db.GlobalDBManager.IsAvailable() && db.GlobalDBManager.Ping(ctx) == nil
 	status.DB = dbOK
 	status.Deps = append(status.Deps, InstallDep{
 		Name:    "postgres",

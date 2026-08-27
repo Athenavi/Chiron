@@ -379,13 +379,14 @@ async def _enqueue_rag_build(kb_id: str, user_id: str, estimated_cost: float) ->
 
     from app.config import settings
     from app.queue.producer import QueueProducer
+    from app.redis_client import get_redis
 
     pool = get_pool()
     docs = await pool.fetch(
         "SELECT id, file_type, name FROM knowledge_documents WHERE knowledge_base_id = $1",
         kb_id,
     )
-    redis = aioredis.from_url(settings.redis_url, decode_responses=False)
+    redis = await get_redis()
     try:
         producer = QueueProducer(redis)
         task_id = await producer.enqueue(

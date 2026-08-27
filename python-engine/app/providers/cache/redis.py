@@ -26,17 +26,13 @@ class RedisCacheClient:
         self._pool: Optional[aioredis.Redis] = None
     
     async def _get_pool(self) -> aioredis.Redis:
-        """获取或创建连接池"""
+        """获取或创建连接池 - 使用统一 Redis 客户端"""
         if self._pool is None:
-            self._pool = aioredis.from_url(
-                self._url,
-                decode_responses=self._decode_responses,
-                max_connections=self._max_connections,
-            )
+            from app.redis_client import get_redis
+            self._pool = await get_redis()
             await self._pool.ping()
             logger.info(
-                "Redis pool connected: %s (pool=%d)",
-                self._url,
+                "Redis pool connected via unified client (pool=%d)",
                 self._max_connections,
             )
         return self._pool
