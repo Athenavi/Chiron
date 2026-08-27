@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -209,4 +210,196 @@ func systemScore(m map[string]interface{}) int {
 		return 85 // Running > 1h
 	}
 	return 80
+}
+
+// DatabaseHealth 数据库健康检查端点（供 Python 引擎调用）
+func (h *SystemHandler) DatabaseHealth(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	result := db.GlobalDBManager.HealthCheck(ctx)
+	OK(w, result)
+}
+
+// RedisHealth Redis 健康检查端点（供 Python 引擎调用）
+func (h *SystemHandler) RedisHealth(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	result := db.GlobalRedisManager.HealthCheck(ctx)
+	OK(w, result)
+}
+
+// DBQuery 执行 SQL 查询并返回结果（供 Python 引擎调用）
+func (h *SystemHandler) DBQuery(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		SQL  string        `json:"sql"`
+		Args []interface{} `json:"args,omitempty"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		BadRequest(w, "invalid request body")
+		return
+	}
+
+	if req.SQL == "" {
+		BadRequest(w, "sql is required")
+		return
+	}
+
+	ctx := r.Context()
+	results, err := db.GlobalDBManager.FetchAll(ctx, req.SQL, req.Args...)
+	if err != nil {
+		InternalError(w, fmt.Sprintf("query failed: %v", err))
+		return
+	}
+
+	OK(w, map[string]interface{}{
+		"rows": results,
+		"count": len(results),
+	})
+}
+
+// DBExecute 执行 SQL 写操作（供 Python 引擎调用）
+func (h *SystemHandler) DBExecute(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		SQL  string        `json:"sql"`
+		Args []interface{} `json:"args,omitempty"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		BadRequest(w, "invalid request body")
+		return
+	}
+
+	if req.SQL == "" {
+		BadRequest(w, "sql is required")
+		return
+	}
+
+	ctx := r.Context()
+	rowsAffected, err := db.GlobalDBManager.Execute(ctx, req.SQL, req.Args...)
+	if err != nil {
+		InternalError(w, fmt.Sprintf("execute failed: %v", err))
+		return
+	}
+
+	OK(w, map[string]interface{}{
+		"rows_affected": rowsAffected,
+	})
+}
+
+// DBBatchExecute 批量执行 SQL（供 Python 引擎调用）
+func (h *SystemHandler) DBBatchExecute(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Queries []string `json:"queries"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		BadRequest(w, "invalid request body")
+		return
+	}
+
+	if len(req.Queries) == 0 {
+		BadRequest(w, "queries is required")
+		return
+	}
+
+	ctx := r.Context()
+	err := db.GlobalDBManager.BatchExecute(ctx, req.Queries)
+	if err != nil {
+		InternalError(w, fmt.Sprintf("batch execute failed: %v", err))
+		return
+	}
+
+	OK(w, map[string]interface{}{
+		"success": true,
+	})
+}
+
+// RedisGet 获取 Redis 键值（供 Python 引擎调用）
+func (h *SystemHandler) RedisGet(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Key string `json:"key"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		BadRequest(w, "invalid request body")
+		return
+	}
+
+	if req.Key == "" {
+		BadRequest(w, "key is required")
+		return
+	}
+
+	ctx := r.Context()
+	val, err := db.GlobalRedisManager.Get(ctx, req.Key)
+	if err != nil {
+		InternalError(w, fmt.Sprintf("redis get failed: %v", err))
+		return
+	}
+
+	OK(w, map[string]interface{}{
+		"value": val,
+	})
+}
+
+// RedisSet 设置 Redis 键值（供 Python 引擎调用）
+func (h *SystemHandler) RedisSet(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Key   string      `json:"key"`
+		Value interface{} `json:"value"`
+		TTL   int64       `json:"ttl,omitempty"` // seconds
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		BadRequest(w, "invalid request body")
+		return
+	}
+
+	if req.Key == "" {
+		BadRequest(w, "key is required")
+		return
+	}
+
+	ctx := r.Context()
+	expiration := time.Duration(0)
+	if req.TTL > 0 {
+		expiration = time.Duration(req.TTL) * time.Second
+	}
+
+	err := db.GlobalRedisManager.Set(ctx, req.Key, req.Value, expiration)
+	if err != nil {
+		InternalError(w, fmt.Sprintf("redis set failed: %v", err))
+		return
+	}
+
+	OK(w, map[string]interface{}{
+		"success": true,
+	})
+}
+
+// RedisDel 删除 Redis 键（供 Python 引擎调用）
+func (h *SystemHandler) RedisDel(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Keys []string `json:"keys"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		BadRequest(w, "invalid request body")
+		return
+	}
+
+	if len(req.Keys) == 0 {
+		BadRequest(w, "keys is required")
+		return
+	}
+
+	ctx := r.Context()
+	err := db.GlobalRedisManager.Del(ctx, req.Keys...)
+	if err != nil {
+		InternalError(w, fmt.Sprintf("redis del failed: %v", err))
+		return
+	}
+
+	OK(w, map[string]interface{}{
+		"success": true,
+	})
 }

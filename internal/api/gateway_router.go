@@ -460,6 +460,17 @@ func registerPublicEndpoints(
 	mux.Handle("GET /ready", rlMW(http.HandlerFunc(handleReadiness)))
 	// 引擎配置下发（X-Internal-Token 保护，Python 引擎启动拉取）
 	mux.Handle("GET /v1/internal/engine-config", rlMW(internalTokenMW(cfg, EngineConfig(cfg))))
+
+	// Python 引擎数据库/Redis 统一访问端点（X-Internal-Token 保护）
+	mux.Handle("POST /v1/internal/db/query", rlMW(internalTokenMW(cfg, http.HandlerFunc(systemHandler.DBQuery))))
+	mux.Handle("POST /v1/internal/db/execute", rlMW(internalTokenMW(cfg, http.HandlerFunc(systemHandler.DBExecute))))
+	mux.Handle("POST /v1/internal/db/batch-execute", rlMW(internalTokenMW(cfg, http.HandlerFunc(systemHandler.DBBatchExecute))))
+	mux.Handle("GET /v1/internal/db/health", rlMW(internalTokenMW(cfg, http.HandlerFunc(systemHandler.DatabaseHealth))))
+
+	mux.Handle("POST /v1/internal/redis/get", rlMW(internalTokenMW(cfg, http.HandlerFunc(systemHandler.RedisGet))))
+	mux.Handle("POST /v1/internal/redis/set", rlMW(internalTokenMW(cfg, http.HandlerFunc(systemHandler.RedisSet))))
+	mux.Handle("POST /v1/internal/redis/del", rlMW(internalTokenMW(cfg, http.HandlerFunc(systemHandler.RedisDel))))
+	mux.Handle("GET /v1/internal/redis/health", rlMW(internalTokenMW(cfg, http.HandlerFunc(systemHandler.RedisHealth))))
 }
 
 // ── Agent submit/cancel/events ──

@@ -127,6 +127,14 @@ async def lifespan(app: FastAPI):
             logger.info("PostgreSQL connected and tables ensured")
         except Exception as e:
             logger.warning("PostgreSQL not available: %s", e)
+    
+    # Initialize unified DB client (optional, controlled by env var)
+    from app.config import settings
+    use_unified_db = os.getenv("USE_UNIFIED_DB_CLIENT", "false").lower() == "true"
+    if use_unified_db:
+        from app.db_client import get_db_client
+        db_client = get_db_client()
+        logger.info("Unified DB client initialized (through Go gateway)")
 
     # ── 3. LLM Gateway ──
     from app.gateway.provider import LLMProvider
