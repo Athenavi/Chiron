@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"encoding/json"
@@ -131,7 +131,7 @@ func recordToolCall(r *http.Request, toolName string, input map[string]interface
 	// Generate a unique ID
 	id := fmt.Sprintf("tc_%d", time.Now().UnixNano())
 
-	_, err = db.GlobalDBManager.Exec(r.Context(),
+	_, err = db.Pool.Exec(r.Context(),
 		`INSERT INTO tool_calls (id, session_id, tool_name, input, output, is_error, duration_ms, created_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
 		id, nullableStr(sessionID), toolName, string(inputJSON), outputStr, execErr != nil, durationMs)
