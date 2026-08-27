@@ -95,24 +95,29 @@ async def lifespan(app: FastAPI):
     logger.info("=" * 60)
 
     # ── 2. Redis 连接池 ──
-    _redis = aioredis.from_url(
-        settings.redis_url,
-        decode_responses=False,
-        max_connections=settings.redis_max_connections,
-    )
-    try:
-        await _redis.ping()
-        logger.info("Redis connected: %s (pool=%d)", settings.redis_url, settings.redis_max_connections)
-        # 将 SessionStore 接入 Redis，实现多实例共享
-        _session_cache._redis = _redis
-        logger.info("SessionStore switched to Redis backend")
-    except Exception as e:
-        # 产品决策(2026-08-22)「Redis 必需、无降级」已修订(2026-09)：与 Go 网关一致，
-        # Redis 不可用时降级启动——SessionStore 回退进程内内存模式，
-        # 依赖 Redis 的功能（分布式限流/会话多实例共享/队列）返回 503，不阻断引擎启动。
+    if not settings.redis_url:
         logger.warning(
-            "Redis unavailable — degraded mode (session cache in-process, distributed features disabled): %s", e)
+            "Redis URL not configured — degraded mode (session cache in-process, distributed features disabled)")
         _redis = None
+    else:
+        _redis = aioredis.from_url(
+            settings.redis_url,
+            decode_responses=False,
+            max_connections=settings.redis_max_connections,
+        )
+        try:
+            await _redis.ping()
+            logger.info("Redis connected: %s (pool=%d)", settings.redis_url, settings.redis_max_connections)
+            # 将 SessionStore 接入 Redis，实现多实例共享
+            _session_cache._redis = _redis
+            logger.info("SessionStore switched to Redis backend")
+        except Exception as e:
+            # 产品决策(2026-08-22)「Redis 必需、无降级」已修订(2026-09)：与 Go 网关一致，
+            # Redis 不可用时降级启动——SessionStore 回退进程内内存模式，
+            # 依赖 Redis 的功能（分布式限流/会话多实例共享/队列）返回 503，不阻断引擎启动。
+            logger.warning(
+                "Redis unavailable — degraded mode (session cache in-process, distributed features disabled): %s", e)
+            _redis = None
     # ── 2.5. PostgreSQL ──
     if settings.postgres_dsn:
         from app.db import init_pool, ensure_tables

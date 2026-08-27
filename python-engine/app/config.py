@@ -268,7 +268,7 @@ if not settings.postgres_dsn and settings.app_secret:
                     if not enc_dsn:
                         return ""
                     key = derive_lock_key(app_secret)
-                    sealed = base64.raw_std_encoding.decode(enc_dsn)
+                    sealed = base64.b64decode(enc_dsn)
                     nonce_size = 12  # AES-GCM nonce size
                     nonce = sealed[:nonce_size]
                     ciphertext = sealed[nonce_size:]
