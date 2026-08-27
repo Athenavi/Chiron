@@ -1,10 +1,10 @@
 """
 SQLAlchemy 模型定义 - Agent
 由代码生成器自动生成 (基于 models.yaml / routes.yaml) - 请勿手动修改
-生成时间：2026-08-27 08:42:35
+生成时间：2026-08-27 17:11:31
 """
 
-from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, ForeignKey, JSON
 import uuid
 
 from . import Base  # 使用统一的 Base
@@ -31,9 +31,11 @@ class Agent(Base):
     system_prompt = Column(Text, nullable=True, doc='系统提示词')
 
 
-    tools = Column(String(255), default='[]', doc='工具配置（JSONB）')
+    tools = Column(JSON, default=[], doc='工具配置（JSONB）')
 
-    llm_config = Column(String(255), default='{}', doc='LLM 配置（JSONB）')
+
+    llm_config = Column(JSON, default={}, doc='LLM 配置（JSONB）')
+
 
     max_turns = Column(Integer, default=10, doc='最大轮次')
 

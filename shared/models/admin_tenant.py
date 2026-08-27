@@ -1,10 +1,10 @@
 """
 SQLAlchemy 模型定义 - AdminTenant
 由代码生成器自动生成 (基于 models.yaml / routes.yaml) - 请勿手动修改
-生成时间：2026-08-27 08:42:35
+生成时间：2026-08-27 17:11:31
 """
 
-from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime
+from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, JSON
 import uuid
 
 from . import Base  # 使用统一的 Base
@@ -52,7 +52,8 @@ class AdminTenant(Base):
 
     created_by = Column(String(50), nullable=True, doc='创建者')
 
-    features = Column(String(255), default='{}', doc='功能特性（JSONB）')
+    features = Column(JSON, default={}, doc='功能特性（JSONB）')
+
 
 
     def to_dict(self, exclude_sensitive=True):

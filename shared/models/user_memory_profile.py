@@ -1,10 +1,10 @@
 """
 SQLAlchemy 模型定义 - UserMemoryProfile
 由代码生成器自动生成 (基于 models.yaml / routes.yaml) - 请勿手动修改
-生成时间：2026-08-27 08:42:35
+生成时间：2026-08-27 17:11:31
 """
 
-from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime
+from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, JSON
 import uuid
 
 from . import Base  # 使用统一的 Base
@@ -26,7 +26,8 @@ class UserMemoryProfile(Base):
 
     item_key = Column(String(128), primary_key=True, default=lambda: str(uuid.uuid4()), doc='键')
 
-    item_value = Column(String(255), nullable=True, doc='值（JSONB）')
+    item_value = Column(JSON, doc='值（JSONB）')
+
 
     confidence = Column(Integer, default=50, doc='置信度 0-100')
 

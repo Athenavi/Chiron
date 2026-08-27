@@ -156,10 +156,12 @@ models:
         nullable: true
       tools:
         type: object
+        db_type: jsonb
         description: 工具配置（JSONB）
         default: '[]'
       llm_config:
         type: object
+        db_type: jsonb
         description: LLM 配置（JSONB）
         default: '{}'
       max_turns:

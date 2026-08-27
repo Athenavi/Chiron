@@ -1,10 +1,10 @@
 """
 SQLAlchemy 模型定义 - MarketingCampaign
 由代码生成器自动生成 (基于 models.yaml / routes.yaml) - 请勿手动修改
-生成时间：2026-08-27 08:42:35
+生成时间：2026-08-27 17:11:31
 """
 
-from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, ForeignKey, JSON
 import uuid
 
 from . import Base  # 使用统一的 Base
@@ -32,7 +32,8 @@ class MarketingCampaign(Base):
 
     campaign_type = Column(String(32), default='email', doc='活动类型')
 
-    config = Column(String(255), default='{}', doc='JSON 配置')
+    config = Column(JSON, default={}, doc='JSON 配置')
+
 
     status = Column(String(16), default='draft', doc='状态')
 

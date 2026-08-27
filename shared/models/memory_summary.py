@@ -1,10 +1,10 @@
 """
 SQLAlchemy 模型定义 - MemorySummary
 由代码生成器自动生成 (基于 models.yaml / routes.yaml) - 请勿手动修改
-生成时间：2026-08-27 08:42:35
+生成时间：2026-08-27 17:11:31
 """
 
-from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime
+from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, JSON
 import uuid
 
 from . import Base  # 使用统一的 Base
@@ -29,9 +29,11 @@ class MemorySummary(Base):
     content = Column(Text, nullable=False, doc='摘要内容')
 
 
-    topics = Column(String(255), default='[]', doc='主题列表（JSONB）')
+    topics = Column(JSON, default=[], doc='主题列表（JSONB）')
 
-    entities = Column(String(255), default='{}', doc='实体字典（JSONB）')
+
+    entities = Column(JSON, default={}, doc='实体字典（JSONB）')
+
 
     turn_start = Column(Integer, default=0, doc='起始轮次')
 

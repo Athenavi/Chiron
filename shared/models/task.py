@@ -1,10 +1,10 @@
 """
 SQLAlchemy 模型定义 - Task
 由代码生成器自动生成 (基于 models.yaml / routes.yaml) - 请勿手动修改
-生成时间：2026-08-27 08:42:35
+生成时间：2026-08-27 17:11:31
 """
 
-from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, ForeignKey, JSON
 import uuid
 
 from . import Base  # 使用统一的 Base
@@ -30,9 +30,11 @@ class Task(Base):
     priority = Column(Integer, default=0, doc='优先级')
 
 
-    payload = Column(String(255), default='{}', doc='任务负载（JSONB）')
+    payload = Column(JSON, default={}, doc='任务负载（JSONB）')
 
-    result = Column(String(255), nullable=True, doc='结果（JSONB）')
+
+    result = Column(JSON, nullable=True, doc='结果（JSONB）')
+
 
     error = Column(Text, nullable=True, doc='错误信息')
 

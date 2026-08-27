@@ -1,10 +1,10 @@
 """
 SQLAlchemy 模型定义 - ToolCall
 由代码生成器自动生成 (基于 models.yaml / routes.yaml) - 请勿手动修改
-生成时间：2026-08-27 08:42:35
+生成时间：2026-08-27 17:11:31
 """
 
-from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime
+from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, JSON
 import uuid
 
 from . import Base  # 使用统一的 Base
@@ -26,7 +26,8 @@ class ToolCall(Base):
 
     tool_name = Column(String(128), nullable=True, doc='工具名称')
 
-    input = Column(String(255), default='{}', doc='输入参数（JSONB）')
+    input = Column(JSON, default={}, doc='输入参数（JSONB）')
+
 
     output = Column(Text, nullable=False, doc='输出结果')
 

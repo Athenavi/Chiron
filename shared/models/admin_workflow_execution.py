@@ -1,10 +1,10 @@
 """
 SQLAlchemy 模型定义 - AdminWorkflowExecution
 由代码生成器自动生成 (基于 models.yaml / routes.yaml) - 请勿手动修改
-生成时间：2026-08-27 08:42:35
+生成时间：2026-08-27 17:11:31
 """
 
-from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime
+from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, JSON
 import uuid
 
 from . import Base  # 使用统一的 Base
@@ -34,16 +34,19 @@ class AdminWorkflowExecution(Base):
     duration_ms = Column(Integer, nullable=True, doc='耗时（毫秒）')
 
 
-    input_data = Column(String(255), nullable=True, doc='输入数据（JSONB）')
+    input_data = Column(JSON, nullable=True, doc='输入数据（JSONB）')
 
-    output_data = Column(String(255), nullable=True, doc='输出数据（JSONB）')
+
+    output_data = Column(JSON, nullable=True, doc='输出数据（JSONB）')
+
 
     error_message = Column(Text, nullable=True, doc='错误信息')
 
 
     triggered_by = Column(String(50), nullable=True, doc='触发者')
 
-    node_results = Column(String(255), default='[]', doc='节点结果（JSONB）')
+    node_results = Column(JSON, default=[], doc='节点结果（JSONB）')
+
 
 
     def to_dict(self, exclude_sensitive=True):

@@ -82,6 +82,14 @@ def check_timestamp_fields(fields: Dict) -> bool:
     return any(f.get('type') in ('datetime', 'timestamp') for f in fields.values())
 
 
+def check_json_fields(fields: Dict) -> bool:
+    return any(f.get('type') == 'object' for f in fields.values())
+
+
+def check_jsonb_fields(fields: Dict) -> bool:
+    return any(f.get('db_type') == 'jsonb' for f in fields.values())
+
+
 def check_foreign_keys_in_fields(fields: Dict) -> bool:
     return any(f.get('foreign_key', False) for f in fields.values())
 
@@ -152,6 +160,8 @@ def generate_all():
             template_data = {
                 'model_name': model_name,
                 'classes': {model_name: class_def},
+                'has_json': check_json_fields(fields),
+                'has_jsonb': check_jsonb_fields(fields),
                 'table_prefix': '',
                 'all_models': orm_models,
                 'generation_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
@@ -205,21 +215,21 @@ def generate_all():
 def update_init(lazy_imports: Dict[str, str]):
     """更新 __init__.py 的 _LAZY_IMPORTS"""
     init_path = OUTPUT_DIR / '__init__.py'
-    
+
     # 读取现有内容
     content = ''
     if init_path.exists():
         with open(init_path, 'r', encoding='utf-8') as f:
             content = f.read()
-    
+
     # 构建新的 _LAZY_IMPORTS 部分
     imports_lines = []
     for model_name in sorted(lazy_imports.keys()):
         module_path = lazy_imports[model_name]
         imports_lines.append(f"    '{model_name}': '{module_path}',")
-    
+
     imports_str = '\n'.join(imports_lines)
-    
+
     new_content = f'''"""
 SQLAlchemy 模型包 - 由代码生成器自动生成
 所有模型统一继承 Base，由 Alembic 自动发现
@@ -233,10 +243,10 @@ _LAZY_IMPORTS = {{
 {imports_str}
 }}
 '''
-    
+
     with open(init_path, 'w', encoding='utf-8') as f:
         f.write(new_content)
-    
+
     print(f"  📝 更新 __init__.py ({len(lazy_imports)} 个懒加载导入)")
 
 

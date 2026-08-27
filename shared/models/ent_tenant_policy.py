@@ -1,10 +1,10 @@
 """
 SQLAlchemy 模型定义 - EntTenantPolicy
 由代码生成器自动生成 (基于 models.yaml / routes.yaml) - 请勿手动修改
-生成时间：2026-08-27 08:42:35
+生成时间：2026-08-27 17:11:31
 """
 
-from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, ForeignKey, JSON
 import uuid
 
 from . import Base  # 使用统一的 Base
@@ -29,7 +29,8 @@ class EntTenantPolicy(Base):
     training_allowed = Column(Boolean, default=True, doc='允许训练')
 
 
-    redaction_rules = Column(String(255), default='{}', doc='脱敏规则（JSONB）')
+    redaction_rules = Column(JSON, default={}, doc='脱敏规则（JSONB）')
+
 
     updated_at = Column(String(255), default='now()', doc='更新时间')
 

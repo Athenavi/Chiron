@@ -1,10 +1,10 @@
 """
 SQLAlchemy 模型定义 - Okr
 由代码生成器自动生成 (基于 models.yaml / routes.yaml) - 请勿手动修改
-生成时间：2026-08-27 08:42:35
+生成时间：2026-08-27 17:11:31
 """
 
-from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, ForeignKey, JSON
 import uuid
 
 from . import Base  # 使用统一的 Base
@@ -27,7 +27,8 @@ class Okr(Base):
 
     objective = Column(String(255), nullable=True, doc='目标')
 
-    key_results = Column(String(255), default='[]', doc='关键结果（JSONB）')
+    key_results = Column(JSON, default=[], doc='关键结果（JSONB）')
+
 
     quarter = Column(String(16), default='', doc='季度')
 

@@ -18,6 +18,12 @@ SQLAlchemy 模型定义 - {{ model_name }}
 {% if table_has_unique_constraints %}
     {% set _ = core_imports.append('UniqueConstraint') %}
 {% endif %}
+{% if has_json or has_jsonb %}
+    {% set _ = core_imports.append('JSON') %}
+{% endif %}
+{% if has_jsonb %}
+    {% set _ = core_imports.append('JSONB') %}
+{% endif %}
 {% if is_unlogged %}
 from sqlalchemy import event
 {% endif %}
@@ -126,7 +132,11 @@ class {{ class_name }}(Base):
     {{ python_name }} = Column({% if db_column %}'{{ db_column }}', {% endif %}DateTime, default=datetime.utcnow{% if nullable %}, nullable=True{% endif %}{% if doc %}, doc='{{ doc }}'{% endif %})
         {%- else %}
     {{ python_name }} = Column({% if db_column %}'{{ db_column }}', {% endif %}DateTime{% if default is not none %}, default={{ default }}{% endif %}{% if nullable %}, nullable=True{% endif %}{% if doc %}, doc='{{ doc }}'{% endif %})
-        {%- endif %}
+        {%- endif %}    {# JSON/JSONB 类型 #}
+    {%- elif field_type == 'object' %}
+        {%- set db_type = field_def.get('db_type', 'json') %}
+        {%- set sqlalchemy_type = 'JSONB' if db_type == 'jsonb' else 'JSON' %}
+    {{ python_name }} = Column({% if db_column %}'{{ db_column }}', {% endif %}{{ sqlalchemy_type }}{% if default is not none %}, default={{ default }}{% endif %}{% if nullable %}, nullable=True{% endif %}{% if doc %}, doc='{{ doc }}'{% endif %})
     {# 字符串类型（默认） #}
     {%- else %}
         {%- set actual_nullable = not nullable and default is none %}

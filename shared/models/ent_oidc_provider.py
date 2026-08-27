@@ -1,10 +1,10 @@
 """
 SQLAlchemy 模型定义 - EntOidcProvider
 由代码生成器自动生成 (基于 models.yaml / routes.yaml) - 请勿手动修改
-生成时间：2026-08-27 08:42:35
+生成时间：2026-08-27 17:11:31
 """
 
-from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, ForeignKey, JSON
 import uuid
 
 from . import Base  # 使用统一的 Base
@@ -40,7 +40,8 @@ class EntOidcProvider(Base):
     auto_provision = Column(Boolean, default=True, doc='自动创建用户')
 
 
-    role_mapping = Column(String(255), default='{}', doc='角色映射（JSONB）')
+    role_mapping = Column(JSON, default={}, doc='角色映射（JSONB）')
+
 
     created_at = Column(String(255), default='now()', doc='创建时间')
 
@@ -63,7 +64,8 @@ class EntOidcProvider(Base):
 
     userinfo_url = Column(String(512), nullable=True, doc='用户信息 URL')
 
-    extra = Column(String(255), default='{}', doc='额外配置（JSONB）')
+    extra = Column(JSON, default={}, doc='额外配置（JSONB）')
+
 
 
     def to_dict(self, exclude_sensitive=True):

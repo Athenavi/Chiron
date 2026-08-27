@@ -1,10 +1,10 @@
 """
 SQLAlchemy 模型定义 - UnifiedSession
 由代码生成器自动生成 (基于 models.yaml / routes.yaml) - 请勿手动修改
-生成时间：2026-08-27 08:42:35
+生成时间：2026-08-27 17:11:31
 """
 
-from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime
+from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, JSON
 import uuid
 
 from . import Base  # 使用统一的 Base
@@ -28,7 +28,8 @@ class UnifiedSession(Base):
 
     mode = Column(String(16), default='auto', doc='模式')
 
-    shared_context = Column(String(255), default='{}', doc='共享上下文（JSONB）')
+    shared_context = Column(JSON, default={}, doc='共享上下文（JSONB）')
+
 
     created_at = Column(String(255), default='now()', doc='创建时间')
 

@@ -1,10 +1,10 @@
 """
 SQLAlchemy 模型定义 - KnowledgeChunk
 由代码生成器自动生成 (基于 models.yaml / routes.yaml) - 请勿手动修改
-生成时间：2026-08-27 08:42:35
+生成时间：2026-08-27 17:11:31
 """
 
-from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, ForeignKey, JSON
 import uuid
 
 from . import Base  # 使用统一的 Base
@@ -35,7 +35,8 @@ class KnowledgeChunk(Base):
     content = Column(Text, nullable=False, doc='内容')
 
 
-    metadata = Column(String(255), default='{}', doc='元数据（JSONB）')
+    metadata = Column(JSON, default={}, doc='元数据（JSONB）')
+
 
     search_vector = Column(String(255), nullable=True, doc='搜索向量')
 

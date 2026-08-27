@@ -1,10 +1,10 @@
 """
 SQLAlchemy 模型定义 - EntTemplate
 由代码生成器自动生成 (基于 models.yaml / routes.yaml) - 请勿手动修改
-生成时间：2026-08-27 08:42:35
+生成时间：2026-08-27 17:11:31
 """
 
-from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime
+from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, JSON
 import uuid
 
 from . import Base  # 使用统一的 Base
@@ -27,7 +27,8 @@ class EntTemplate(Base):
     description = Column(Text, nullable=False, doc='描述')
 
 
-    payload = Column(String(255), nullable=True, doc='负载（JSONB）')
+    payload = Column(JSON, doc='负载（JSONB）')
+
 
     published = Column(Boolean, default=True, doc='是否已发布')
 

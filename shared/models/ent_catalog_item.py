@@ -1,10 +1,10 @@
 """
 SQLAlchemy 模型定义 - EntCatalogItem
 由代码生成器自动生成 (基于 models.yaml / routes.yaml) - 请勿手动修改
-生成时间：2026-08-27 08:42:35
+生成时间：2026-08-27 17:11:31
 """
 
-from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime
+from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, JSON
 import uuid
 
 from . import Base  # 使用统一的 Base
@@ -26,7 +26,8 @@ class EntCatalogItem(Base):
 
     version = Column(String(32), default='1.0.0', doc='版本')
 
-    manifest = Column(String(255), default='{}', doc='清单（JSONB）')
+    manifest = Column(JSON, default={}, doc='清单（JSONB）')
+
 
     status = Column(String(16), default='draft', doc='状态')
 

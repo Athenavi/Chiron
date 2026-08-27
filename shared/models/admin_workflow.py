@@ -1,10 +1,10 @@
 """
 SQLAlchemy 模型定义 - AdminWorkflow
 由代码生成器自动生成 (基于 models.yaml / routes.yaml) - 请勿手动修改
-生成时间：2026-08-27 08:42:35
+生成时间：2026-08-27 17:11:31
 """
 
-from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime
+from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, JSON
 import uuid
 
 from . import Base  # 使用统一的 Base
@@ -27,9 +27,11 @@ class AdminWorkflow(Base):
     description = Column(Text, nullable=True, doc='描述')
 
 
-    nodes = Column(String(255), nullable=True, doc='节点（JSONB）')
+    nodes = Column(JSON, doc='节点（JSONB）')
 
-    edges = Column(String(255), nullable=True, doc='边（JSONB）')
+
+    edges = Column(JSON, doc='边（JSONB）')
+
 
     error_handling_strategy = Column(String(20), default='fail_fast', doc='错误处理策略')
 
