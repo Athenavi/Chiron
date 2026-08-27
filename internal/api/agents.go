@@ -150,8 +150,8 @@ func (h *AgentHandler) seedPresetAgents() {
 func (h *AgentHandler) List(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	rows, err := db.GlobalDBManager.Query(r.Context(),
-		`SELECT id::text, name, COALESCE(description,''), COALESCE(system_prompt,''), COALESCE(tools,'[]'::jsonb), COALESCE(llm_config,'{}'::jsonb), max_turns, timeout_seconds, enabled, created_at, updated_at
-		 FROM agents WHERE tenant_id = $1 AND (user_id = $2 OR (visibility = 'tenant' AND tenant_id = $1)) ORDER BY created_at DESC`, claims.TenantID, claims.UserID)
+		`SELECT id::text, name, COALESCE(description,''), COALESCE(system_prompt,''), COALESCE(tools,'[]'::json), COALESCE(llm_config,'{}'::json), max_turns, timeout_seconds, enabled, created_at, updated_at
+		 FROM agents WHERE tenant_id = $1 AND user_id = $2 ORDER BY created_at DESC`, claims.TenantID, claims.UserID)
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "list agents failed")
 		return

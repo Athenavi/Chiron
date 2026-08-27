@@ -80,7 +80,7 @@ func (h *MediaHandler) List(w http.ResponseWriter, r *http.Request) {
 		argIdx++
 	}
 	if tagsParam != "" {
-		// 閫楀彿鍒嗛殧鏍囩锛氬尮閰嶅叏閮紙tags @>锛?
+		// 逗号分隔标签：匹配全部（tags 包含所有指定标签）
 		tagList := strings.Split(tagsParam, ",")
 		clean := make([]string, 0, len(tagList))
 		for _, t := range tagList {
@@ -89,9 +89,12 @@ func (h *MediaHandler) List(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if len(clean) > 0 {
-			where += fmt.Sprintf(" AND tags @> $%d::text[]", argIdx)
-			args = append(args, clean)
-			argIdx++
+			// tags 是逗号分隔的字符串，使用 LIKE 匹配每个标签
+			for _, tag := range clean {
+				where += fmt.Sprintf(" AND (tags LIKE $%d OR tags LIKE $%d OR tags LIKE $%d)", argIdx, argIdx+1, argIdx+2)
+				args = append(args, tag+",%", "%,"+tag+",%", "%,"+tag)
+				argIdx += 3
+			}
 		}
 	}
 
@@ -102,7 +105,7 @@ func (h *MediaHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	query := `SELECT id, type, name, COALESCE(file_url, ''), COALESCE(mime_type, ''),
-		COALESCE(thumbnail, ''), metadata_data::text, COALESCE(tags::text, ''), COALESCE(category, ''), size, created_at, updated_at
+		COALESCE(thumbnail, ''), metadata_data, COALESCE(tags, ''), COALESCE(category, ''), size, created_at, updated_at
 		FROM media_assets` + where +
 		" ORDER BY (type = 'folder') DESC, name ASC LIMIT $%d OFFSET $%d"
 	args = append(args, pageSize, (page-1)*pageSize)
@@ -118,19 +121,17 @@ func (h *MediaHandler) List(w http.ResponseWriter, r *http.Request) {
 	items := make([]MediaAsset, 0, pageSize)
 	for rows.Next() {
 		var a MediaAsset
-		var metadataJSON, tagsJSON string
+		var metadataJSON []byte
+		var tagsStr string
 		if err := rows.Scan(&a.ID, &a.Type, &a.Name, &a.FileURL, &a.MimeType,
-			&a.Thumbnail, &metadataJSON, &tagsJSON, &a.Category, &a.Size, &a.CreatedAt, &a.UpdatedAt); err != nil {
+			&a.Thumbnail, &metadataJSON, &tagsStr, &a.Category, &a.Size, &a.CreatedAt, &a.UpdatedAt); err != nil {
 			continue
 		}
-		if metadataJSON != "" && metadataJSON != "{}" {
-			json.Unmarshal([]byte(metadataJSON), &a.Metadata)
+		if len(metadataJSON) > 0 && string(metadataJSON) != "{}" && string(metadataJSON) != "null" {
+			json.Unmarshal(metadataJSON, &a.Metadata)
 		}
-		if tagsJSON != "" {
-			t := strings.Trim(tagsJSON, "{}")
-			if t != "" {
-				a.Tags = strings.Split(t, ",")
-			}
+		if tagsStr != "" {
+			a.Tags = strings.Split(tagsStr, ",")
 		}
 		items = append(items, a)
 	}
@@ -177,18 +178,18 @@ func (h *MediaHandler) Create(w http.ResponseWriter, r *http.Request) {
 	fileURL := ""
 
 	if body.Content != "" {
-		// 鍏堟彃鍏ユ暟鎹簱鑾峰彇 UUID
+		// 先插入数据库获取 UUID
 		metadataJSON, _ := json.Marshal(body.Metadata)
-		tagsJSON := "{}"
+		tagsStr := ""
 		if len(body.Tags) > 0 {
-			tagsJSON = "{" + strings.Join(body.Tags, ",") + "}"
+			tagsStr = strings.Join(body.Tags, ",")
 		}
 
 		err := db.Pool.QueryRow(r.Context(),
-			`INSERT INTO media_assets (id, tenant_id, user_id, type, name, file_url, category, tags, metadata, size, created_at, updated_at)
+			`INSERT INTO media_assets (id, tenant_id, user_id, type, name, file_url, category, tags, metadata_data, size, created_at, updated_at)
 			 VALUES (gen_random_uuid(), $1, $2, $3, $4, '', $5, $6, $7, $8, NOW(), NOW())
 			 RETURNING id`,
-			claims.TenantID, claims.UserID, body.Type, body.Name, nullableStr(body.Category), tagsJSON, string(metadataJSON), len(body.Content),
+			claims.TenantID, claims.UserID, body.Type, body.Name, nullableStr(body.Category), tagsStr, string(metadataJSON), len(body.Content),
 		).Scan(&assetID)
 		if err != nil {
 			logAndRespond(w, err, http.StatusInternalServerError, "create asset failed")
@@ -211,16 +212,16 @@ func (h *MediaHandler) Create(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		metadataJSON, _ := json.Marshal(body.Metadata)
-		tagsJSON := "{}"
+		tagsStr := ""
 		if len(body.Tags) > 0 {
-			tagsJSON = "{" + strings.Join(body.Tags, ",") + "}"
+			tagsStr = strings.Join(body.Tags, ",")
 		}
 
 		err := db.Pool.QueryRow(r.Context(),
-			`INSERT INTO media_assets (id, tenant_id, user_id, type, name, file_url, category, tags, metadata, size, created_at, updated_at)
+			`INSERT INTO media_assets (id, tenant_id, user_id, type, name, file_url, category, tags, metadata_data, size, created_at, updated_at)
 			 VALUES (gen_random_uuid(), $1, $2, $3, $4, '', $5, $6, $7, $8, NOW(), NOW())
 			 RETURNING id`,
-			claims.TenantID, claims.UserID, body.Type, body.Name, nullableStr(body.Category), tagsJSON, string(metadataJSON), 0,
+			claims.TenantID, claims.UserID, body.Type, body.Name, nullableStr(body.Category), tagsStr, string(metadataJSON), 0,
 		).Scan(&assetID)
 		if err != nil {
 			logAndRespond(w, err, http.StatusInternalServerError, "create asset failed")
