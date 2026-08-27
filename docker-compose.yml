@@ -118,10 +118,26 @@
       - "127.0.0.1:9090:9090"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus_alerts.yml:/etc/prometheus/alerts.yml
       - prometheusdata:/prometheus
     depends_on:
       gateway:
         condition: service_healthy
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    ports:
+      - "127.0.0.1:9093:9093"
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml
+      - alertmanagerdata:/alertmanager
+    depends_on:
+      - prometheus
     restart: unless-stopped
 
 volumes:
@@ -132,4 +148,5 @@ volumes:
   etcddata:
   milvusdata:
   prometheusdata:
+  alertmanagerdata:
 
