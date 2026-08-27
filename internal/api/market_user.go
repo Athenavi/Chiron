@@ -54,7 +54,7 @@ func (h *UserMarketHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := db.ReadPool().Query(r.Context(),
+	rows, err := db.GlobalDBManager.Query(r.Context(),
 		`SELECT id::text, type, name, version, manifest, status FROM ent_catalog_items
 		 WHERE type = $1 AND status = 'published' ORDER BY created_at DESC`, itemType)
 	if err != nil {
@@ -83,7 +83,7 @@ func (h *UserMarketHandler) List(w http.ResponseWriter, r *http.Request) {
 // itemEnabledForTenant 查询租户安装记录（fail-open：无记录视为未安装）。
 func itemEnabledForTenant(ctx context.Context, itemID, tenantID string) (bool, error) {
 	var enabled bool
-	err := db.ReadPool().QueryRow(ctx,
+	err := db.GlobalDBManager.QueryRow(ctx,
 		`SELECT COALESCE(enabled, false) FROM ent_catalog_installs WHERE item_id = $1 AND tenant_id = $2`,
 		itemID, tenantID).Scan(&enabled)
 	if err != nil {
@@ -108,7 +108,7 @@ func (h *UserMarketHandler) Install(w http.ResponseWriter, r *http.Request) {
 
 	var name string
 	var manifest []byte
-	if err := db.ReadPool().QueryRow(r.Context(),
+	if err := db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT name, manifest FROM ent_catalog_items WHERE id = $1 AND type = $2 AND status = 'published'`,
 		itemID, itemType).Scan(&name, &manifest); err != nil {
 		NotFound(w, "market item not found or not published")
@@ -179,7 +179,7 @@ func (h *UserMarketHandler) installAgent(w http.ResponseWriter, r *http.Request,
 	maxTurns := intVal(m["max_turns"], 10)
 	timeout := intVal(m["timeout_seconds"], 120)
 
-	if _, err := db.Pool.Exec(r.Context(),
+	if _, err := db.GlobalDBManager.Exec(r.Context(),
 		`INSERT INTO agents (id, tenant_id, user_id, name, description, system_prompt, tools, llm_config, max_turns, timeout_seconds, enabled)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true)`,
 		agentID, claims.TenantID, claims.UserID, name, desc, prompt,

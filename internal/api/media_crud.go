@@ -99,7 +99,7 @@ func (h *MediaHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var total int64
-	if err := db.ReadPool().QueryRow(r.Context(), "SELECT COUNT(*) FROM media_assets"+where, args...).Scan(&total); err != nil {
+	if err := db.GlobalDBManager.QueryRow(r.Context(), "SELECT COUNT(*) FROM media_assets"+where, args...).Scan(&total); err != nil {
 		InternalError(w, "count media assets")
 		return
 	}
@@ -111,7 +111,7 @@ func (h *MediaHandler) List(w http.ResponseWriter, r *http.Request) {
 	args = append(args, pageSize, (page-1)*pageSize)
 	query = fmt.Sprintf(query, argIdx, argIdx+1)
 
-	rows, err := db.ReadPool().Query(r.Context(), query, args...)
+	rows, err := db.GlobalDBManager.Query(r.Context(), query, args...)
 	if err != nil {
 		InternalError(w, "query media assets")
 		return
@@ -185,7 +185,7 @@ func (h *MediaHandler) Create(w http.ResponseWriter, r *http.Request) {
 			tagsStr = strings.Join(body.Tags, ",")
 		}
 
-		err := db.Pool.QueryRow(r.Context(),
+		err := db.GlobalDBManager.QueryRow(r.Context(),
 			`INSERT INTO media_assets (id, tenant_id, user_id, type, name, file_url, category, tags, metadata_data, size, created_at, updated_at)
 			 VALUES (gen_random_uuid(), $1, $2, $3, $4, '', $5, $6, $7, $8, NOW(), NOW())
 			 RETURNING id`,
@@ -204,7 +204,7 @@ func (h *MediaHandler) Create(w http.ResponseWriter, r *http.Request) {
 		fileURL = h.objectURL(objectKey)
 
 		// 鏇存柊 file_url
-		_, err = db.Pool.Exec(r.Context(),
+		_, err = db.GlobalDBManager.Exec(r.Context(),
 			`UPDATE media_assets SET file_url = $1 WHERE id = $2`,
 			fileURL, assetID)
 		if err != nil {
@@ -217,7 +217,7 @@ func (h *MediaHandler) Create(w http.ResponseWriter, r *http.Request) {
 			tagsStr = strings.Join(body.Tags, ",")
 		}
 
-		err := db.Pool.QueryRow(r.Context(),
+		err := db.GlobalDBManager.QueryRow(r.Context(),
 			`INSERT INTO media_assets (id, tenant_id, user_id, type, name, file_url, category, tags, metadata_data, size, created_at, updated_at)
 			 VALUES (gen_random_uuid(), $1, $2, $3, $4, '', $5, $6, $7, $8, NOW(), NOW())
 			 RETURNING id`,
@@ -239,7 +239,7 @@ func (h *MediaHandler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *MediaHandler) ListFolders(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 
-	rows, err := db.Pool.Query(r.Context(),
+	rows, err := db.GlobalDBManager.Query(r.Context(),
 		`SELECT id, name, COALESCE(parent_id::text, '') FROM media_assets
 		 WHERE tenant_id = $1 AND user_id = $2 AND type = 'folder'
 		 ORDER BY name`, claims.TenantID, claims.UserID)
@@ -285,7 +285,7 @@ func (h *MediaHandler) CreateFolder(w http.ResponseWriter, r *http.Request) {
 
 	// 鍚岀骇閲嶅悕妫€鏌?
 	var exists bool
-	if err := db.Pool.QueryRow(r.Context(),
+	if err := db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT EXISTS(SELECT 1 FROM media_assets WHERE tenant_id=$1 AND user_id=$2 AND parent_id=$3 AND name=$4)`,
 		claims.TenantID, claims.UserID, body.ParentID, body.Name).Scan(&exists); err != nil {
 		InternalError(w, "check folder name")
@@ -297,7 +297,7 @@ func (h *MediaHandler) CreateFolder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var id string
-	if err := db.Pool.QueryRow(r.Context(),
+	if err := db.GlobalDBManager.QueryRow(r.Context(),
 		`INSERT INTO media_assets (id, tenant_id, user_id, type, name, parent_id, created_at, updated_at)
 		 VALUES (gen_random_uuid(), $1, $2, 'folder', $3, $4, NOW(), NOW()) RETURNING id`,
 		claims.TenantID, claims.UserID, body.Name, body.ParentID).Scan(&id); err != nil {
@@ -335,7 +335,7 @@ func (h *MediaHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	// 鎵€鏈夋潈 + 褰撳墠鍊?
 	var curName, curParent string
-	if err := db.Pool.QueryRow(r.Context(),
+	if err := db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT COALESCE(name,''), COALESCE(parent_id,'') FROM media_assets WHERE id=$1 AND tenant_id=$2 AND user_id=$3`,
 		id, claims.TenantID, claims.UserID).Scan(&curName, &curParent); err != nil {
 		NotFound(w, "media asset not found")
@@ -359,7 +359,7 @@ func (h *MediaHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if body.ParentID != nil {
 		cycle, err := wouldCreateCycle(func(pid string) (string, error) {
 			var p string
-			err := db.Pool.QueryRow(r.Context(),
+			err := db.GlobalDBManager.QueryRow(r.Context(),
 				`SELECT COALESCE(parent_id,'') FROM media_assets WHERE id=$1 AND tenant_id=$2 AND user_id=$3`,
 				pid, claims.TenantID, claims.UserID).Scan(&p)
 			if err != nil {
@@ -380,7 +380,7 @@ func (h *MediaHandler) Update(w http.ResponseWriter, r *http.Request) {
 	// 閲嶅悕妫€鏌ワ紙鎺掗櫎鑷韩锛?
 	if newName != curName || newParent != curParent {
 		var exists bool
-		if err := db.Pool.QueryRow(r.Context(),
+		if err := db.GlobalDBManager.QueryRow(r.Context(),
 			`SELECT EXISTS(SELECT 1 FROM media_assets WHERE tenant_id=$1 AND user_id=$2 AND parent_id=$3 AND name=$4 AND id<>$5)`,
 			claims.TenantID, claims.UserID, newParent, newName, id).Scan(&exists); err != nil {
 			InternalError(w, "check name conflict")
@@ -392,7 +392,7 @@ func (h *MediaHandler) Update(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if _, err := db.Pool.Exec(r.Context(),
+	if _, err := db.GlobalDBManager.Exec(r.Context(),
 		`UPDATE media_assets SET name=$1, parent_id=$2, updated_at=NOW() WHERE id=$3 AND tenant_id=$4 AND user_id=$5`,
 		newName, newParent, id, claims.TenantID, claims.UserID); err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "update media asset failed")
@@ -400,7 +400,7 @@ func (h *MediaHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	// 鏍囩鐙珛鏇存柊锛堜笉褰卞搷鍚嶇О/鐖剁洰褰曟鏌ワ級
 	if body.Tags != nil {
-		if _, err := db.Pool.Exec(r.Context(),
+		if _, err := db.GlobalDBManager.Exec(r.Context(),
 			`UPDATE media_assets SET tags=$1, updated_at=NOW() WHERE id=$2 AND tenant_id=$3 AND user_id=$4`,
 			*body.Tags, id, claims.TenantID, claims.UserID); err != nil {
 			logAndRespond(w, err, http.StatusInternalServerError, "update media tags failed")
@@ -414,7 +414,7 @@ func (h *MediaHandler) Update(w http.ResponseWriter, r *http.Request) {
 // the persisted file_path column; falls back to legacy name-based key.
 func (h *MediaHandler) assetObjectKey(r *http.Request, id string) (string, error) {
 	var fileName, filePath, userID string
-	err := db.ReadPool().QueryRow(r.Context(),
+	err := db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT COALESCE(name,''), COALESCE(file_path,''), COALESCE(user_id,'') FROM media_assets WHERE id=$1`,
 		id).Scan(&fileName, &filePath, &userID)
 	if err != nil {
@@ -435,7 +435,7 @@ func (h *MediaHandler) assetObjectKeys(ctx context.Context, ids []string) (map[s
 	if len(ids) == 0 {
 		return map[string]string{}, nil
 	}
-	rows, err := db.ReadPool().Query(ctx,
+	rows, err := db.GlobalDBManager.Query(ctx,
 		`SELECT id::text, COALESCE(name,''), COALESCE(file_path,''), COALESCE(user_id,'')
 		 FROM media_assets WHERE id = ANY($1)`, ids)
 	if err != nil {
@@ -479,7 +479,7 @@ func (h *MediaHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 鏌ヨ璧勪骇骞舵牎楠屾墍鏈夋潈
-	if err := db.ReadPool().QueryRow(ctx,
+	if err := db.GlobalDBManager.QueryRow(ctx,
 		`SELECT 1 FROM media_assets WHERE id = $1 AND tenant_id = $2 AND user_id = $3`,
 		id, claims.TenantID, claims.UserID,
 	).Scan(new(int)); err != nil {
@@ -509,7 +509,7 @@ func (h *MediaHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if _, err := db.Pool.Exec(ctx,
+	if _, err := db.GlobalDBManager.Exec(ctx,
 		`DELETE FROM media_assets WHERE id = ANY($1) AND tenant_id=$2 AND user_id=$3`,
 		ids, claims.TenantID, claims.UserID); err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "delete media asset failed")
@@ -562,7 +562,7 @@ func (h *MediaHandler) BatchDelete(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if _, err := db.Pool.Exec(r.Context(),
+	if _, err := db.GlobalDBManager.Exec(r.Context(),
 		`DELETE FROM media_assets WHERE id = ANY($1) AND tenant_id=$2 AND user_id=$3`,
 		allIDs, claims.TenantID, claims.UserID); err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "batch delete media assets failed")
@@ -575,7 +575,7 @@ func (h *MediaHandler) BatchDelete(w http.ResponseWriter, r *http.Request) {
 
 // getChildren returns the child asset IDs for a given parent folder.
 func (h *MediaHandler) getChildren(ctx context.Context, tenantID, userID, parentID string) ([]string, error) {
-	rows, err := db.ReadPool().Query(ctx,
+	rows, err := db.GlobalDBManager.Query(ctx,
 		`SELECT id FROM media_assets WHERE tenant_id=$1 AND user_id=$2 AND parent_id=$3`,
 		tenantID, userID, parentID)
 	if err != nil {

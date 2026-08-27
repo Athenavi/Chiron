@@ -103,7 +103,7 @@ func (h *SystemHandler) Spans(w http.ResponseWriter, r *http.Request) {
 
 // Traces returns recent tool call executions as trace entries.
 func (h *SystemHandler) Traces(w http.ResponseWriter, r *http.Request) {
-	rows, err := db.ReadPool().Query(r.Context(),
+	rows, err := db.GlobalDBManager.Query(r.Context(),
 		`SELECT id, tool_name, is_error, duration_ms, created_at
 		 FROM tool_calls
 		 ORDER BY created_at DESC

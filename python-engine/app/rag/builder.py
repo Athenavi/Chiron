@@ -502,19 +502,10 @@ class RAGBuilder:
         return table
 
     async def _pg_conn(self):
-        """获取 PostgreSQL 连接与释放函数：优先全局连接池，未初始化时惰性自建"""
+        """获取 PostgreSQL 连接与释放函数：统一通过 DBManager"""
         from app.db import get_pool
 
-        try:
-            pool = get_pool()
-        except RuntimeError:
-            import asyncpg
-
-            if self._pg_pool is None:
-                self._pg_pool = await asyncpg.create_pool(
-                    settings.postgres_dsn, min_size=1, max_size=5
-                )
-            pool = self._pg_pool
+        pool = get_pool()
         conn = await pool.acquire()
         return conn, pool.release
 

@@ -279,7 +279,7 @@ func (h *MarketHandler) CreateItem(w http.ResponseWriter, r *http.Request) {
 		ServiceUnavailable(w, ErrDBUnavailable)
 		return
 	}
-	created, err := scanMarketItem(db.Pool.QueryRow(r.Context(),
+	created, err := scanMarketItem(db.GlobalDBManager.QueryRow(r.Context(),
 		`INSERT INTO ent_catalog_items (type, name, version, manifest, status, created_by)
 		 VALUES ($1, $2, $3, $4, 'draft', $5) RETURNING `+catalogItemColumns,
 		body.Type, body.Name, body.Version, string(body.Manifest), claims.UserID))
@@ -361,7 +361,7 @@ func (h *MarketHandler) UpdateItem(w http.ResponseWriter, r *http.Request) {
 		ServiceUnavailable(w, ErrDBUnavailable)
 		return
 	}
-	updated, err := scanMarketItem(db.Pool.QueryRow(r.Context(),
+	updated, err := scanMarketItem(db.GlobalDBManager.QueryRow(r.Context(),
 		`UPDATE ent_catalog_items SET
 		     name = COALESCE($2, name),
 		     version = COALESCE($3, version),
@@ -395,7 +395,7 @@ func (h *MarketHandler) DeleteItem(w http.ResponseWriter, r *http.Request) {
 		ServiceUnavailable(w, ErrDBUnavailable)
 		return
 	}
-	tag, err := db.Pool.Exec(r.Context(), `DELETE FROM ent_catalog_items WHERE id = $1`, id)
+	tag, err := db.GlobalDBManager.Exec(r.Context(), `DELETE FROM ent_catalog_items WHERE id = $1`, id)
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "delete market item failed")
 		return
@@ -423,7 +423,7 @@ func (h *MarketHandler) transitionItem(w http.ResponseWriter, r *http.Request, t
 		return
 	}
 	var from string
-	if err := db.Pool.QueryRow(r.Context(),
+	if err := db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT status FROM ent_catalog_items WHERE id = $1`, id).Scan(&from); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			NotFound(w, ErrNotFound)
@@ -439,7 +439,7 @@ func (h *MarketHandler) transitionItem(w http.ResponseWriter, r *http.Request, t
 		})
 		return
 	}
-	updated, err := scanMarketItem(db.Pool.QueryRow(r.Context(),
+	updated, err := scanMarketItem(db.GlobalDBManager.QueryRow(r.Context(),
 		`UPDATE ent_catalog_items SET status = $2, updated_at = NOW()
 		 WHERE id = $1 AND status = $3 RETURNING `+catalogItemColumns, id, to, from))
 	if err != nil {
@@ -555,7 +555,7 @@ func (h *MarketHandler) GrantItem(w http.ResponseWriter, r *http.Request) {
 	}
 	// 条目必须存在（外键兜底，提前给出友好 404）
 	var exists bool
-	if err := db.Pool.QueryRow(r.Context(),
+	if err := db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT EXISTS(SELECT 1 FROM ent_catalog_items WHERE id = $1)`, body.ItemID).Scan(&exists); err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "grant market item failed")
 		return
@@ -564,7 +564,7 @@ func (h *MarketHandler) GrantItem(w http.ResponseWriter, r *http.Request) {
 		NotFound(w, ErrNotFound)
 		return
 	}
-	g, err := scanMarketGrant(db.Pool.QueryRow(r.Context(),
+	g, err := scanMarketGrant(db.GlobalDBManager.QueryRow(r.Context(),
 		`INSERT INTO ent_catalog_installs (item_id, tenant_id, enabled)
 		 VALUES ($1, $2, $3)
 		 ON CONFLICT (item_id, tenant_id) DO UPDATE SET enabled = EXCLUDED.enabled
@@ -600,7 +600,7 @@ func (h *MarketHandler) UpdateGrant(w http.ResponseWriter, r *http.Request) {
 		ServiceUnavailable(w, ErrDBUnavailable)
 		return
 	}
-	g, err := scanMarketGrant(db.Pool.QueryRow(r.Context(),
+	g, err := scanMarketGrant(db.GlobalDBManager.QueryRow(r.Context(),
 		`UPDATE ent_catalog_installs SET enabled = $3
 		 WHERE item_id = $1 AND tenant_id = $2
 		 RETURNING item_id, tenant_id, enabled, installed_at`, itemID, tenantID, body.Enabled))
@@ -631,7 +631,7 @@ func (h *MarketHandler) DeleteGrant(w http.ResponseWriter, r *http.Request) {
 		ServiceUnavailable(w, ErrDBUnavailable)
 		return
 	}
-	tag, err := db.Pool.Exec(r.Context(),
+	tag, err := db.GlobalDBManager.Exec(r.Context(),
 		`DELETE FROM ent_catalog_installs WHERE item_id = $1 AND tenant_id = $2`, itemID, tenantID)
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "delete market grant failed")

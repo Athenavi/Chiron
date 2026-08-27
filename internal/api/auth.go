@@ -110,7 +110,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	// 设置租户上下文以绕过 RLS —— 必须在事务中才能让 SET LOCAL 持续生效
-	tx, err := db.Pool.Begin(ctx)
+	tx, err := db.GlobalDBManager.Begin(ctx)
 	if err != nil {
 		slog.Error("begin tx for tenant context", "error", err)
 		InternalError(w, "login failed")
@@ -227,7 +227,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	// 设置租户上下文以绕过 RLS —— 必须在事务中才能让 SET LOCAL 持续生效
-	tx, err := db.Pool.Begin(ctx)
+	tx, err := db.GlobalDBManager.Begin(ctx)
 	if err != nil {
 		slog.Error("begin tx for tenant context", "error", err)
 		InternalError(w, "registration failed")
@@ -319,7 +319,7 @@ func (h *AuthHandler) Profile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var settings map[string]interface{}
-	if err := db.ReadPool().QueryRow(r.Context(),
+	if err := db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT COALESCE(settings::jsonb, '{}'::jsonb) FROM users WHERE id = $1`, claims.UserID).Scan(&settings); err != nil {
 		settings = map[string]interface{}{}
 	}
@@ -381,7 +381,7 @@ func (h *AuthHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	setClauses = strings.TrimSuffix(setClauses, ", ")
 	args = append(args, claims.UserID)
 
-	if _, err := db.Pool.Exec(r.Context(),
+	if _, err := db.GlobalDBManager.Exec(r.Context(),
 		fmt.Sprintf("UPDATE users SET %s, updated_at = NOW() WHERE id = $%d", setClauses, argIdx),
 		args...); err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "update profile failed")
@@ -412,7 +412,7 @@ func (h *AuthHandler) Session(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	tx, err := db.Pool.Begin(ctx)
+	tx, err := db.GlobalDBManager.Begin(ctx)
 	if err != nil {
 		slog.Error("begin tx for tenant context", "error", err)
 		InternalError(w, "session lookup failed")
@@ -462,7 +462,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 
 	// 2) 校验用户仍然存在（防止已删除用户刷 token）
 	var userExists bool
-	err = db.ReadPool().QueryRow(r.Context(),
+	err = db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)`, oldClaims.UserID).Scan(&userExists)
 	if err != nil || !userExists {
 		Unauthorized(w, "user not found")

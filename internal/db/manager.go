@@ -252,3 +252,64 @@ func (r errorRow) Scan(dest ...interface{}) error {
 
 // GlobalDBManager 全局数据库管理器实例
 var GlobalDBManager = NewDBManager()
+
+// TxFunc 事务函数类型
+type TxFunc func(tx pgx.Tx) error
+
+// WithTransaction 在事务中执行函数
+func (m *DBManager) WithTransaction(ctx context.Context, fn TxFunc) error {
+	pool, err := m.GetPool()
+	if err != nil {
+		return fmt.Errorf("db manager: %w", err)
+	}
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction failed: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if err := fn(tx); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+// QueryRowWithScan 执行查询并扫描到指定目标
+func (m *DBManager) QueryRowWithScan(ctx context.Context, dest interface{}, sql string, args ...interface{}) error {
+	pool, err := m.GetReadPool()
+	if err != nil {
+		return fmt.Errorf("db manager: %w", err)
+	}
+
+	row := pool.QueryRow(ctx, sql, args...)
+	return row.Scan(dest)
+}
+
+// QueryWithRows 执行查询并返回原始 rows（调用者负责关闭）
+func (m *DBManager) QueryWithRows(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+	pool, err := m.GetReadPool()
+	if err != nil {
+		return nil, fmt.Errorf("db manager: %w", err)
+	}
+	return pool.Query(ctx, sql, args...)
+}
+
+// ExecWithResult 执行 SQL 并返回 CommandTag
+func (m *DBManager) ExecWithResult(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+	pool, err := m.GetPool()
+	if err != nil {
+		return pgconn.CommandTag{}, fmt.Errorf("db manager: %w", err)
+	}
+	return pool.Exec(ctx, sql, args...)
+}
+
+// BeginTx 开始事务（供高级用法）
+func (m *DBManager) BeginTx(ctx context.Context) (pgx.Tx, error) {
+	pool, err := m.GetPool()
+	if err != nil {
+		return nil, fmt.Errorf("db manager: %w", err)
+	}
+	return pool.Begin(ctx)
+}

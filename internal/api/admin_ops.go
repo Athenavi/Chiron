@@ -78,7 +78,7 @@ type tenantRow struct {
 }
 
 func (h *AdminHandler) ListTenants(w http.ResponseWriter, r *http.Request) {
-	rows, err := db.ReadPool().Query(r.Context(),
+	rows, err := db.GlobalDBManager.Query(r.Context(),
 		`SELECT id::text, name, status, created_at FROM tenants ORDER BY created_at DESC`)
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "list tenants failed")
@@ -108,7 +108,7 @@ func (h *AdminHandler) CreateTenant(w http.ResponseWriter, r *http.Request) {
 		InternalError(w, "generate id failed")
 		return
 	}
-	if _, err := db.Pool.Exec(r.Context(),
+	if _, err := db.GlobalDBManager.Exec(r.Context(),
 		`INSERT INTO tenants (id, name, status) VALUES ($1, $2, 'active')`, tenantID, strings.TrimSpace(body.Name)); err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "create tenant failed")
 		return
@@ -160,7 +160,7 @@ func (h *AdminHandler) UpdateTenant(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	args = append(args, id)
-	if _, err := db.Pool.Exec(r.Context(),
+	if _, err := db.GlobalDBManager.Exec(r.Context(),
 		fmt.Sprintf("UPDATE tenants SET %s, updated_at = NOW() WHERE id = $%d", strings.Join(sets, ", "), idx), args...); err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "update tenant failed")
 		return
@@ -170,7 +170,7 @@ func (h *AdminHandler) UpdateTenant(w http.ResponseWriter, r *http.Request) {
 
 func (h *AdminHandler) DeleteTenant(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if _, err := db.Pool.Exec(r.Context(), `DELETE FROM tenants WHERE id = $1`, id); err != nil {
+	if _, err := db.GlobalDBManager.Exec(r.Context(), `DELETE FROM tenants WHERE id = $1`, id); err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "delete tenant failed")
 		return
 	}
@@ -179,7 +179,7 @@ func (h *AdminHandler) DeleteTenant(w http.ResponseWriter, r *http.Request) {
 
 func (h *AdminHandler) SuspendTenant(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if _, err := db.Pool.Exec(r.Context(),
+	if _, err := db.GlobalDBManager.Exec(r.Context(),
 		`UPDATE tenants SET status = 'suspended', updated_at = NOW() WHERE id = $1`, id); err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "suspend tenant failed")
 		return
@@ -203,7 +203,7 @@ func (h *AdminHandler) TenantUsage(w http.ResponseWriter, r *http.Request) {
 		if *dst != 0 {
 			return
 		}
-		_ = db.ReadPool().QueryRow(ctx, sql, id).Scan(dst)
+		_ = db.GlobalDBManager.QueryRow(ctx, sql, id).Scan(dst)
 	}
 	q(`SELECT COUNT(*) FROM users WHERE tenant_id = $1`, &u.Users)
 	q(`SELECT COUNT(*) FROM sessions WHERE tenant_id = $1`, &u.Sessions)
@@ -227,7 +227,7 @@ type domainRow struct {
 var validDomainRe = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)+$`)
 
 func (h *AdminHandler) ListDomains(w http.ResponseWriter, r *http.Request) {
-	rows, err := db.ReadPool().Query(r.Context(),
+	rows, err := db.GlobalDBManager.Query(r.Context(),
 		`SELECT id::text, domain, ssl_status, verified, created_at FROM domains ORDER BY created_at DESC LIMIT 100`)
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "list domains failed")
@@ -258,7 +258,7 @@ func (h *AdminHandler) CreateDomain(w http.ResponseWriter, r *http.Request) {
 		Unauthorized(w, "missing tenant context")
 		return
 	}
-	if _, err := db.Pool.Exec(r.Context(),
+	if _, err := db.GlobalDBManager.Exec(r.Context(),
 		`INSERT INTO domains (tenant_id, domain) VALUES ($1, $2) ON CONFLICT (domain) DO NOTHING`,
 		tenantID, domain); err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "create domain failed")
@@ -276,7 +276,7 @@ func (h *AdminHandler) UpdateDomain(w http.ResponseWriter, r *http.Request) {
 		BadRequest(w, "valid domain is required")
 		return
 	}
-	if _, err := db.Pool.Exec(r.Context(),
+	if _, err := db.GlobalDBManager.Exec(r.Context(),
 		`UPDATE domains SET domain = $1, verified = false, ssl_status = 'none', updated_at = NOW() WHERE id = $2`,
 		strings.ToLower(body.Domain), id); err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "update domain failed")
@@ -287,7 +287,7 @@ func (h *AdminHandler) UpdateDomain(w http.ResponseWriter, r *http.Request) {
 
 func (h *AdminHandler) DeleteDomain(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if _, err := db.Pool.Exec(r.Context(), `DELETE FROM domains WHERE id = $1`, id); err != nil {
+	if _, err := db.GlobalDBManager.Exec(r.Context(), `DELETE FROM domains WHERE id = $1`, id); err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "delete domain failed")
 		return
 	}
@@ -298,14 +298,14 @@ func (h *AdminHandler) DeleteDomain(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) VerifyDomain(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var domain string
-	if err := db.ReadPool().QueryRow(r.Context(),
+	if err := db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT domain FROM domains WHERE id = $1`, id).Scan(&domain); err != nil {
 		NotFound(w, "domain not found")
 		return
 	}
 	addrs, err := net.LookupHost(domain)
 	verified := err == nil && len(addrs) > 0
-	if _, err := db.Pool.Exec(r.Context(),
+	if _, err := db.GlobalDBManager.Exec(r.Context(),
 		`UPDATE domains SET verified = $1, updated_at = NOW() WHERE id = $2`, verified, id); err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "update domain failed")
 		return
@@ -321,7 +321,7 @@ func (h *AdminHandler) VerifyDomain(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) RenewDomainSSL(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var verified bool
-	if err := db.ReadPool().QueryRow(r.Context(),
+	if err := db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT verified FROM domains WHERE id = $1`, id).Scan(&verified); err != nil {
 		NotFound(w, "domain not found")
 		return
@@ -330,7 +330,7 @@ func (h *AdminHandler) RenewDomainSSL(w http.ResponseWriter, r *http.Request) {
 		BadRequest(w, "domain must be verified before SSL renewal")
 		return
 	}
-	if _, err := db.Pool.Exec(r.Context(),
+	if _, err := db.GlobalDBManager.Exec(r.Context(),
 		`UPDATE domains SET ssl_status = 'active', updated_at = NOW() WHERE id = $1`, id); err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "renew ssl failed")
 		return
@@ -341,7 +341,7 @@ func (h *AdminHandler) RenewDomainSSL(w http.ResponseWriter, r *http.Request) {
 // ── 数据库管理 ──
 
 func (h *AdminHandler) DatabaseConfigs(w http.ResponseWriter, r *http.Request) {
-	rows, err := db.ReadPool().Query(r.Context(),
+	rows, err := db.GlobalDBManager.Query(r.Context(),
 		`SELECT name, setting FROM pg_settings
 		 WHERE name IN ('max_connections','shared_buffers','work_mem','maintenance_work_mem','effective_cache_size',
 		   'wal_level','max_worker_processes','max_parallel_workers','statement_timeout','idle_in_transaction_session_timeout')
@@ -434,7 +434,7 @@ func (h *AdminHandler) RestoreDatabaseBackup(w http.ResponseWriter, r *http.Requ
 		InternalError(w, "read backup failed")
 		return
 	}
-	if _, err := db.Pool.Exec(r.Context(), string(data)); err != nil {
+	if _, err := db.GlobalDBManager.Exec(r.Context(), string(data)); err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "restore failed")
 		return
 	}
@@ -443,7 +443,7 @@ func (h *AdminHandler) RestoreDatabaseBackup(w http.ResponseWriter, r *http.Requ
 
 func (h *AdminHandler) DatabaseStatus(w http.ResponseWriter, r *http.Request) {
 	var version string
-	err := db.ReadPool().QueryRow(r.Context(), `SELECT version()`).Scan(&version)
+	err := db.GlobalDBManager.QueryRow(r.Context(), `SELECT version()`).Scan(&version)
 	OK(w, map[string]interface{}{"version": version, "connected": err == nil && version != ""})
 }
 
@@ -465,7 +465,7 @@ func (h *AdminHandler) DatabaseQuery(w http.ResponseWriter, r *http.Request) {
 		BadRequest(w, "query not allowed")
 		return
 	}
-	rows, err := db.ReadPool().Query(r.Context(), body.Query)
+	rows, err := db.GlobalDBManager.Query(r.Context(), body.Query)
 	if err != nil {
 		BadRequest(w, "query failed: "+err.Error())
 		return
@@ -516,7 +516,7 @@ func (h *AdminHandler) DatabaseOptimize(w http.ResponseWriter, r *http.Request) 
 	}
 	// 表名白名单校验：仅允许 public schema 的常规表
 	var exists bool
-	if err := db.ReadPool().QueryRow(r.Context(),
+	if err := db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name=$1 AND table_type='BASE TABLE')`,
 		body.Table).Scan(&exists); err != nil || !exists {
 		BadRequest(w, "unknown table: "+body.Table)
@@ -526,7 +526,7 @@ func (h *AdminHandler) DatabaseOptimize(w http.ResponseWriter, r *http.Request) 
 	if action == "vacuum" {
 		stmt = "VACUUM " + quoteIdent(body.Table)
 	}
-	if _, err := db.Pool.Exec(r.Context(), stmt); err != nil {
+	if _, err := db.GlobalDBManager.Exec(r.Context(), stmt); err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, action+" failed")
 		return
 	}
@@ -588,7 +588,7 @@ type modelRow struct {
 }
 
 func (h *AdminHandler) ListModels(w http.ResponseWriter, r *http.Request) {
-	rows, err := db.ReadPool().Query(r.Context(),
+	rows, err := db.GlobalDBManager.Query(r.Context(),
 		`SELECT id::text, provider, name, display_name, enabled, context_window, created_at FROM llm_models ORDER BY provider, name`)
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "list models failed")
@@ -621,7 +621,7 @@ func (h *AdminHandler) CreateModel(w http.ResponseWriter, r *http.Request) {
 		body.ContextWindow = 8192
 	}
 	id, _ := id.UUID()
-	if _, err := db.Pool.Exec(r.Context(),
+	if _, err := db.GlobalDBManager.Exec(r.Context(),
 		`INSERT INTO llm_models (id, provider, name, display_name, enabled, context_window)
 		 VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (provider, name) DO UPDATE
 		 SET display_name = EXCLUDED.display_name, enabled = EXCLUDED.enabled, context_window = EXCLUDED.context_window, updated_at = NOW()`,
@@ -677,7 +677,7 @@ func (h *AdminHandler) UpdateModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	args = append(args, id)
-	if _, err := db.Pool.Exec(r.Context(),
+	if _, err := db.GlobalDBManager.Exec(r.Context(),
 		fmt.Sprintf("UPDATE llm_models SET %s, updated_at = NOW() WHERE id = $%d", strings.Join(sets, ", "), idx), args...); err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "update model failed")
 		return
@@ -686,7 +686,7 @@ func (h *AdminHandler) UpdateModel(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AdminHandler) DeleteModel(w http.ResponseWriter, r *http.Request) {
-	if _, err := db.Pool.Exec(r.Context(), `DELETE FROM llm_models WHERE id = $1`, r.PathValue("id")); err != nil {
+	if _, err := db.GlobalDBManager.Exec(r.Context(), `DELETE FROM llm_models WHERE id = $1`, r.PathValue("id")); err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "delete model failed")
 		return
 	}
@@ -774,7 +774,7 @@ func (h *AdminHandler) CreateCronJob(w http.ResponseWriter, r *http.Request) {
 	}
 	jobID, _ := id.UUID()
 	token, _ := id.UUID()
-	if _, err := db.Pool.Exec(r.Context(),
+	if _, err := db.GlobalDBManager.Exec(r.Context(),
 		`INSERT INTO cron_jobs (id, name, schedule, task, enabled, webhook_token) VALUES ($1, $2, $3, $4, $5, $6)`,
 		jobID, body.Name, body.Schedule, body.Task, body.Enabled, token); err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "create cron job failed")
@@ -829,7 +829,7 @@ func (h *AdminHandler) UpdateCronJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	args = append(args, id)
-	if _, err := db.Pool.Exec(r.Context(),
+	if _, err := db.GlobalDBManager.Exec(r.Context(),
 		fmt.Sprintf("UPDATE cron_jobs SET %s, updated_at = NOW() WHERE id = $%d", strings.Join(sets, ", "), idx), args...); err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "update cron job failed")
 		return
@@ -838,7 +838,7 @@ func (h *AdminHandler) UpdateCronJob(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AdminHandler) DeleteCronJob(w http.ResponseWriter, r *http.Request) {
-	if _, err := db.Pool.Exec(r.Context(), `DELETE FROM cron_jobs WHERE id = $1`, r.PathValue("id")); err != nil {
+	if _, err := db.GlobalDBManager.Exec(r.Context(), `DELETE FROM cron_jobs WHERE id = $1`, r.PathValue("id")); err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "delete cron job failed")
 		return
 	}

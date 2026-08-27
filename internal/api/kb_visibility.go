@@ -26,7 +26,7 @@ func handleKBVisibility(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	kbID := r.PathValue("id")
-	tag, err := db.Pool.Exec(r.Context(),
+	tag, err := db.GlobalDBManager.Exec(r.Context(),
 		`UPDATE knowledge_bases SET visibility = $1 WHERE id = $2 AND tenant_id = $3 AND user_id = $4`,
 		body.Visibility, kbID, claims.TenantID, claims.UserID)
 	if err != nil {

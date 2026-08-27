@@ -79,7 +79,7 @@ func (h *MediaHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		logAndRespond(w, err, http.StatusInternalServerError, "generate id failed")
 		return
 	}
-	_, err = db.Pool.Exec(r.Context(),
+	_, err = db.GlobalDBManager.Exec(r.Context(),
 		`INSERT INTO media_assets (id, tenant_id, user_id, type, name, file_url, mime_type, category, size, parent_id, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, '', $6, $7, $8, $9, NOW(), NOW())`,
 		assetID, tenantID, claims.UserID, assetType, name, mimeType, nullableStr(category), fileSize, parentID,
@@ -97,7 +97,7 @@ func (h *MediaHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	fileURL := h.objectURL(objectKey)
 
 	// 更新 file_url
-	_, err = db.Pool.Exec(r.Context(),
+	_, err = db.GlobalDBManager.Exec(r.Context(),
 		`UPDATE media_assets SET file_url = $1 WHERE id = $2 AND tenant_id = $3`,
 		fileURL, assetID, tenantID)
 	if err != nil {
@@ -225,7 +225,7 @@ func (h *MediaHandler) CompleteUpload(w http.ResponseWriter, r *http.Request) {
 		logAndRespond(w, err, http.StatusInternalServerError, "generate id failed")
 		return
 	}
-	_, err = db.Pool.Exec(r.Context(),
+	_, err = db.GlobalDBManager.Exec(r.Context(),
 		`INSERT INTO media_assets (id, tenant_id, user_id, type, name, file_url, mime_type, category, size, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())`,
 		assetID, tenantID, claims.UserID, body.Type, body.Name, body.FileURL, truncateMIME(body.MimeType), nullableStr(body.Category), body.Size)

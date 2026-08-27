@@ -400,7 +400,7 @@ func (h *EntPolicyHandler) PutPrivacy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var p EntTenantPolicy
-	err := db.Pool.QueryRow(r.Context(),
+	err := db.GlobalDBManager.QueryRow(r.Context(),
 		`INSERT INTO ent_tenant_policies (tenant_id, privacy_mode, data_retention_days, training_allowed, redaction_rules, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, NOW())
 		 ON CONFLICT (tenant_id) DO UPDATE SET
@@ -583,7 +583,7 @@ func (h *EntPolicyHandler) CreateModelPolicy(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	limitsJSON, _ := json.Marshal(p.PerModelLimits)
-	created, err := scanModelPolicy(db.Pool.QueryRow(r.Context(),
+	created, err := scanModelPolicy(db.GlobalDBManager.QueryRow(r.Context(),
 		`INSERT INTO ent_model_policies (tenant_id, role_id, allowed_models, per_model_limits)
 		 VALUES ($1, $2, $3, $4) RETURNING `+modelPolicyColumns,
 		tenantID, p.RoleID, p.AllowedModels, string(limitsJSON)))
@@ -661,7 +661,7 @@ func (h *EntPolicyHandler) UpdateModelPolicy(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	limitsJSON, _ := json.Marshal(p.PerModelLimits)
-	updated, err := scanModelPolicy(db.Pool.QueryRow(r.Context(),
+	updated, err := scanModelPolicy(db.GlobalDBManager.QueryRow(r.Context(),
 		`UPDATE ent_model_policies
 		 SET role_id = $2, allowed_models = $3, per_model_limits = $4, updated_at = NOW()
 		 WHERE id = $1 RETURNING `+modelPolicyColumns,
@@ -699,7 +699,7 @@ func (h *EntPolicyHandler) DeleteModelPolicy(w http.ResponseWriter, r *http.Requ
 		ServiceUnavailable(w, ErrDBUnavailable)
 		return
 	}
-	tag, err := db.Pool.Exec(r.Context(), `DELETE FROM ent_model_policies WHERE id = $1`, id)
+	tag, err := db.GlobalDBManager.Exec(r.Context(), `DELETE FROM ent_model_policies WHERE id = $1`, id)
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "delete model policy failed")
 		return

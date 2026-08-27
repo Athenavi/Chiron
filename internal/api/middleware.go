@@ -269,7 +269,7 @@ func AuthMiddleware(a *auth.Authenticator) func(http.Handler) http.Handler {
 				// Validate API key against PostgreSQL（含 tenant_id 与 revoked 状态校验，多租户隔离）
 				var userID, role, tenantID string
 				keyHash := sha256.Sum256([]byte(key))
-				err := db.ReadPool().QueryRow(r.Context(),
+				err := db.GlobalDBManager.QueryRow(r.Context(),
 					`SELECT u.id, u.role, COALESCE(u.tenant_id, '') AS tenant_id
 					 FROM users u
 					 JOIN api_keys ak ON ak.user_id = u.id

@@ -166,7 +166,7 @@ func (s *pgEntCostStore) CostSummary(ctx context.Context, from, to time.Time, gr
 		        COALESCE(SUM(output_tokens),0), COUNT(*)
 		 FROM billing_records WHERE created_at >= $1 AND created_at < $2
 		 GROUP BY %s`, keyExpr, groupExpr)
-	rows, err := db.ReadPool().Query(ctx, qBilling, from, to)
+	rows, err := db.GlobalDBManager.Query(ctx, qBilling, from, to)
 	if err != nil {
 		return nil, fmt.Errorf("summary billing_records: %w", err)
 	}
@@ -197,7 +197,7 @@ func (s *pgEntCostStore) CostSummary(ctx context.Context, from, to time.Time, gr
 		 FROM credit_transactions ct JOIN users u ON u.id::text = ct.user_id::text
 		 WHERE ct.amount < 0 AND ct.created_at >= $1 AND ct.created_at < $2
 		 GROUP BY %s`, ctKey, ctGroup)
-	rows, err = db.ReadPool().Query(ctx, qCredits, from, to)
+	rows, err = db.GlobalDBManager.Query(ctx, qCredits, from, to)
 	if err != nil {
 		return nil, fmt.Errorf("summary credit_transactions: %w", err)
 	}
@@ -228,7 +228,7 @@ func (s *pgEntCostStore) CostSummary(ctx context.Context, from, to time.Time, gr
 		 WHERE p.status = 'paid'
 		   AND COALESCE(p.paid_at, p.created_at) >= $1 AND COALESCE(p.paid_at, p.created_at) < $2
 		 GROUP BY %s`, pKey, pGroup)
-	rows, err = db.ReadPool().Query(ctx, qPayments, from, to)
+	rows, err = db.GlobalDBManager.Query(ctx, qPayments, from, to)
 	if err != nil {
 		return nil, fmt.Errorf("summary payments: %w", err)
 	}
@@ -264,7 +264,7 @@ func (s *pgEntCostStore) CostSummary(ctx context.Context, from, to time.Time, gr
 func (s *pgEntCostStore) GroupCost(ctx context.Context, groupID string, from, to time.Time) (*entGroupCost, error) {
 	out := &entGroupCost{GroupID: groupID, Records: []entGroupCostRow{}}
 
-	err := db.ReadPool().QueryRow(ctx,
+	err := db.GlobalDBManager.QueryRow(ctx,
 		`SELECT COUNT(*), COALESCE(SUM(cost_cents),0), COALESCE(SUM(input_tokens),0),
 		        COALESCE(SUM(output_tokens),0)
 		 FROM billing_records WHERE group_id = $1 AND created_at >= $2 AND created_at < $3`,
@@ -274,7 +274,7 @@ func (s *pgEntCostStore) GroupCost(ctx context.Context, groupID string, from, to
 		return nil, fmt.Errorf("group cost totals: %w", err)
 	}
 
-	rows, err := db.ReadPool().Query(ctx,
+	rows, err := db.GlobalDBManager.Query(ctx,
 		`SELECT id, user_id, session_id, input_tokens, output_tokens, cost_cents, created_at
 		 FROM billing_records WHERE group_id = $1 AND created_at >= $2 AND created_at < $3
 		 ORDER BY created_at DESC LIMIT 500`, groupID, from, to)
@@ -317,7 +317,7 @@ func (s *pgEntCostStore) ListQuotaPools(ctx context.Context, tenantID string) ([
 		args = append(args, tenantID)
 	}
 	query += ` ORDER BY created_at`
-	rows, err := db.ReadPool().Query(ctx, query, args...)
+	rows, err := db.GlobalDBManager.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -334,7 +334,7 @@ func (s *pgEntCostStore) ListQuotaPools(ctx context.Context, tenantID string) ([
 }
 
 func (s *pgEntCostStore) GetQuotaPool(ctx context.Context, id string) (*EntQuotaPool, error) {
-	p, err := scanQuotaPool(db.ReadPool().QueryRow(ctx,
+	p, err := scanQuotaPool(db.GlobalDBManager.QueryRow(ctx,
 		`SELECT `+quotaPoolColumns+` FROM ent_quota_pools WHERE id = $1`, id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -346,7 +346,7 @@ func (s *pgEntCostStore) GetQuotaPool(ctx context.Context, id string) (*EntQuota
 }
 
 func (s *pgEntCostStore) CreateQuotaPool(ctx context.Context, p *EntQuotaPool) error {
-	row := db.Pool.QueryRow(ctx,
+	row := db.GlobalDBManager.QueryRow(ctx,
 		`INSERT INTO ent_quota_pools (tenant_id, resource_type, total_amount, period)
 		 VALUES ($1, $2, $3, $4) RETURNING `+quotaPoolColumns,
 		p.TenantID, p.ResourceType, p.TotalAmount, p.Period)
@@ -362,7 +362,7 @@ func (s *pgEntCostStore) CreateQuotaPool(ctx context.Context, p *EntQuotaPool) e
 }
 
 func (s *pgEntCostStore) UpdateQuotaPool(ctx context.Context, p *EntQuotaPool) error {
-	row := db.Pool.QueryRow(ctx,
+	row := db.GlobalDBManager.QueryRow(ctx,
 		`UPDATE ent_quota_pools
 		 SET resource_type = $2, total_amount = $3, period = $4, updated_at = NOW()
 		 WHERE id = $1 RETURNING `+quotaPoolColumns,
@@ -382,7 +382,7 @@ func (s *pgEntCostStore) UpdateQuotaPool(ctx context.Context, p *EntQuotaPool) e
 }
 
 func (s *pgEntCostStore) DeleteQuotaPool(ctx context.Context, id string) error {
-	tag, err := db.Pool.Exec(ctx, `DELETE FROM ent_quota_pools WHERE id = $1`, id)
+	tag, err := db.GlobalDBManager.Exec(ctx, `DELETE FROM ent_quota_pools WHERE id = $1`, id)
 	if err != nil {
 		return err
 	}
@@ -395,7 +395,7 @@ func (s *pgEntCostStore) DeleteQuotaPool(ctx context.Context, id string) error {
 // ── 配额分配 ──
 
 func (s *pgEntCostStore) ListAllocations(ctx context.Context, poolID string) ([]EntQuotaAllocation, error) {
-	rows, err := db.ReadPool().Query(ctx,
+	rows, err := db.GlobalDBManager.Query(ctx,
 		`SELECT id, pool_id, target_type, target_id, amount, created_at
 		 FROM ent_quota_allocations WHERE pool_id = $1 ORDER BY created_at`, poolID)
 	if err != nil {
@@ -415,14 +415,14 @@ func (s *pgEntCostStore) ListAllocations(ctx context.Context, poolID string) ([]
 
 func (s *pgEntCostStore) SumAllocated(ctx context.Context, poolID string) (int64, error) {
 	var sum int64
-	err := db.ReadPool().QueryRow(ctx,
+	err := db.GlobalDBManager.QueryRow(ctx,
 		`SELECT COALESCE(SUM(amount),0) FROM ent_quota_allocations WHERE pool_id = $1`, poolID).
 		Scan(&sum)
 	return sum, err
 }
 
 func (s *pgEntCostStore) CreateAllocation(ctx context.Context, a *EntQuotaAllocation) error {
-	row := db.Pool.QueryRow(ctx,
+	row := db.GlobalDBManager.QueryRow(ctx,
 		`INSERT INTO ent_quota_allocations (pool_id, target_type, target_id, amount)
 		 VALUES ($1, $2, $3, $4)
 		 RETURNING id, pool_id, target_type, target_id, amount, created_at`,
@@ -437,7 +437,7 @@ func (s *pgEntCostStore) CreateAllocation(ctx context.Context, a *EntQuotaAlloca
 }
 
 func (s *pgEntCostStore) DeleteAllocation(ctx context.Context, poolID, id string) (bool, error) {
-	tag, err := db.Pool.Exec(ctx,
+	tag, err := db.GlobalDBManager.Exec(ctx,
 		`DELETE FROM ent_quota_allocations WHERE id = $1 AND pool_id = $2`, id, poolID)
 	if err != nil {
 		return false, err
@@ -448,7 +448,7 @@ func (s *pgEntCostStore) DeleteAllocation(ctx context.Context, poolID, id string
 // ── quota 强制 / 用量支撑查询 ──
 
 func (s *pgEntCostStore) TenantTokenPools(ctx context.Context, tenantID string) ([]EntQuotaPool, error) {
-	rows, err := db.ReadPool().Query(ctx,
+	rows, err := db.GlobalDBManager.Query(ctx,
 		`SELECT `+quotaPoolColumns+` FROM ent_quota_pools
 		 WHERE tenant_id = $1 AND resource_type = 'token' ORDER BY created_at`, tenantID)
 	if err != nil {
@@ -468,7 +468,7 @@ func (s *pgEntCostStore) TenantTokenPools(ctx context.Context, tenantID string) 
 
 func (s *pgEntCostStore) TokenUsageSQL(ctx context.Context, tenantID string, since time.Time) (int64, error) {
 	var used int64
-	err := db.ReadPool().QueryRow(ctx,
+	err := db.GlobalDBManager.QueryRow(ctx,
 		`SELECT COALESCE(SUM(input_tokens + output_tokens),0)
 		 FROM billing_records WHERE tenant_id = $1 AND created_at >= $2`, tenantID, since).
 		Scan(&used)
@@ -477,7 +477,7 @@ func (s *pgEntCostStore) TokenUsageSQL(ctx context.Context, tenantID string, sin
 
 func (s *pgEntCostStore) ResolveTenantID(ctx context.Context, userID string) (string, error) {
 	var tenantID string
-	err := db.ReadPool().QueryRow(ctx,
+	err := db.GlobalDBManager.QueryRow(ctx,
 		`SELECT tenant_id FROM users WHERE id = $1`, userID).Scan(&tenantID)
 	if err != nil {
 		return "", err

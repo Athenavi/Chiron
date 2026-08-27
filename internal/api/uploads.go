@@ -164,7 +164,7 @@ func (h *UploadHandler) Init(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now()
-	if _, err := db.Pool.Exec(r.Context(),
+	if _, err := db.GlobalDBManager.Exec(r.Context(),
 		`INSERT INTO uploads (id, tenant_id, user_id, name, size, mime_type, purpose, parent_id, category, chunk_size, chunk_count, status, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'uploading', $12, $12)`,
 		uploadID, claims.TenantID, claims.UserID, body.Name, body.Size, truncateMIME(body.MimeType), body.Purpose,
@@ -198,7 +198,7 @@ func (h *UploadHandler) PutChunk(w http.ResponseWriter, r *http.Request) {
 
 	// 归属校验（含 tenant_id，防跨租户读写分片）
 	var owner string
-	if err := db.Pool.QueryRow(r.Context(),
+	if err := db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT user_id FROM uploads WHERE id = $1 AND tenant_id = $2`, uploadID, claims.TenantID).Scan(&owner); err != nil || owner != claims.UserID {
 		NotFound(w, "upload not found")
 		return
@@ -223,7 +223,7 @@ func (h *UploadHandler) PutChunk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := db.Pool.Exec(r.Context(),
+	if _, err := db.GlobalDBManager.Exec(r.Context(),
 		`UPDATE uploads SET chunks_received = (
 			SELECT jsonb_agg(elem)::text
 			FROM (
@@ -251,7 +251,7 @@ func (h *UploadHandler) GetProgress(w http.ResponseWriter, r *http.Request) {
 	uploadID := r.PathValue("id")
 	var received []string
 	var status string
-	err := db.Pool.QueryRow(r.Context(),
+	err := db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT chunks_received, status FROM uploads WHERE id = $1 AND tenant_id = $2 AND user_id = $3`, uploadID, claims.TenantID, claims.UserID).
 		Scan(&received, &status)
 	if err != nil {
@@ -296,7 +296,7 @@ func (h *UploadHandler) Complete(w http.ResponseWriter, r *http.Request) {
 		Received  []string
 	}
 	var receivedJSON string
-	err := db.Pool.QueryRow(r.Context(),
+	err := db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT id, user_id, name, size, mime_type, purpose, parent_id, category, chunk_size, chunk_count, chunks_received
 		 FROM uploads WHERE id = $1 AND tenant_id = $2 AND user_id = $3`, uploadID, claims.TenantID, claims.UserID).
 		Scan(&up.ID, &up.UserID, &up.Name, &up.Size, &up.MimeType, &up.Purpose,
@@ -353,7 +353,7 @@ func (h *UploadHandler) Complete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := db.Pool.Exec(r.Context(),
+	if _, err := db.GlobalDBManager.Exec(r.Context(),
 		`UPDATE uploads SET status = 'completed', updated_at = NOW() WHERE id = $1 AND tenant_id = $2`, uploadID, claims.TenantID); err != nil {
 		slog.Warn("failed to record upload", "error", err)
 	}
@@ -433,7 +433,7 @@ func (h *UploadHandler) finalizeMedia(r *http.Request, tenantID string, up struc
 		return "", err
 	}
 	assetType := detectType(up.MimeType)
-	if _, err := db.Pool.Exec(r.Context(),
+	if _, err := db.GlobalDBManager.Exec(r.Context(),
 		`INSERT INTO media_assets (id, tenant_id, user_id, type, name, file_url, mime_type, category, size, parent_id, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())`,
 		assetID, tenantID, up.UserID, assetType, up.Name, "/"+objectKey,
@@ -462,7 +462,7 @@ func (h *UploadHandler) finalizeKBDoc(r *http.Request, tenantID string, up struc
 	}
 	// 校验 KB 存在且归属当前租户当前用户
 	var owner string
-	if err := db.Pool.QueryRow(r.Context(),
+	if err := db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT user_id FROM knowledge_bases WHERE id = $1 AND tenant_id = $2`, up.ParentID, tenantID).Scan(&owner); err != nil || owner != up.UserID {
 		return "", fmt.Errorf("knowledge base not found or not owned")
 	}
@@ -481,7 +481,7 @@ func (h *UploadHandler) finalizeKBDoc(r *http.Request, tenantID string, up struc
 	if err != nil {
 		return "", err
 	}
-	_, err = db.Pool.Exec(r.Context(),
+	_, err = db.GlobalDBManager.Exec(r.Context(),
 		`INSERT INTO knowledge_documents (id, tenant_id, knowledge_base_id, user_id, name, file_type, file_size_bytes, status, content, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, NOW(), NOW())`,
 		docID, tenantID, up.ParentID, up.UserID, up.Name, ext, up.Size, content)
@@ -489,7 +489,7 @@ func (h *UploadHandler) finalizeKBDoc(r *http.Request, tenantID string, up struc
 		return "", err
 	}
 	// 重算 KB 统计（带 tenant_id 限制）
-	_, _ = db.Pool.Exec(r.Context(),
+	_, _ = db.GlobalDBManager.Exec(r.Context(),
 		`UPDATE knowledge_bases
 		 SET document_count = (SELECT COUNT(*) FROM knowledge_documents WHERE knowledge_base_id = $1 AND tenant_id = $2),
 		     total_size_bytes = COALESCE((SELECT SUM(file_size_bytes) FROM knowledge_documents WHERE knowledge_base_id = $1 AND tenant_id = $2), 0),

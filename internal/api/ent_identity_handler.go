@@ -51,7 +51,7 @@ func (pgEntStore) Exec(ctx context.Context, sql string, args ...any) (pgconn.Com
 	if db.Pool == nil {
 		return pgconn.CommandTag{}, errEntDBUnavailable
 	}
-	return db.Pool.Exec(ctx, sql, args...)
+	return db.GlobalDBManager.Exec(ctx, sql, args...)
 }
 
 // deadRow 在连接池缺失时返回确定性错误（避免 nil pgx.Row panic）。

@@ -25,7 +25,7 @@ const mediaSignTTL = 15 * time.Minute
 func signMediaURL(ctx context.Context, assetID, secret, tenantID, userID string) (string, error) {
 	// 归属校验
 	var filePath string
-	if err := db.ReadPool().QueryRow(ctx,
+	if err := db.GlobalDBManager.QueryRow(ctx,
 		`SELECT COALESCE(file_path, '') FROM media_assets WHERE id = $1 AND tenant_id = $2 AND user_id = $3`,
 		assetID, tenantID, userID).Scan(&filePath); err != nil {
 		return "", err
@@ -82,7 +82,7 @@ func (h *MediaHandler) ServeSignedMedia(w http.ResponseWriter, r *http.Request) 
 	}
 	// 取文件路径
 	var filePath string
-	if err := db.ReadPool().QueryRow(r.Context(),
+	if err := db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT COALESCE(file_path, '') FROM media_assets WHERE id = $1`, assetID).Scan(&filePath); err != nil || filePath == "" {
 		http.Error(w, "media not found", http.StatusNotFound)
 		return

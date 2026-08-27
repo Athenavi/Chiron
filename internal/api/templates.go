@@ -49,7 +49,7 @@ func (h *TemplateHandler) List(w http.ResponseWriter, r *http.Request) {
 		args = append(args, itemType)
 	}
 	sql += ` ORDER BY created_at DESC`
-	rows, err := db.ReadPool().Query(r.Context(), sql, args...)
+	rows, err := db.GlobalDBManager.Query(r.Context(), sql, args...)
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "list templates failed")
 		return
@@ -70,7 +70,7 @@ func (h *TemplateHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *TemplateHandler) Get(w http.ResponseWriter, r *http.Request) {
 	var t templateRow
 	var payload []byte
-	if err := db.ReadPool().QueryRow(r.Context(),
+	if err := db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT id::text, type, name, description, payload, created_at FROM ent_templates WHERE id = $1 AND published = true`,
 		r.PathValue("id")).Scan(&t.ID, &t.Type, &t.Name, &t.Description, &payload, &t.CreatedAt); err != nil {
 		NotFound(w, "template not found")
@@ -89,7 +89,7 @@ func (h *TemplateHandler) Use(w http.ResponseWriter, r *http.Request) {
 	}
 	var t templateRow
 	var payload []byte
-	if err := db.ReadPool().QueryRow(r.Context(),
+	if err := db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT id::text, type, name, description, payload FROM ent_templates WHERE id = $1 AND published = true`,
 		r.PathValue("id")).Scan(&t.ID, &t.Type, &t.Name, &t.Description, &payload); err != nil {
 		NotFound(w, "template not found")
@@ -129,7 +129,7 @@ func (h *TemplateHandler) useAgent(w http.ResponseWriter, r *http.Request, claim
 	llm, _ := json.Marshal(m["llm_config"])
 	maxTurns := intVal(m["max_turns"], 10)
 	timeout := intVal(m["timeout_seconds"], 120)
-	if _, err := db.Pool.Exec(r.Context(),
+	if _, err := db.GlobalDBManager.Exec(r.Context(),
 		`INSERT INTO agents (id, tenant_id, user_id, name, description, system_prompt, tools, llm_config, max_turns, timeout_seconds, enabled)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true)`,
 		agentID, claims.TenantID, claims.UserID, name, desc, prompt,

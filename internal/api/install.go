@@ -335,7 +335,7 @@ func (h *InstallHandler) Status(w http.ResponseWriter, r *http.Request) {
 	// If at least one user with role 'owner' exists, system is initialized
 	if dbOK {
 		var count int
-		err := db.Pool.QueryRow(r.Context(), `SELECT COUNT(*) FROM users WHERE role = 'owner'`).Scan(&count)
+		err := db.GlobalDBManager.QueryRow(r.Context(), `SELECT COUNT(*) FROM users WHERE role = 'owner'`).Scan(&count)
 		if err != nil || count == 0 {
 			status.Needed = true
 			status.Reason = "no admin user configured"
@@ -740,7 +740,7 @@ var ErrAlreadyInitialized = errors.New("system already initialized")
 // createOwnerAccount 原子化创建首个 owner 账户（事务 + 咨询锁保证并发/读副本滞后下只初始化一次）。
 // 已存在 owner 时返回 ErrAlreadyInitialized。
 func createOwnerAccount(ctx context.Context, email, name, password string) (string, error) {
-	tx, err := db.Pool.Begin(ctx)
+	tx, err := db.GlobalDBManager.Begin(ctx)
 	if err != nil {
 		return "", err
 	}
