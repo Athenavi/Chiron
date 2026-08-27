@@ -268,7 +268,12 @@ if not settings.postgres_dsn and settings.app_secret:
                     if not enc_dsn:
                         return ""
                     key = derive_lock_key(app_secret)
-                    sealed = base64.b64decode(enc_dsn)
+                    # Go 使用 base64.RawStdEncoding（无 padding），Python 需要兼容
+                    # 添加 padding 以符合标准 base64 解码要求
+                    missing_padding = len(enc_dsn) % 4
+                    if missing_padding:
+                        enc_dsn += '=' * (4 - missing_padding)
+                    sealed = base64.urlsafe_b64decode(enc_dsn)
                     nonce_size = 12  # AES-GCM nonce size
                     nonce = sealed[:nonce_size]
                     ciphertext = sealed[nonce_size:]
