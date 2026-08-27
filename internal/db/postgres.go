@@ -31,7 +31,7 @@ func ConnectPostgres(ctx context.Context, dsn string, maxConn, minConn int) erro
 	cfg.MaxConnLifetime = 30 * time.Minute
 	cfg.MaxConnIdleTime = 5 * time.Minute
 	cfg.HealthCheckPeriod = 30 * time.Second
-	// P 性能/稳定：statement_timeout 防慢查询长期占用连接耗尽�?
+	// P 性能/稳定：statement_timeout 防慢查询长期占用连接耗尽池
 	// 长查询（迁移/批量）应走独立连接，不复用业务池
 	cfg.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
 		_, err := conn.Exec(ctx, "SET statement_timeout = 30000")

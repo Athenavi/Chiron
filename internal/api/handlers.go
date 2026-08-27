@@ -1,4 +1,4 @@
-package api
+ï»¿package api
 
 import (
 	"context"
@@ -18,8 +18,8 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleReadiness(w http.ResponseWriter, r *http.Request) {
-	// ²úÆ·¾ö²ß(2026-08-22)£ºRedis Îª±ØĞèÒÀÀµ£»¾ÍĞ÷¼ì²é·´Ó³ÕæÊµÒÀÀµ×´Ì¬£¬
-	// ¹©±àÅÅÆ÷(compose/K8s)ÔÚ Redis ¹ÊÕÏÊ±´¥·¢ÖØÆô¡£
+	// äº§å“å†³ç­–(2026-08-22)ï¼šRedis ä¸ºå¿…éœ€ä¾èµ–ï¼›å°±ç»ªæ£€æŸ¥åæ˜ çœŸå®ä¾èµ–çŠ¶æ€ï¼Œ
+	// ä¾›ç¼–æ’å™¨(compose/K8s)åœ¨ Redis æ•…éšœæ—¶è§¦å‘é‡å¯ã€‚
 	deps := map[string]string{
 		"postgres": "up",
 		"redis":    "up",
@@ -27,7 +27,7 @@ func handleReadiness(w http.ResponseWriter, r *http.Request) {
 	ready := true
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
-	if !db.GlobalDBManager.IsAvailable() || db.GlobalDBManager.Ping(ctx) != nil {
+	if db.Pool == nil || db.Pool.Ping(ctx) != nil {
 		deps["postgres"] = "down"
 		ready = false
 	}

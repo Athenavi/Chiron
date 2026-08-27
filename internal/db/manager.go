@@ -10,16 +10,19 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// ErrDatabaseNotAvailable 数据库未初始化错�?var ErrDatabaseNotAvailable = errors.New("database not available")
+// ErrDatabaseNotAvailable 数据库未初始化错误
+var ErrDatabaseNotAvailable = errors.New("database not available")
 
-// DBManager 统一数据库管理器，集中处理所有数据库操作�?nil 检�?type DBManager struct{}
+// DBManager 统一数据库管理器，集中处理所有数据库操作和 nil 检查
+type DBManager struct{}
 
 // NewDBManager 创建数据库管理器实例
 func NewDBManager() *DBManager {
 	return &DBManager{}
 }
 
-// GetPool 获取主数据库连接池，如果未初始化则返回错�?func (m *DBManager) GetPool() (*pgxpool.Pool, error) {
+// GetPool 获取主数据库连接池，如果未初始化则返回错误
+func (m *DBManager) GetPool() (*pgxpool.Pool, error) {
 	PoolMu.RLock()
 	p := Pool
 	PoolMu.RUnlock()
@@ -56,7 +59,8 @@ func (m *DBManager) Query(ctx context.Context, sql string, args ...interface{}) 
 	return pool.Query(ctx, sql, args...)
 }
 
-// QueryRow 执行查询并返回单行结�?func (m *DBManager) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+// QueryRow 执行查询并返回单行结果
+func (m *DBManager) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
 	pool, err := m.GetReadPool()
 	if err != nil {
 		return errorRow{err: err}
@@ -64,7 +68,8 @@ func (m *DBManager) Query(ctx context.Context, sql string, args ...interface{}) 
 	return pool.QueryRow(ctx, sql, args...)
 }
 
-// Exec 执行写操作（INSERT/UPDATE/DELETE�?func (m *DBManager) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+// Exec 执行写操作（INSERT/UPDATE/DELETE）
+func (m *DBManager) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
 	pool, err := m.GetPool()
 	if err != nil {
 		return pgconn.CommandTag{}, fmt.Errorf("db manager: %w", err)
@@ -72,7 +77,8 @@ func (m *DBManager) Query(ctx context.Context, sql string, args ...interface{}) 
 	return pool.Exec(ctx, sql, args...)
 }
 
-// Begin 开始事�?func (m *DBManager) Begin(ctx context.Context) (pgx.Tx, error) {
+// Begin 开始事务
+func (m *DBManager) Begin(ctx context.Context) (pgx.Tx, error) {
 	pool, err := m.GetPool()
 	if err != nil {
 		return nil, fmt.Errorf("db manager: %w", err)
@@ -80,7 +86,8 @@ func (m *DBManager) Query(ctx context.Context, sql string, args ...interface{}) 
 	return pool.Begin(ctx)
 }
 
-// Ping 检查数据库连接状�?func (m *DBManager) Ping(ctx context.Context) error {
+// Ping 检查数据库连接状态
+func (m *DBManager) Ping(ctx context.Context) error {
 	pool, err := m.GetPool()
 	if err != nil {
 		return err
@@ -96,7 +103,8 @@ func (m *DBManager) IsAvailable() bool {
 	return p != nil
 }
 
-// errorRow 实现 pgx.Row 接口，用于返回错�?type errorRow struct {
+// errorRow 实现 pgx.Row 接口，用于返回错误
+type errorRow struct {
 	err error
 }
 

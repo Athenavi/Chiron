@@ -1,4 +1,4 @@
-package api
+ï»¿package api
 
 import (
 	"context"
@@ -32,9 +32,9 @@ type Conversation struct {
 	CreatedAt time.Time   `json:"created_at"`
 	UpdatedAt time.Time   `json:"updated_at"`
 	Messages  []Message   `json:"messages,omitempty"`
-	ToolCalls []ToolCall  `json:"tool_calls,omitempty"` // S ĞŞ¸´£º¹¤¾ßµ÷ÓÃ¹ı³ÌÂä¿â£¬Ë¢ĞÂºó»¹Ô­
-	Cursor    string      `json:"cursor,omitempty"`     // P ĞÔÄÜĞŞ¸´£º·ÖÒ³ÓÎ±ê£¨¼ÓÔØ¸üÔçÏûÏ¢£©
-	HasMore   bool        `json:"has_more"`             // P ĞÔÄÜĞŞ¸´£ºÊÇ·ñ»¹ÓĞ¸üÔçµÄÏûÏ¢
+	ToolCalls []ToolCall  `json:"tool_calls,omitempty"` // S ä¿®å¤ï¼šå·¥å…·è°ƒç”¨è¿‡ç¨‹è½åº“ï¼Œåˆ·æ–°åè¿˜åŸ
+	Cursor    string      `json:"cursor,omitempty"`     // P æ€§èƒ½ä¿®å¤ï¼šåˆ†é¡µæ¸¸æ ‡ï¼ˆåŠ è½½æ›´æ—©æ¶ˆæ¯ï¼‰
+	HasMore   bool        `json:"has_more"`             // P æ€§èƒ½ä¿®å¤ï¼šæ˜¯å¦è¿˜æœ‰æ›´æ—©çš„æ¶ˆæ¯
 }
 
 // Message is a single chat message returned to the frontend.
@@ -42,7 +42,7 @@ type Message struct {
 	ID        string    `json:"id"`
 	Role      string    `json:"role"`
 	Content   string    `json:"content"`
-	ToolCalls string    `json:"tool_calls,omitempty"` // assistant ÏûÏ¢µÄ OpenAI ¸ñÊ½ tool_calls£¨S ĞŞ¸´£©
+	ToolCalls string    `json:"tool_calls,omitempty"` // assistant æ¶ˆæ¯çš„ OpenAI æ ¼å¼ tool_callsï¼ˆS ä¿®å¤ï¼‰
 	CreatedAt time.Time `json:"created_at"`
 }
 
@@ -100,7 +100,7 @@ func (h *ConversationHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ·ÖÒ³²ÎÊı£ºÄ¬ÈÏ·µ»Ø×î½ü 50 Ìõ£¨P ĞÔÄÜĞŞ¸´£ºÊ×ÆÁ²»¼ÓÔØÈ«Á¿£¬ÉÏ¹ö¼ÓÔØ¸üÔç£©
+	// åˆ†é¡µå‚æ•°ï¼šé»˜è®¤è¿”å›æœ€è¿‘ 50 æ¡ï¼ˆP æ€§èƒ½ä¿®å¤ï¼šé¦–å±ä¸åŠ è½½å…¨é‡ï¼Œä¸Šæ»šåŠ è½½æ›´æ—©ï¼‰
 	limit := 50
 	if l := r.URL.Query().Get("limit"); l != "" {
 		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
@@ -109,8 +109,8 @@ func (h *ConversationHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 	before := r.URL.Query().Get("before")
 
-	// P ĞÔÄÜ£ºmessages Óë tool_calls Á½¸ö²éÑ¯²¢ĞĞ£¨pgxpool ²¢·¢°²È«£©
-	// Ê¹ÓÃ select È·±£ context È¡ÏûÊ±²»Ğ¹Â© goroutine
+	// P æ€§èƒ½ï¼šmessages ä¸ tool_calls ä¸¤ä¸ªæŸ¥è¯¢å¹¶è¡Œï¼ˆpgxpool å¹¶å‘å®‰å…¨ï¼‰
+	// ä½¿ç”¨ select ç¡®ä¿ context å–æ¶ˆæ—¶ä¸æ³„æ¼ goroutine
 	type pageResult struct {
 		page session.MessagePage
 		err  error
@@ -158,11 +158,11 @@ func (h *ConversationHandler) Get(w http.ResponseWriter, r *http.Request) {
 			ID:        m.ID,
 			Role:      m.Role,
 			Content:   m.Content,
-			ToolCalls: m.ToolCalls, // S ĞŞ¸´£ºassistant ÏûÏ¢µÄ tool_calls ËæÏêÇé·µ»Ø
+			ToolCalls: m.ToolCalls, // S ä¿®å¤ï¼šassistant æ¶ˆæ¯çš„ tool_calls éšè¯¦æƒ…è¿”å›
 			CreatedAt: m.CreatedAt,
 		})
 	}
-	// S ĞŞ¸´£º¹¤¾ßµ÷ÓÃ¹ı³ÌÂä¿â ¡ª Ëæ»á»°ÏêÇé·µ»Ø£¬Ç°¶ËË¢ĞÂºó»¹Ô­¹¤¾ß¿¨Æ¬
+	// S ä¿®å¤ï¼šå·¥å…·è°ƒç”¨è¿‡ç¨‹è½åº“ â€” éšä¼šè¯è¯¦æƒ…è¿”å›ï¼Œå‰ç«¯åˆ·æ–°åè¿˜åŸå·¥å…·å¡ç‰‡
 	for _, tc := range toolCalls {
 		conv.ToolCalls = append(conv.ToolCalls, ToolCall{
 			ID:        tc.ID,
@@ -186,7 +186,7 @@ func (h *ConversationHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if body.Title == "" {
-		body.Title = "ĞÂ¶Ô»°"
+		body.Title = "æ–°å¯¹è¯"
 	}
 
 	claims := auth.GetClaims(r.Context())
@@ -247,7 +247,7 @@ func (h *ConversationHandler) Delete(w http.ResponseWriter, r *http.Request) {
 }
 
 
-// Update updates a session's title and/or pinned flag (session menu: ÖØÃüÃû/ÖÃ¶¥).
+// Update updates a session's title and/or pinned flag (session menu: é‡å‘½å/ç½®é¡¶).
 func (h *ConversationHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {

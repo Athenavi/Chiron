@@ -15,31 +15,31 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// ── 人机验证配置管理 + 登录防滥用栅�?──────────────────────
+// ── 人机验证配置管理 + 登录防滥用栅栏 ──────────────────────
 //
-// 防滥用双保险�?
-//  1. 管理员启用验证码后，登录/注册必须携带有效 captcha token�?
-//  2. 未启用时，同一 IP 连续失败达到阈值会"升级"为强制验证码�?
-//     继续失败达到硬上限则直接 429 拒绝（Redis 计数�?5 分钟窗口）�?
+// 防滥用双保险：
+//  1. 管理员启用验证码后，登录/注册必须携带有效 captcha token；
+//  2. 未启用时，同一 IP 连续失败达到阈值会"升级"为强制验证码，
+//     继续失败达到硬上限则直接 429 拒绝（Redis 计数，15 分钟窗口）。
 
-// errCaptchaHandled 表示 Enforce 已写响应，调用方应直�?return�?
+// errCaptchaHandled 表示 Enforce 已写响应，调用方应直接 return。
 var errCaptchaHandled = errors.New("captcha gate: response already written")
 
 const (
-	captchaFailThreshold = 5   // 连续失败 N 次后强制验证�?
+	captchaFailThreshold = 5   // 连续失败 N 次后强制验证码
 	captchaHardLimit     = 30  // 连续失败 N 次后直接拒绝
 	captchaFailWindow    = 15 * time.Minute
 	captchaFailKeyPrefix = "login:fail:"
 )
 
-// failCounterStore 抽象登录失败计数存储（生�?Redis，测试内�?fake）�?
+// failCounterStore 抽象登录失败计数存储（生产 Redis，测试内存 fake）。
 type failCounterStore interface {
 	incr(ctx context.Context, ip string, window time.Duration)
 	get(ctx context.Context, ip string) int
 	clear(ctx context.Context, ip string)
 }
 
-// redisFailCounter �?Redis 实现：key = login:fail:{ip}，TTL = 窗口期�?
+// redisFailCounter 是 Redis 实现：key = login:fail:{ip}，TTL = 窗口期。
 type redisFailCounter struct {
 	rdb db.RedisClient
 }
@@ -74,7 +74,7 @@ func (c redisFailCounter) clear(ctx context.Context, ip string) {
 	c.rdb.Del(ctx, captchaFailKeyPrefix+ip)
 }
 
-// captchaConfigRow �?ent_captcha_config 的内存形态（secret 保留密文）�?
+// captchaConfigRow 是 ent_captcha_config 的内存形态（secret 保留密文）。
 type captchaConfigRow struct {
 	Provider  string
 	SiteKey   string
@@ -83,15 +83,15 @@ type captchaConfigRow struct {
 	Enabled   bool
 }
 
-// CaptchaHandler 提供验证码配�?CRUD、公开配置下发与防滥用栅栏�?
+// CaptchaHandler 提供验证码配置 CRUD、公开配置下发与防滥用栅栏。
 type CaptchaHandler struct {
 	db       entQuerier
 	encKey   []byte
 	verifier auth.CaptchaVerifier
-	counter  failCounterStore // nil 时失败计数降级跳过（仍有 rlMW 兜底�?
+	counter  failCounterStore // nil 时失败计数降级跳过（仍有 rlMW 兜底）
 }
 
-// NewCaptchaHandler 构造验证码 handler；密钥沿�?SSO 加密密钥�?
+// NewCaptchaHandler 构造验证码 handler；密钥沿用 SSO 加密密钥。
 func NewCaptchaHandler(cfg *config.Config) *CaptchaHandler {
 	return &CaptchaHandler{
 		db:       pgEntStore{},
@@ -101,12 +101,12 @@ func NewCaptchaHandler(cfg *config.Config) *CaptchaHandler {
 	}
 }
 
-// RegisterPublicRoutes 挂载公开路由（无 authMW，供登录页拉取前端组件参数；须套 rlMW）�?
+// RegisterPublicRoutes 挂载公开路由（无 authMW，供登录页拉取前端组件参数；须套 rlMW）。
 func (h *CaptchaHandler) RegisterPublicRoutes(mux *http.ServeMux, rlMW func(http.Handler) http.Handler) {
 	mux.Handle("GET /v1/auth/captcha/config", rlMW(http.HandlerFunc(h.PublicConfig)))
 }
 
-// RegisterAdminRoutes 挂载管理路由（authMW + RequireEntPerm("sso:manage")）�?
+// RegisterAdminRoutes 挂载管理路由（authMW + RequireEntPerm("sso:manage")）。
 func (h *CaptchaHandler) RegisterAdminRoutes(mux *http.ServeMux, authMW func(http.Handler) http.Handler) {
 	guard := func(hf http.HandlerFunc) http.Handler {
 		return authMW(RequireEntPerm("sso:manage")(hf))
@@ -118,7 +118,7 @@ func (h *CaptchaHandler) RegisterAdminRoutes(mux *http.ServeMux, authMW func(htt
 // ── 公开配置下发 ────────────────────────────────────────
 
 // PublicConfig GET /v1/auth/captcha/config
-// 仅下发前端渲染验证码组件所需的非敏感字段；未启用/未配置返�?enabled=false�?
+// 仅下发前端渲染验证码组件所需的非敏感字段；未启用/未配置返回 enabled=false。
 func (h *CaptchaHandler) PublicConfig(w http.ResponseWriter, r *http.Request) {
 	row, err := h.loadConfig(r.Context())
 	if err != nil {
@@ -137,9 +137,9 @@ func (h *CaptchaHandler) PublicConfig(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ── 管理�?──────────────────────────────────────────────
+// ── 管理端 ──────────────────────────────────────────────
 
-// GetConfig GET /v1/ent/captcha/config（secret 脱敏）�?
+// GetConfig GET /v1/ent/captcha/config（secret 脱敏）。
 func (h *CaptchaHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 	row, err := h.loadConfig(r.Context())
 	if err != nil {
@@ -167,12 +167,12 @@ func (h *CaptchaHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 type updateCaptchaRequest struct {
 	Provider  *string `json:"provider"`
 	SiteKey   *string `json:"site_key"`
-	Secret    *string `json:"secret"` // 空串/脱敏占位 = 保留原�?
+	Secret    *string `json:"secret"` // 空串/脱敏占位 = 保留原值
 	VerifyURL *string `json:"verify_url"`
 	Enabled   *bool   `json:"enabled"`
 }
 
-// UpdateConfig PUT /v1/ent/captcha/config（单租户单行 upsert）�?
+// UpdateConfig PUT /v1/ent/captcha/config（单租户单行 upsert）。
 func (h *CaptchaHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 	var req updateCaptchaRequest
 	if err := DecodeJSON(w, r, &req); err != nil {
@@ -212,7 +212,7 @@ func (h *CaptchaHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 		enabled = *req.Enabled
 	}
 
-	// secret：新值加密；空串/占位保留原密�?
+	// secret：新值加密；空串/占位保留原密文
 	secretEnc := ""
 	if existing != nil {
 		secretEnc = existing.SecretEnc
@@ -268,7 +268,7 @@ func (h *CaptchaHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if updated == nil {
-		// 并发删除配置的极端竞态：fail-loud 而非空指�?
+		// 并发删除配置的极端竞态：fail-loud 而非空指针
 		logAndRespond(w, errors.New("captcha config vanished after upsert"),
 			http.StatusInternalServerError, "captcha config unavailable")
 		return
@@ -284,10 +284,10 @@ func (h *CaptchaHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 
 // ── 防滥用栅栏（登录/注册调用）─────────────────────────
 
-// Enforce 在登�?注册等敏感接口的凭据校验前执行：
-//   - 未启用且未达失败阈�?�?nil 放行�?
-//   - 需要验证码�?token 缺失/校验失败/服务商不可达 �?写响应并返回 errCaptchaHandled�?
-//   - 达硬上限 �?429�?
+// Enforce 在登录/注册等敏感接口的凭据校验前执行：
+//   - 未启用且未达失败阈值 → nil 放行；
+//   - 需要验证码但 token 缺失/校验失败/服务商不可达 → 写响应并返回 errCaptchaHandled；
+//   - 达硬上限 → 429。
 func (h *CaptchaHandler) Enforce(w http.ResponseWriter, r *http.Request, tok *auth.CaptchaToken) error {
 	ip := clientIP(r)
 
@@ -306,7 +306,7 @@ func (h *CaptchaHandler) Enforce(w http.ResponseWriter, r *http.Request, tok *au
 
 	required := row != nil && row.Enabled
 	if !required && fails >= captchaFailThreshold && row != nil && row.SecretEnc != "" {
-		// 未全局启用但已配置 �?失败升级为强制验证码
+		// 未全局启用但已配置 → 失败升级为强制验证码
 		required = true
 	}
 
@@ -315,7 +315,7 @@ func (h *CaptchaHandler) Enforce(w http.ResponseWriter, r *http.Request, tok *au
 	}
 
 	if row == nil || row.SecretEnc == "" {
-		// 配置缺失却要求验�?�?fail-loud，绝不静默放�?
+		// 配置缺失却要求验证 → fail-loud，绝不静默放行
 		ServiceUnavailable(w, "captcha is not configured")
 		return errCaptchaHandled
 	}
@@ -346,14 +346,14 @@ func (h *CaptchaHandler) Enforce(w http.ResponseWriter, r *http.Request, tok *au
 			Forbidden(w, "captcha verification failed")
 			return errCaptchaHandled
 		}
-		// 服务商不可达等系统级错误 �?fail-loud 502
+		// 服务商不可达等系统级错误 → fail-loud 502
 		logAndRespond(w, err, http.StatusBadGateway, "captcha provider unavailable")
 		return errCaptchaHandled
 	}
 	return nil
 }
 
-// RecordFailure 登录失败后调用：计数 + 窗口续期�?
+// RecordFailure 登录失败后调用：计数 + 窗口续期。
 func (h *CaptchaHandler) RecordFailure(ctx context.Context, r *http.Request) {
 	if h.counter == nil {
 		return
@@ -361,7 +361,7 @@ func (h *CaptchaHandler) RecordFailure(ctx context.Context, r *http.Request) {
 	h.counter.incr(ctx, clientIP(r), captchaFailWindow)
 }
 
-// ClearFailures 登录成功后调用：清除失败计数�?
+// ClearFailures 登录成功后调用：清除失败计数。
 func (h *CaptchaHandler) ClearFailures(ctx context.Context, r *http.Request) {
 	if h.counter == nil {
 		return
@@ -397,7 +397,7 @@ func (h *CaptchaHandler) loadConfig(ctx context.Context) (*captchaConfigRow, err
 	return &row, nil
 }
 
-// clientIP 提取客户�?IP（realIPHeader 中间件已�?RemoteAddr 规整为真�?IP）�?
+// clientIP 提取客户端 IP（realIPHeader 中间件已把 RemoteAddr 规整为真实 IP）。
 func clientIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {

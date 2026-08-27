@@ -48,24 +48,24 @@ func (h *MediaHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	fileSize := int64(len(fileData))
 
-	// P1-6: �?magic bytes 检测真�?MIME，避免客户端伪�?Content-Type 上传可执行文�?
+	// P1-6: 用 magic bytes 检测真实 MIME，避免客户端伪造 Content-Type 上传可执行文件
 	declaredMIME := truncateMIME(header.Header.Get("Content-Type"))
 	detectedMIME := truncateMIME(http.DetectContentType(fileData))
-	// 优先采用检测到�?MIME；声明与检测不一致时以检测为准（更安全）
+	// 优先采用检测到的 MIME；声明与检测不一致时以检测为准（更安全）
 	mimeType := detectedMIME
 	if declaredMIME != "" && declaredMIME == detectedMIME {
-		// 声明与检测一致，保留声明的（可能更精确，�?image/png vs image/jpeg�?
+		// 声明与检测一致，保留声明的（可能更精确，如 image/png vs image/jpeg）
 		mimeType = declaredMIME
 	}
-	// 拒绝可执�?脚本�?MIME（即使客户端伪装为图片）
-	// P1-6: 传入文件名以便扩展名兜底（PE/ELF magic bytes 只检测为 octet-stream�?
+	// 拒绝可执行/脚本类 MIME（即使客户端伪装为图片）
+	// P1-6: 传入文件名以便扩展名兜底（PE/ELF magic bytes 只检测为 octet-stream）
 	if isExecutableMIME(mimeType, header.Filename) {
 		BadRequest(w, "file type not allowed: "+mimeType)
 		return
 	}
 	assetType := detectType(mimeType)
 	category := r.FormValue("category")
-	parentID := r.FormValue("parent_id") // 当前目录；空 = 根目�?
+	parentID := r.FormValue("parent_id") // 当前目录；空 = 根目录
 
 	dir := h.resolveDir(r)
 	name := r.FormValue("name")
@@ -79,7 +79,7 @@ func (h *MediaHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		logAndRespond(w, err, http.StatusInternalServerError, "generate id failed")
 		return
 	}
-	_, err = db.GlobalDBManager.Exec(r.Context(),
+	_, err = db.Pool.Exec(r.Context(),
 		`INSERT INTO media_assets (id, tenant_id, user_id, type, name, file_url, mime_type, category, size, parent_id, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, '', $6, $7, $8, $9, NOW(), NOW())`,
 		assetID, tenantID, claims.UserID, assetType, name, mimeType, nullableStr(category), fileSize, parentID,
@@ -97,7 +97,7 @@ func (h *MediaHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	fileURL := h.objectURL(objectKey)
 
 	// 更新 file_url
-	_, err = db.GlobalDBManager.Exec(r.Context(),
+	_, err = db.Pool.Exec(r.Context(),
 		`UPDATE media_assets SET file_url = $1 WHERE id = $2 AND tenant_id = $3`,
 		fileURL, assetID, tenantID)
 	if err != nil {
@@ -110,7 +110,7 @@ func (h *MediaHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ── PresignUpload �?returns a presigned URL for client-side direct upload ──
+// ── PresignUpload — returns a presigned URL for client-side direct upload ──
 
 func (h *MediaHandler) PresignUpload(w http.ResponseWriter, r *http.Request) {
 	var body struct {
@@ -166,7 +166,7 @@ func (h *MediaHandler) PresignUpload(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ── CompleteUpload �?called by client after presigned upload is done ──
+// ── CompleteUpload — called by client after presigned upload is done ──
 
 func (h *MediaHandler) CompleteUpload(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
@@ -197,7 +197,7 @@ func (h *MediaHandler) CompleteUpload(w http.ResponseWriter, r *http.Request) {
 		body.Type = "file"
 	}
 
-	// 校验 file_url 指向配置的存储后端（防止客户端伪造任�?URL 入库�?
+	// 校验 file_url 指向配置的存储后端（防止客户端伪造任意 URL 入库）
 	inner := h.store
 	if atomic, ok := h.store.(*storage.AtomicStore); ok {
 		inner = atomic.LoadRaw()
@@ -225,7 +225,7 @@ func (h *MediaHandler) CompleteUpload(w http.ResponseWriter, r *http.Request) {
 		logAndRespond(w, err, http.StatusInternalServerError, "generate id failed")
 		return
 	}
-	_, err = db.GlobalDBManager.Exec(r.Context(),
+	_, err = db.Pool.Exec(r.Context(),
 		`INSERT INTO media_assets (id, tenant_id, user_id, type, name, file_url, mime_type, category, size, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())`,
 		assetID, tenantID, claims.UserID, body.Type, body.Name, body.FileURL, truncateMIME(body.MimeType), nullableStr(body.Category), body.Size)
@@ -263,10 +263,10 @@ func truncateMIME(mime string) string {
 	return mime
 }
 
-// isExecutableMIME 拦截可执�?脚本�?MIME，防止伪装为图片上传恶意文件�?
-// P1-6: 即使 magic bytes 检测出真实类型，仍需拒绝危险类型落地存储�?
-// fileName 用于扩展名兜底（net/http �?DetectContentType �?PE/ELF/Mach-O
-// 通常返回 application/octet-stream，无法区分可执行文件与普通二进制）�?
+// isExecutableMIME 拦截可执行/脚本类 MIME，防止伪装为图片上传恶意文件。
+// P1-6: 即使 magic bytes 检测出真实类型，仍需拒绝危险类型落地存储。
+// fileName 用于扩展名兜底（net/http 的 DetectContentType 对 PE/ELF/Mach-O
+// 通常返回 application/octet-stream，无法区分可执行文件与普通二进制）。
 func isExecutableMIME(mime string, fileName string) bool {
 	// 归一化小写并去掉参数
 	m := strings.ToLower(strings.TrimSpace(mime))
@@ -290,7 +290,7 @@ func isExecutableMIME(mime string, fileName string) bool {
 		return true
 	}
 	// 扩展名兜底：octet-stream（PE/ELF/Mach-O magic bytes 通用回退）或 text/plain
-	// （shell 脚本检测为 text/plain�? 危险扩展�?�?拒绝
+	// （shell 脚本检测为 text/plain）+ 危险扩展名 → 拒绝
 	if m == "application/octet-stream" || m == "" || m == "text/plain" || m == "text/html" {
 		ext := strings.ToLower(filepath.Ext(fileName))
 		switch ext {
@@ -300,7 +300,7 @@ func isExecutableMIME(mime string, fileName string) bool {
 			return true
 		}
 	}
-	// text/plain 可能是任何脚本，�?magic bytes 只能识别文本�?
-	// 这里只拦截明确的可执行二进制类型，text/plain 由业务层判断扩展�?
+	// text/plain 可能是任何脚本，但 magic bytes 只能识别文本；
+	// 这里只拦截明确的可执行二进制类型，text/plain 由业务层判断扩展名
 	return false
 }

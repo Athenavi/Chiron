@@ -12,7 +12,7 @@ func wouldCreateCycle(getParent func(id string) (string, error), id, newParent s
 	if id == newParent {
 		return true, nil
 	}
-	// 根目录（空串）没有父节点，直接判定无�?
+	// 根目录（空串）没有父节点，直接判定无环
 	if newParent == "" {
 		return false, nil
 	}

@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-// InputSanitizer 输入净化器，防�?Prompt Injection
+// InputSanitizer 输入净化器，防止 Prompt Injection
 type InputSanitizer struct {
 	injectionPatterns []*regexp.Regexp
 	homoglyphPattern  *regexp.Regexp
@@ -51,7 +51,7 @@ func NewInputSanitizer() *InputSanitizer {
 		compiled = append(compiled, re)
 	}
 
-	// 检测非 ASCII 同形异义词（Unicode 混淆攻击：西里尔/希腊/阿拉伯字母伪装成 ASCII�?
+	// 检测非 ASCII 同形异义词（Unicode 混淆攻击：西里尔/希腊/阿拉伯字母伪装成 ASCII）
 	homoglyph := regexp.MustCompile("[\u0400-\u04FF\u0370-\u03FF\u0600-\u06FF]")
 
 	return &InputSanitizer{
@@ -60,15 +60,15 @@ func NewInputSanitizer() *InputSanitizer {
 	}
 }
 
-// Sanitize 净化用户输�?
-// 使用 XML 标签包裹 + HTML 转义，防止用户输入被 LLM 解释为指�?
+// Sanitize 净化用户输入
+// 使用 XML 标签包裹 + HTML 转义，防止用户输入被 LLM 解释为指令
 func (s *InputSanitizer) Sanitize(input string) string {
 	escaped := htmlEscape(input)
 	return fmt.Sprintf("<user_input>\n%s\n</user_input>", escaped)
 }
 
-// DetectInjection 检�?Prompt Injection 攻击
-// 返回 (是否检测到, 匹配的模式描�?
+// DetectInjection 检测 Prompt Injection 攻击
+// 返回 (是否检测到, 匹配的模式描述)
 func (s *InputSanitizer) DetectInjection(input string) (bool, string) {
 	normalized := normalizeInput(input)
 
@@ -84,17 +84,17 @@ func (s *InputSanitizer) DetectInjection(input string) (bool, string) {
 	return false, ""
 }
 
-// normalizeInput 归一化用户输入以规避混淆技�?
+// normalizeInput 归一化用户输入以规避混淆技术
 // 将全角→半角、去除零宽字符、统一空白
 func normalizeInput(input string) string {
 	var b strings.Builder
 	b.Grow(len(input))
 	for _, r := range input {
-		// 零宽字符 / 格式控制符（U+200B-200F, U+FE00-FE0F 变体选择符等�?
+		// 零宽字符 / 格式控制符（U+200B-200F, U+FE00-FE0F 变体选择符等）
 		if (r >= '\u200B' && r <= '\u200F') || (r >= '\uFE00' && r <= '\uFE0F') || (r >= '\u2060' && r <= '\u2064') {
 			continue
 		}
-		// 全角 ASCII �?半角
+		// 全角 ASCII → 半角
 		if r >= '\uFF01' && r <= '\uFF5E' {
 			b.WriteRune(r - 0xFEE0)
 			continue
@@ -105,7 +105,7 @@ func normalizeInput(input string) string {
 	return strings.Join(strings.Fields(lower), " ")
 }
 
-// htmlEscape 转义用户输入中的特殊字符，防�?LLM �?
+// htmlEscape 转义用户输入中的特殊字符，防止 LLM 将
 // 用户输入中的 XML/HTML 标签误解释为指令
 func htmlEscape(s string) string {
 	var b strings.Builder
@@ -133,13 +133,13 @@ func htmlEscape(s string) string {
 func SanitizeMiddleware(sanitizer *InputSanitizer) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// 只对 POST 请求进行净�?
+			// 只对 POST 请求进行净化
 			if r.Method != http.MethodPost {
 				next.ServeHTTP(w, r)
 				return
 			}
 
-			// 检�?Content-Type
+			// 检查 Content-Type
 			ct := r.Header.Get("Content-Type")
 			if !strings.Contains(ct, "application/json") {
 				next.ServeHTTP(w, r)
@@ -155,9 +155,9 @@ func SanitizeMiddleware(sanitizer *InputSanitizer) func(http.Handler) http.Handl
 			}
 			defer r.Body.Close()
 
-			// 只对非空 content 字段进行净�?
+			// 只对非空 content 字段进行净化
 			if content, ok := body["content"].(string); ok && content != "" {
-				// 检测注�?
+				// 检测注入
 				if detected, pattern := sanitizer.DetectInjection(content); detected {
 					slog.Warn("检测到 Prompt Injection 攻击",
 						"pattern", pattern,
@@ -168,7 +168,7 @@ func SanitizeMiddleware(sanitizer *InputSanitizer) func(http.Handler) http.Handl
 					BadRequest(w, "输入内容包含不允许的指令")
 					return
 				}
-				// 净�?content
+				// 净化 content
 				body["content"] = sanitizer.Sanitize(content)
 			}
 
@@ -187,15 +187,15 @@ func SanitizeMiddleware(sanitizer *InputSanitizer) func(http.Handler) http.Handl
 	}
 }
 
-// OutputScanner 输出扫描器，检�?LLM 响应中的敏感信息
+// OutputScanner 输出扫描器，检测 LLM 响应中的敏感信息
 type OutputScanner struct {
-	// 系统提示关键�?
+	// 系统提示关键词
 	systemPromptKeywords []string
 	// API Key 模式
 	apiKeyPatterns []*regexp.Regexp
 }
 
-// NewOutputScanner 创建输出扫描�?
+// NewOutputScanner 创建输出扫描器
 func NewOutputScanner() *OutputScanner {
 	return &OutputScanner{
 		systemPromptKeywords: []string{
@@ -213,7 +213,7 @@ func NewOutputScanner() *OutputScanner {
 
 // Scan 扫描 LLM 输出
 func (s *OutputScanner) Scan(response string) (safe bool, reason string) {
-	// 检查是否泄露系统提�?
+	// 检查是否泄露系统提示
 	lower := strings.ToLower(response)
 	for _, keyword := range s.systemPromptKeywords {
 		if strings.Contains(lower, strings.ToLower(keyword)) {
@@ -221,7 +221,7 @@ func (s *OutputScanner) Scan(response string) (safe bool, reason string) {
 		}
 	}
 
-	// 检查是否包�?API Key
+	// 检查是否包含 API Key
 	for _, pattern := range s.apiKeyPatterns {
 		if pattern.MatchString(response) {
 			return false, "response may contain API keys or secrets"
@@ -231,7 +231,7 @@ func (s *OutputScanner) Scan(response string) (safe bool, reason string) {
 	return true, ""
 }
 
-// truncate 截断字符�?
+// truncate 截断字符串
 func truncate(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s

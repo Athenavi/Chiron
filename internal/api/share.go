@@ -26,7 +26,7 @@ func NewShareHandler(a *auth.Authenticator, sm *session.Manager) *ShareHandler {
 }
 
 // shareToken generates a random unguessable share id (80 bits entropy, base32
-// lowercase, no padding �?16 chars). Shares must not be enumerable, unlike
+// lowercase, no padding — 16 chars). Shares must not be enumerable, unlike
 // snowflake ids, because the id is the whole access control.
 func shareToken() (string, error) {
 	var b [10]byte
@@ -72,7 +72,7 @@ func (h *ShareHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 消息归属校验：只允许分享本会话的消息
-	rows, err := db.GlobalDBManager.Query(r.Context(),
+	rows, err := db.Pool.Query(r.Context(),
 		`SELECT id FROM messages WHERE session_id = $1 AND id = ANY($2::text[])`, id, messageIDs)
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "validate messages failed")
@@ -101,7 +101,7 @@ func (h *ShareHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 幂等：已有活跃分享直接返�?
+	// 幂等：已有活跃分享直接返回
 	existing, err := h.activeShare(r, id)
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "query share failed")
@@ -117,7 +117,7 @@ func (h *ShareHandler) Create(w http.ResponseWriter, r *http.Request) {
 		logAndRespond(w, err, http.StatusInternalServerError, "create share failed")
 		return
 	}
-	_, err = db.GlobalDBManager.Exec(r.Context(),
+	_, err = db.Pool.Exec(r.Context(),
 		`INSERT INTO conversation_shares (id, session_id, user_id, title, message_ids, created_at)
 		 VALUES ($1, $2, $3::uuid, $4, $5, $6)`,
 		token, id, claims.UserID, sess.Title, valid, time.Now())
@@ -182,7 +182,7 @@ func (h *ShareHandler) Revoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := db.GlobalDBManager.Exec(r.Context(),
+	if _, err := db.Pool.Exec(r.Context(),
 		`UPDATE conversation_shares SET revoked_at = NOW() WHERE session_id = $1 AND revoked_at IS NULL`, id); err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "revoke share failed")
 		return
@@ -203,7 +203,7 @@ func (h *ShareHandler) PublicGet(w http.ResponseWriter, r *http.Request) {
 	var messageIDs []string
 	var createdAt time.Time
 	var revokedAt *time.Time
-	err := db.GlobalDBManager.QueryRow(r.Context(),
+	err := db.Pool.QueryRow(r.Context(),
 		`SELECT id, session_id, title, message_ids, created_at, revoked_at
 		 FROM conversation_shares WHERE id = $1`, token).
 		Scan(&shareID, &sessionID, &title, &messageIDs, &createdAt, &revokedAt)
@@ -216,8 +216,8 @@ func (h *ShareHandler) PublicGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 只暴露用户选中的文本消息（user/assistant），按时间正�?
-	rows, err := db.GlobalDBManager.Query(r.Context(),
+	// 只暴露用户选中的文本消息（user/assistant），按时间正序
+	rows, err := db.Pool.Query(r.Context(),
 		`SELECT role, content, created_at FROM messages
 		 WHERE session_id = $1 AND id = ANY($2::text[]) AND role IN ('user', 'assistant')
 		 ORDER BY created_at ASC, id ASC`, sessionID, messageIDs)
@@ -256,7 +256,7 @@ func (h *ShareHandler) PublicGet(w http.ResponseWriter, r *http.Request) {
 // activeShare returns the session's non-revoked share, or nil.
 func (h *ShareHandler) activeShare(r *http.Request, sessionID string) (*model.ConversationShare, error) {
 	share := &model.ConversationShare{}
-	err := db.GlobalDBManager.QueryRow(r.Context(),
+	err := db.Pool.QueryRow(r.Context(),
 		`SELECT id, created_at FROM conversation_shares
 		 WHERE session_id = $1 AND revoked_at IS NULL LIMIT 1`, sessionID).
 		Scan(&share.ID, &share.CreatedAt)

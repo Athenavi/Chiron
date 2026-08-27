@@ -19,28 +19,28 @@ import (
 	"time"
 )
 
-// ── 短信验证码（SMS）登�?────────────────────────────────
+// ── 短信验证码（SMS）登录 ────────────────────────────────
 //
-// 支持的短信服务商�?
-//   - aliyun : 阿里云短信（dysmsapi，POP RPC 签名 V1�?
-//   - tencent: 腾讯云短信（sms.tencentcloudapi.com，TC3-HMAC-SHA256 签名�?
-//   - custom : 自定�?HTTP 端点（约定契约见 CustomSmsContract�?
+// 支持的短信服务商：
+//   - aliyun : 阿里云短信（dysmsapi，POP RPC 签名 V1）
+//   - tencent: 腾讯云短信（sms.tencentcloudapi.com，TC3-HMAC-SHA256 签名）
+//   - custom : 自定义 HTTP 端点（约定契约见 CustomSmsContract）
 //
-// 所有服务商的发送均�?HTTP 调用，不引入�?SDK�?
+// 所有服务商的发送均为 HTTP 调用，不引入大 SDK。
 
-// SmsProvider 是支持的短信服务商类型�?
+// SmsProvider 是支持的短信服务商类型。
 const (
 	SmsAliyun  = "aliyun"
 	SmsTencent = "tencent"
 	SmsCustom  = "custom"
 )
 
-// SmsKnownProviders 返回全部受支持的短信服务商（配置校验用）�?
+// SmsKnownProviders 返回全部受支持的短信服务商（配置校验用）。
 func SmsKnownProviders() []string {
 	return []string{SmsAliyun, SmsTencent, SmsCustom}
 }
 
-// IsKnownSmsProvider 判断 provider 类型是否受支持�?
+// IsKnownSmsProvider 判断 provider 类型是否受支持。
 func IsKnownSmsProvider(p string) bool {
 	switch p {
 	case SmsAliyun, SmsTencent, SmsCustom:
@@ -49,45 +49,45 @@ func IsKnownSmsProvider(p string) bool {
 	return false
 }
 
-// 各服务商默认发送端点（cfg.Endpoint 非空时覆盖，供测试与代理场景）�?
+// 各服务商默认发送端点（cfg.Endpoint 非空时覆盖，供测试与代理场景）。
 const (
 	DefaultSmsAliyunEndpoint  = "https://dysmsapi.aliyuncs.com"
 	DefaultSmsTencentEndpoint = "https://sms.tencentcloudapi.com"
 )
 
-// SmsConfig 是一次发送所需的完整配置（secret 已解密）�?
+// SmsConfig 是一次发送所需的完整配置（secret 已解密）。
 type SmsConfig struct {
 	Provider        string // aliyun/tencent/custom
 	SignName        string
-	TemplateID      string // 阿里�?TemplateCode / 腾讯�?TemplateId / custom template_id
+	TemplateID      string // 阿里云 TemplateCode / 腾讯云 TemplateId / custom template_id
 	AccessKeyID     string
 	AccessKeySecret string
-	Endpoint        string // custom 必填；其余为覆盖�?
+	Endpoint        string // custom 必填；其余为覆盖项
 }
 
-// ErrSmsSendFailed 表示服务商拒绝发送（业务可回 502 + 具体原因）�?
+// ErrSmsSendFailed 表示服务商拒绝发送（业务可回 502 + 具体原因）。
 var ErrSmsSendFailed = errors.New("sms provider rejected the request")
 
-// ErrSmsUnreachable 表示服务商不可达（业务可�?502，fail-loud）�?
+// ErrSmsUnreachable 表示服务商不可达（业务可回 502，fail-loud）。
 var ErrSmsUnreachable = errors.New("sms provider unreachable")
 
-// SmsSender 抽象短信发送，测试可替换�?
+// SmsSender 抽象短信发送，测试可替换。
 type SmsSender interface {
-	// Send 发送验证码短信；成功返�?nil�?
+	// Send 发送验证码短信；成功返回 nil。
 	Send(ctx context.Context, cfg *SmsConfig, phone, code string) error
 }
 
-// HTTPSmsSender 是真实实现：�?provider 分派请求/签名格式�?
+// HTTPSmsSender 是真实实现：按 provider 分派请求/签名格式。
 type HTTPSmsSender struct {
 	client *http.Client
 }
 
-// NewHTTPSmsSender 构造发送器�?0s 超时）�?
+// NewHTTPSmsSender 构造发送器（10s 超时）。
 func NewHTTPSmsSender() *HTTPSmsSender {
 	return &HTTPSmsSender{client: &http.Client{Timeout: 10 * time.Second}}
 }
 
-// Send 按服务商协议发送验证码�?
+// Send 按服务商协议发送验证码。
 func (s *HTTPSmsSender) Send(ctx context.Context, cfg *SmsConfig, phone, code string) error {
 	if cfg == nil {
 		return errors.New("sms: nil config")
@@ -110,7 +110,7 @@ func (s *HTTPSmsSender) Send(ctx context.Context, cfg *SmsConfig, phone, code st
 
 // ── 阿里云短信（POP RPC 签名 V1）────────────────────────
 
-// aliyunPercentEncode 是阿里云 POP 协议�?RFC3986 百分号编码�?
+// aliyunPercentEncode 是阿里云 POP 协议的 RFC3986 百分号编码。
 func aliyunPercentEncode(s string) string {
 	encoded := url.QueryEscape(s)
 	encoded = strings.ReplaceAll(encoded, "+", "%20")
@@ -119,7 +119,7 @@ func aliyunPercentEncode(s string) string {
 	return encoded
 }
 
-// aliyunSign 计算 POP V1 签名：base64(HMAC-SHA1(AccessKeySecret+"&", stringToSign))�?
+// aliyunSign 计算 POP V1 签名：base64(HMAC-SHA1(AccessKeySecret+"&", stringToSign))。
 func aliyunSign(secret, stringToSign string) string {
 	mac := hmac.New(sha1.New, []byte(secret+"&"))
 	mac.Write([]byte(stringToSign))
@@ -210,11 +210,11 @@ func (s *HTTPSmsSender) sendTencent(ctx context.Context, cfg *SmsConfig, phone, 
 		host = u.Host
 	}
 
-	// 腾讯云要�?E.164 号码（无 "+" 前缀），�?8613800000000
+	// 腾讯云要求 E.164 号码（无 "+" 前缀），如 8613800000000
 	tel := strings.TrimPrefix(phone, "+")
 	payload, err := json.Marshal(map[string]any{
 		"PhoneNumberSet":   []string{tel},
-		"SmsSdkAppId":     cfg.AccessKeyID, // 腾讯云侧 AppID 复用 AccessKeyID 字段传�?
+		"SmsSdkAppId":     cfg.AccessKeyID, // 腾讯云侧 AppID 复用 AccessKeyID 字段传递
 		"SignName":         cfg.SignName,
 		"TemplateId":       cfg.TemplateID,
 		"TemplateParamSet": []string{code},
@@ -311,9 +311,9 @@ func (s *HTTPSmsSender) sendTencent(ctx context.Context, cfg *SmsConfig, phone, 
 //	{"access_key_id": "...", "access_key_secret": "...", "phone": "...",
 //	 "code": "...", "sign_name": "...", "template_id": "..."}
 //
-//	�?HTTP 200 �?{"success": true} 视为发送成功；其余一律拒绝�?
+//	→ HTTP 200 且 {"success": true} 视为发送成功；其余一律拒绝。
 //
-// 该契约足以接入任意自�?第三方短信服务（网关侧做适配层即可）�?
+// 该契约足以接入任意自建/第三方短信服务（网关侧做适配层即可）。
 func (s *HTTPSmsSender) sendCustom(ctx context.Context, cfg *SmsConfig, phone, code string) error {
 	if cfg.Endpoint == "" {
 		return errors.New("sms: custom provider requires endpoint")
@@ -375,8 +375,8 @@ func (s *HTTPSmsSender) postStatus(ctx context.Context, endpoint, contentType st
 
 // ── 号码与验证码工具（纯函数，便于单测）─────────────────
 
-// ValidateSmsPhone 校验手机号：可�?"+" 前缀 + 5-20 位数字�?
-// 归一化仅去除首尾空白；不做国家码推断（各服务商格式自定）�?
+// ValidateSmsPhone 校验手机号：可选 "+" 前缀 + 5-20 位数字。
+// 归一化仅去除首尾空白；不做国家码推断（各服务商格式自定）。
 func ValidateSmsPhone(phone string) bool {
 	p := strings.TrimSpace(phone)
 	if p == "" || len(p) > 21 {
@@ -396,12 +396,12 @@ func ValidateSmsPhone(phone string) bool {
 	return true
 }
 
-// NormalizeSmsPhone 去空白后返回原样（保�?"+"），供存�?查询统一形态�?
+// NormalizeSmsPhone 去空白后返回原样（保留 "+"），供存储/查询统一形态。
 func NormalizeSmsPhone(phone string) string {
 	return strings.TrimSpace(phone)
 }
 
-// GenerateSmsCode 生成 n 位纯数字验证码（crypto/rand，首位可�?0）�?
+// GenerateSmsCode 生成 n 位纯数字验证码（crypto/rand，首位可为 0）。
 func GenerateSmsCode(n int) (string, error) {
 	if n < 4 || n > 8 {
 		return "", errors.New("sms: code length must be 4-8")

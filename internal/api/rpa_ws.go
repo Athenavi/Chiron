@@ -27,7 +27,7 @@ const (
 	RPAMsgAck     RPAMessageType = "ack"
 )
 
-// RPAMessage 是所�?RPA WebSocket 消息的统一 envelope
+// RPAMessage 是所有 RPA WebSocket 消息的统一 envelope
 type RPAMessage struct {
 	Type   RPAMessageType         `json:"type"`
 	ID     string                 `json:"id"`
@@ -48,20 +48,20 @@ func (e *RPAError) Error() string {
 	return fmt.Sprintf("rpa error %d: %s", e.Code, e.Message)
 }
 
-// RPACommand 封装发送给插件的命�?
+// RPACommand 封装发送给插件的命令
 type RPACommand struct {
 	Method string
 	Params map[string]interface{}
 	TabID  int
 }
 
-// RPAResult 封装插件返回的结�?
+// RPAResult 封装插件返回的结果
 type RPAResult struct {
 	Result map[string]interface{}
 	Error  *RPAError
 }
 
-// ── RPA 客户�?──
+// ── RPA 客户端 ──
 
 type RPAClient struct {
 	ID       string
@@ -88,7 +88,7 @@ func (c *RPAClient) SendMessage(msg RPAMessage) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	msg.TS = time.Now().UnixMilli()
-	// P1 修复：写超时，防止死客户端无限阻塞广�?goroutine
+	// P1 修复：写超时，防止死客户端无限阻塞广播 goroutine
 	_ = c.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 	return c.Conn.WriteJSON(msg)
 }
@@ -97,8 +97,8 @@ func (c *RPAClient) SendMessage(msg RPAMessage) error {
 
 type RPAHub struct {
 	mu      sync.RWMutex
-	clients map[string]*RPAClient      // clientID �?client
-	pending map[string]chan *RPAResult // msgID �?result channel
+	clients map[string]*RPAClient      // clientID → client
+	pending map[string]chan *RPAResult // msgID → result channel
 }
 
 func NewRPAHub() *RPAHub {
@@ -108,7 +108,7 @@ func NewRPAHub() *RPAHub {
 	}
 }
 
-// Register 注册一个插件连�?
+// Register 注册一个插件连接
 func (h *RPAHub) Register(client *RPAClient) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -116,7 +116,7 @@ func (h *RPAHub) Register(client *RPAClient) {
 	slog.Info("rpa client registered", "client_id", client.ID, "user_id", client.UserID)
 }
 
-// Unregister 注销一个插件连�?
+// Unregister 注销一个插件连接
 func (h *RPAHub) Unregister(clientID string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -124,7 +124,7 @@ func (h *RPAHub) Unregister(clientID string) {
 	slog.Info("rpa client unregistered", "client_id", clientID)
 }
 
-// GetClient 获取指定客户�?
+// GetClient 获取指定客户端
 func (h *RPAHub) GetClient(clientID string) (*RPAClient, bool) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -147,7 +147,7 @@ func (h *RPAHub) GetClientByUser(userID string) (*RPAClient, bool) {
 	return latest, latest != nil
 }
 
-// SendCommand 发送命令并等待结果（带超时�?
+// SendCommand 发送命令并等待结果（带超时）
 func (h *RPAHub) SendCommand(ctx context.Context, clientID string, cmd *RPACommand) (*RPAResult, error) {
 	client, ok := h.GetClient(clientID)
 	if !ok {
@@ -175,7 +175,7 @@ func (h *RPAHub) SendCommand(ctx context.Context, clientID string, cmd *RPAComma
 		h.mu.Unlock()
 	}()
 
-	// 发送命�?
+	// 发送命令
 	if err := client.SendMessage(msg); err != nil {
 		return nil, fmt.Errorf("send command: %w", err)
 	}
@@ -220,7 +220,7 @@ func (h *RPAHub) BroadcastToUser(userID string, msg RPAMessage) {
 	}
 }
 
-// ConnectedClients 返回已连接的客户端列�?
+// ConnectedClients 返回已连接的客户端列表
 func (h *RPAHub) ConnectedClients() []*RPAClient {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -264,7 +264,7 @@ var rpaUpgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		origin := r.Header.Get("Origin")
 		if origin == "" {
-			return true // 服务�?ws 客户端无 Origin
+			return true // 服务端 ws 客户端无 Origin
 		}
 		allowed := os.Getenv("CORS_ORIGINS")
 		if allowed == "" || allowed == "*" {
@@ -289,7 +289,7 @@ const (
 	rpaPingInterval = 30 * time.Second
 )
 
-// RPAWebSocketHandler 处理 RPA 插件�?WebSocket 连接
+// RPAWebSocketHandler 处理 RPA 插件的 WebSocket 连接
 func RPAWebSocketHandler(hub *RPAHub, authenticator *auth.Authenticator) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// 验证 JWT token
@@ -321,7 +321,7 @@ func RPAWebSocketHandler(hub *RPAHub, authenticator *auth.Authenticator) http.Ha
 		}
 		hub.Register(client)
 
-		// 发送连接确�?
+		// 发送连接确认
 		client.SendMessage(RPAMessage{
 			Type: RPAMsgAck,
 			ID:   "init",
@@ -397,9 +397,9 @@ func RPAWebSocketHandler(hub *RPAHub, authenticator *auth.Authenticator) http.Ha
 	}
 }
 
-// ── RPA HTTP Bridge（Python engine �?Go gateway �?浏览器插件） ──
+// ── RPA HTTP Bridge（Python engine → Go gateway → 浏览器插件） ──
 
-// rpaInternalTokenOK 常量时间比较 X-Internal-Token（网关↔引擎互信）�?
+// rpaInternalTokenOK 常量时间比较 X-Internal-Token（网关↔引擎互信）。
 func rpaInternalTokenOK(r *http.Request, internalToken string) bool {
 	if internalToken == "" {
 		return false
@@ -408,8 +408,8 @@ func rpaInternalTokenOK(r *http.Request, internalToken string) bool {
 	return provided != "" && subtle.ConstantTimeCompare([]byte(provided), []byte(internalToken)) == 1
 }
 
-// RPAExecHandler �?Python engine �?GatewayBrowserHub 把浏览器命令发给
-// 已连接插�?Chrome Extension /ws/rpa)。要求共�?internal token，防止直连滥用�?
+// RPAExecHandler 供 Python engine 的 GatewayBrowserHub 把浏览器命令发给
+// 已连接插件(Chrome Extension /ws/rpa)。要求共享 internal token，防止直连滥用。
 func RPAExecHandler(hub *RPAHub, internalToken string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !rpaInternalTokenOK(r, internalToken) {
@@ -434,7 +434,7 @@ func RPAExecHandler(hub *RPAHub, internalToken string) http.HandlerFunc {
 	}
 }
 
-// RPAClientsHandler 返回已连接浏览器插件客户端列表�?
+// RPAClientsHandler 返回已连接浏览器插件客户端列表。
 func RPAClientsHandler(hub *RPAHub, internalToken string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !rpaInternalTokenOK(r, internalToken) {

@@ -1,4 +1,4 @@
-package api
+ï»¿package api
 
 import (
 	"context"
@@ -17,13 +17,13 @@ import (
 	"github.com/athenavi/chiron/internal/id"
 )
 
-// AgentHandler ¹ÜÀí×Ô¶¨Òå Agent£¨DB agents ±í£©+ ÔËĞĞ»á»°£¨agent_sessions£©¡£
-// Ö´ĞĞÁ´Â·£ºRun Âä session(pending) ¡ú Òì²½µ÷ Python /v1/agents/dispatch
-// £¨Python ÓÃ SubAgent ÕæÖ´ĞĞ£©¡ú ½á¹û»ØĞ´ session(completed/failed)¡£
+// AgentHandler ç®¡ç†è‡ªå®šä¹‰ Agentï¼ˆDB agents è¡¨ï¼‰+ è¿è¡Œä¼šè¯ï¼ˆagent_sessionsï¼‰ã€‚
+// æ‰§è¡Œé“¾è·¯ï¼šRun è½ session(pending) â†’ å¼‚æ­¥è°ƒ Python /v1/agents/dispatch
+// ï¼ˆPython ç”¨ SubAgent çœŸæ‰§è¡Œï¼‰â†’ ç»“æœå›å†™ session(completed/failed)ã€‚
 type AgentHandler struct {
 	authenticator *auth.Authenticator
 	pythonClient  *engine.PythonClient
-	sem           chan struct{} // ²¢·¢Ö´ĞĞÉÏÏŞ£¨Óë /submit µÄ agentSem Í¬Ô´£©
+	sem           chan struct{} // å¹¶å‘æ‰§è¡Œä¸Šé™ï¼ˆä¸ /submit çš„ agentSem åŒæºï¼‰
 }
 
 func NewAgentHandler(a *auth.Authenticator, pc *engine.PythonClient, sem chan struct{}) *AgentHandler {
@@ -39,7 +39,7 @@ func NewAgentHandler(a *auth.Authenticator, pc *engine.PythonClient, sem chan st
 	return h
 }
 
-// Agent ÊÇ×Ô¶¨Òå Agent µÄ DB ±íÊ¾¡£
+// Agent æ˜¯è‡ªå®šä¹‰ Agent çš„ DB è¡¨ç¤ºã€‚
 type Agent struct {
 	ID             string          `json:"id"`
 	Name           string          `json:"name"`
@@ -54,7 +54,7 @@ type Agent struct {
 	UpdatedAt      time.Time       `json:"updated_at"`
 }
 
-// AgentSession ÊÇÒ»´Î Agent ÔËĞĞµÄ³Ö¾Ã»¯¼ÇÂ¼¡£
+// AgentSession æ˜¯ä¸€æ¬¡ Agent è¿è¡Œçš„æŒä¹…åŒ–è®°å½•ã€‚
 type AgentSession struct {
 	ID        string    `json:"id"`
 	AgentID   string    `json:"agent_id,omitempty"`
@@ -66,7 +66,7 @@ type AgentSession struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// ©¤©¤ Ô¤ÖÃ Agent ²¥ÖÖ£¨DB agents ±íÎª¿ÕÊ±²åÈëÄÚÖÃ 3 Àà£© ©¤©¤
+// â”€â”€ é¢„ç½® Agent æ’­ç§ï¼ˆDB agents è¡¨ä¸ºç©ºæ—¶æ’å…¥å†…ç½® 3 ç±»ï¼‰ â”€â”€
 
 type presetAgent struct {
 	Name        string         `json:"name"`
@@ -77,8 +77,8 @@ type presetAgent struct {
 	Turns       int            `json:"turns"`
 }
 
-// loadPresetAgents ´Ó configs/preset_agents.json ¼ÓÔØÔ¤ÖÃ Agent ¶¨Òå¡£
-// ÎÄ¼ş²»´æÔÚÊ±·µ»Ø¿ÕÁĞ±í£¨²»²¥ÖÖÈÎºÎÔ¤ÖÃ Agent£©¡£
+// loadPresetAgents ä» configs/preset_agents.json åŠ è½½é¢„ç½® Agent å®šä¹‰ã€‚
+// æ–‡ä»¶ä¸å­˜åœ¨æ—¶è¿”å›ç©ºåˆ—è¡¨ï¼ˆä¸æ’­ç§ä»»ä½•é¢„ç½® Agentï¼‰ã€‚
 func loadPresetAgents() []presetAgent {
 	candidates := []string{
 		"configs/preset_agents.json",
@@ -97,7 +97,7 @@ func loadPresetAgents() []presetAgent {
 		slog.Info("loaded preset agents from config", "path", path, "count", len(presets))
 		return presets
 	}
-	slog.Warn("preset agents config not found ¡ª no preset agents will be seeded")
+	slog.Warn("preset agents config not found â€” no preset agents will be seeded")
 	return nil
 }
 
@@ -144,9 +144,9 @@ func (h *AgentHandler) seedPresetAgents() {
 	}
 }
 
-// ©¤©¤ CRUD ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
+// â”€â”€ CRUD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-// List ·µ»Øµ±Ç°×â»§µÄÈ«²¿ Agent£¨°´´´½¨Ê±¼äµ¹Ğò£©¡£
+// List è¿”å›å½“å‰ç§Ÿæˆ·çš„å…¨éƒ¨ Agentï¼ˆæŒ‰åˆ›å»ºæ—¶é—´å€’åºï¼‰ã€‚
 func (h *AgentHandler) List(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	rows, err := db.GlobalDBManager.Query(r.Context(),
@@ -171,7 +171,7 @@ func (h *AgentHandler) List(w http.ResponseWriter, r *http.Request) {
 	OK(w, agents)
 }
 
-// Create ĞÂ½¨Ò»¸ö Agent£¨°ó¶¨µ±Ç°×â»§£©¡£
+// Create æ–°å»ºä¸€ä¸ª Agentï¼ˆç»‘å®šå½“å‰ç§Ÿæˆ·ï¼‰ã€‚
 func (h *AgentHandler) Create(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	var body Agent
@@ -220,7 +220,7 @@ func (h *AgentHandler) Create(w http.ResponseWriter, r *http.Request) {
 	OK(w, body)
 }
 
-// Get ·µ»Øµ¥¸ö Agent£¨±ØĞë¹éÊôµ±Ç°×â»§£©¡£
+// Get è¿”å›å•ä¸ª Agentï¼ˆå¿…é¡»å½’å±å½“å‰ç§Ÿæˆ·ï¼‰ã€‚
 func (h *AgentHandler) Get(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	agentID := r.PathValue("id")
@@ -236,7 +236,7 @@ func (h *AgentHandler) Get(w http.ResponseWriter, r *http.Request) {
 	OK(w, a)
 }
 
-// Update ¸üĞÂ Agent ×Ö¶Î£¨name/description/system_prompt/tools/llm_config/max_turns/timeout_seconds/enabled£©¡£
+// Update æ›´æ–° Agent å­—æ®µï¼ˆname/description/system_prompt/tools/llm_config/max_turns/timeout_seconds/enabledï¼‰ã€‚
 func (h *AgentHandler) Update(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	agentID := r.PathValue("id")
@@ -244,8 +244,8 @@ func (h *AgentHandler) Update(w http.ResponseWriter, r *http.Request) {
 		BadRequest(w, "id is required")
 		return
 	}
-	// P1 ĞŞ¸´£º¸ÄÓÃÖ¸Õë×Ö¶Î°´Ğè¸üĞÂ¡ª¡ªÔ­ÊµÏÖ description/system_prompt ³É¶Ô¸²¸Ç
-	// £¨Ö»´«ÆäÒ»Çå¿ÕÁíÒ»¸ö£©£¬ÇÒ enabled ÎŞÌõ¼şĞ´Èë£¨²»´«¼´±»ÖØÖÃÎª false£©¡£
+	// P1 ä¿®å¤ï¼šæ”¹ç”¨æŒ‡é’ˆå­—æ®µæŒ‰éœ€æ›´æ–°â€”â€”åŸå®ç° description/system_prompt æˆå¯¹è¦†ç›–
+	// ï¼ˆåªä¼ å…¶ä¸€æ¸…ç©ºå¦ä¸€ä¸ªï¼‰ï¼Œä¸” enabled æ— æ¡ä»¶å†™å…¥ï¼ˆä¸ä¼ å³è¢«é‡ç½®ä¸º falseï¼‰ã€‚
 	var body struct {
 		Name           *string         `json:"name"`
 		Description    *string         `json:"description"`
@@ -261,7 +261,7 @@ func (h *AgentHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ¶¯Ì¬ SET£º·ÇÁã×Ö¶Î²Å¸üĞÂ£¨±ÜÃâ°Ñ¿ÕÖµµ±¡°Çå³ı¡±£©
+	// åŠ¨æ€ SETï¼šéé›¶å­—æ®µæ‰æ›´æ–°ï¼ˆé¿å…æŠŠç©ºå€¼å½“â€œæ¸…é™¤â€ï¼‰
 	sets := []string{}
 	args := []any{}
 	push := func(expr string, v any) {
@@ -292,7 +292,7 @@ func (h *AgentHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if body.Enabled != nil {
 		push("enabled = $"+itoa(len(args)+1), *body.Enabled)
 	}
-	// WHERE tenant_id = $N+1 AND id = $N+2 ¡ª¡ª Ë«ÖØĞ£Ñé·À¿ç×â»§
+	// WHERE tenant_id = $N+1 AND id = $N+2 â€”â€” åŒé‡æ ¡éªŒé˜²è·¨ç§Ÿæˆ·
 	args = append(args, claims.TenantID, agentID)
 
 	if len(sets) == 0 {
@@ -312,7 +312,7 @@ func (h *AgentHandler) Update(w http.ResponseWriter, r *http.Request) {
 	OK(w, a)
 }
 
-// Delete É¾³ı Agent ¼°ÆäÔËĞĞ¼ÇÂ¼£¨½öµ±¹éÊôµ±Ç°×â»§£©¡£
+// Delete åˆ é™¤ Agent åŠå…¶è¿è¡Œè®°å½•ï¼ˆä»…å½“å½’å±å½“å‰ç§Ÿæˆ·ï¼‰ã€‚
 func (h *AgentHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	agentID := r.PathValue("id")
@@ -327,9 +327,9 @@ func (h *AgentHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	OK(w, map[string]string{"status": "deleted"})
 }
 
-// ©¤©¤ ÔËĞĞÓë»á»° ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
+// â”€â”€ è¿è¡Œä¸ä¼šè¯ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-// Run ÅÉ·¢ÈÎÎñ¸ø Agent£ºÂä session(pending) ºóÒì²½Ö´ĞĞ£¬½á¹û»ØĞ´¡£
+// Run æ´¾å‘ä»»åŠ¡ç»™ Agentï¼šè½ session(pending) åå¼‚æ­¥æ‰§è¡Œï¼Œç»“æœå›å†™ã€‚
 func (h *AgentHandler) Run(w http.ResponseWriter, r *http.Request) {
 	agentID := r.PathValue("id")
 	if agentID == "" {
@@ -378,7 +378,7 @@ func (h *AgentHandler) Run(w http.ResponseWriter, r *http.Request) {
 	if timeout <= 0 {
 		timeout = 120 * time.Second
 	}
-	// P1 ĞŞ¸´£ºÖ´ĞĞÇ°»ñÈ¡²¢·¢ĞÅºÅÁ¿£¬·ÀÖ¹ÎŞÉÏÏŞ²¢·¢´ò±¬ÒıÇæ
+	// P1 ä¿®å¤ï¼šæ‰§è¡Œå‰è·å–å¹¶å‘ä¿¡å·é‡ï¼Œé˜²æ­¢æ— ä¸Šé™å¹¶å‘æ‰“çˆ†å¼•æ“
 	if h.sem != nil {
 		h.sem <- struct{}{}
 	}
@@ -417,7 +417,7 @@ func (h *AgentHandler) executeAgent(agent *Agent, task, sessionID, userID, tenan
 
 	_, _ = db.GlobalDBManager.Exec(ctx, `UPDATE agent_sessions SET status = 'running', updated_at = NOW() WHERE id = $1`, sessionID)
 
-	// tools/llm_config ×ª map ´«¸ø Python£¨tools ±£³Ö []map ½á¹¹£©
+	// tools/llm_config è½¬ map ä¼ ç»™ Pythonï¼ˆtools ä¿æŒ []map ç»“æ„ï¼‰
 	var tools []map[string]any
 	if len(agent.Tools) > 0 && string(agent.Tools) != "[]" {
 		_ = json.Unmarshal(agent.Tools, &tools)
@@ -437,7 +437,7 @@ func (h *AgentHandler) executeAgent(agent *Agent, task, sessionID, userID, tenan
 		"max_turns":     agent.MaxTurns,
 		"max_tokens":    llmInt(llm, "max_tokens", 4096),
 		"temperature":   llmFloat(llm, "temperature", 0.6),
-		"tenant_id":     tenantID, // S ¶à×â»§¸ôÀë:ÓÃ JWT claims µÄ TenantID,²»ÄÜÓÃ userID
+		"tenant_id":     tenantID, // S å¤šç§Ÿæˆ·éš”ç¦»:ç”¨ JWT claims çš„ TenantID,ä¸èƒ½ç”¨ userID
 		"user_id":       userID,
 		"session_id":    sessionID,
 	}
@@ -459,8 +459,8 @@ func (h *AgentHandler) executeAgent(agent *Agent, task, sessionID, userID, tenan
 		status, string(resultJSON), sessionID)
 }
 
-// ListSessions ·µ»Øµ±Ç°ÓÃ»§ÔÚµ±Ç°×â»§ÏÂµÄÔËĞĞ¼ÇÂ¼£¨µ¹Ğò£©¡£
-// SetVisibility ÉèÖÃ Agent ¹²Ïí¿É¼ûĞÔ£¨½ö owner£©£ºPUT /v1/agents/{id}/visibility
+// ListSessions è¿”å›å½“å‰ç”¨æˆ·åœ¨å½“å‰ç§Ÿæˆ·ä¸‹çš„è¿è¡Œè®°å½•ï¼ˆå€’åºï¼‰ã€‚
+// SetVisibility è®¾ç½® Agent å…±äº«å¯è§æ€§ï¼ˆä»… ownerï¼‰ï¼šPUT /v1/agents/{id}/visibility
 func (h *AgentHandler) SetVisibility(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	if claims == nil || claims.TenantID == "" {
@@ -478,7 +478,7 @@ func (h *AgentHandler) SetVisibility(w http.ResponseWriter, r *http.Request) {
 		BadRequest(w, "visibility must be private or tenant")
 		return
 	}
-	// owner-only£º¸üĞÂ±ØĞëÃüÖĞ user_id
+	// owner-onlyï¼šæ›´æ–°å¿…é¡»å‘½ä¸­ user_id
 	tag, err := db.GlobalDBManager.Exec(r.Context(),
 		`UPDATE agents SET visibility = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3 AND user_id = $4`,
 		body.Visibility, r.PathValue("id"), claims.TenantID, claims.UserID)
@@ -517,7 +517,7 @@ func (h *AgentHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
 	OK(w, sessions)
 }
 
-// GetSession ·µ»Øµ¥¸öÔËĞĞ¼ÇÂ¼£¨¹éÊôĞ£Ñé£©¡£
+// GetSession è¿”å›å•ä¸ªè¿è¡Œè®°å½•ï¼ˆå½’å±æ ¡éªŒï¼‰ã€‚
 func (h *AgentHandler) GetSession(w http.ResponseWriter, r *http.Request) {
 	sessionID := r.PathValue("id")
 	if sessionID == "" {
@@ -538,7 +538,7 @@ func (h *AgentHandler) GetSession(w http.ResponseWriter, r *http.Request) {
 	OK(w, s)
 }
 
-// ©¤©¤ helpers ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
+// â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 func (h *AgentHandler) queryAgent(ctx context.Context, tenantID, userID, agentID string) (*Agent, error) {
 	var a Agent
@@ -553,8 +553,8 @@ func (h *AgentHandler) queryAgent(ctx context.Context, tenantID, userID, agentID
 	return &a, nil
 }
 
-// resolveOwnerTenantID ²éÑ¯ÏµÍ³Ê×¸ö owner ½ÇÉ«ÓÃ»§µÄ tenant_id£¬ÓÃ×÷Ô¤ÖÃ Agent µÄ¹éÊô×â»§¡£
-// ¶à×â»§³¡¾°ÏÂÔ¤ÖÃ Agent ½öÔÚ owner ×â»§²¥ÖÖÒ»´Î£¨ÆäËü×â»§Ğè×ÔĞĞÍ¨¹ı API ´´½¨£©¡£
+// resolveOwnerTenantID æŸ¥è¯¢ç³»ç»Ÿé¦–ä¸ª owner è§’è‰²ç”¨æˆ·çš„ tenant_idï¼Œç”¨ä½œé¢„ç½® Agent çš„å½’å±ç§Ÿæˆ·ã€‚
+// å¤šç§Ÿæˆ·åœºæ™¯ä¸‹é¢„ç½® Agent ä»…åœ¨ owner ç§Ÿæˆ·æ’­ç§ä¸€æ¬¡ï¼ˆå…¶å®ƒç§Ÿæˆ·éœ€è‡ªè¡Œé€šè¿‡ API åˆ›å»ºï¼‰ã€‚
 func (h *AgentHandler) resolveOwnerTenantID(ctx context.Context) (string, error) {
 	var tenantID string
 	err := db.GlobalDBManager.QueryRow(ctx,
@@ -565,7 +565,7 @@ func (h *AgentHandler) resolveOwnerTenantID(ctx context.Context) (string, error)
 	return tenantID, nil
 }
 
-// ©¤©¤ Í¨ÓÃĞ¡¹¤¾ß£¨×Ö·û´®/ÊıÖµÆ´½ÓÓë llm_config È¡Öµ£© ©¤©¤
+// â”€â”€ é€šç”¨å°å·¥å…·ï¼ˆå­—ç¬¦ä¸²/æ•°å€¼æ‹¼æ¥ä¸ llm_config å–å€¼ï¼‰ â”€â”€
 
 func trimSpace(s string) string { return strings.TrimSpace(s) }
 

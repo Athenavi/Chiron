@@ -67,12 +67,12 @@ func (h *SystemHandler) Metrics(w http.ResponseWriter, r *http.Request) {
 	OK(w, monitor.Snapshot())
 }
 
-// PrometheusMetrics 输出 Prometheus 文本格式指标（供 Prometheus 抓取）�?
-// 端点 /metrics 公开暴露（生产部署建议加内网限制�?basicauth）�?
+// PrometheusMetrics 输出 Prometheus 文本格式指标（供 Prometheus 抓取）。
+// 端点 /metrics 公开暴露（生产部署建议加内网限制或 basicauth）。
 func (h *SystemHandler) PrometheusMetrics(w http.ResponseWriter, r *http.Request) {
 	s := monitor.Snapshot()
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
-	// counter 类型指标（snapshot key �?prometheus metric name�?
+	// counter 类型指标（snapshot key → prometheus metric name）
 	counters := [][2]string{
 		{"requests_total", "Total HTTP requests"},
 		{"llm_calls", "Total LLM API calls"},
@@ -102,7 +102,7 @@ func (h *SystemHandler) Spans(w http.ResponseWriter, r *http.Request) {
 
 // Traces returns recent tool call executions as trace entries.
 func (h *SystemHandler) Traces(w http.ResponseWriter, r *http.Request) {
-	rows, err := db.GlobalDBManager.Query(r.Context(),
+	rows, err := db.ReadPool().Query(r.Context(),
 		`SELECT id, tool_name, is_error, duration_ms, created_at
 		 FROM tool_calls
 		 ORDER BY created_at DESC

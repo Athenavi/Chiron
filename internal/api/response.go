@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-// Unified error message constants â€?single source of truth for all handlers.
+// Unified error message constants â€” single source of truth for all handlers.
 const (
 	ErrAuthRequired  = "authentication required"
 	ErrDBUnavailable = "service temporarily unavailable"

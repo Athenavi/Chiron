@@ -19,19 +19,19 @@ type AuditEntry struct {
 	Action    string    `json:"action"`    // "session.create", "tool.execute", "agent.run"
 	Resource  string    `json:"resource"`  // 资源标识
 	Detail    string    `json:"detail"`    // 详细信息
-	IP        string    `json:"ip"`        // 客户�?IP
+	IP        string    `json:"ip"`        // 客户端 IP
 	Success   bool      `json:"success"`   // 是否成功
 	Error     string    `json:"error"`     // 错误信息
 	Timestamp time.Time `json:"timestamp"`
 }
 
-// Auditor 审计日志记录�?
+// Auditor 审计日志记录器
 type Auditor struct {
 	rdb      RedisClient
 	stream   string
 }
 
-// NewAuditor 创建审计日志记录�?
+// NewAuditor 创建审计日志记录器
 func NewAuditor(rdb RedisClient) *Auditor {
 	return &Auditor{
 		rdb:    rdb,
@@ -39,7 +39,7 @@ func NewAuditor(rdb RedisClient) *Auditor {
 	}
 }
 
-// Log 记录审计事件�?Redis Streams
+// Log 记录审计事件到 Redis Streams
 func (a *Auditor) Log(ctx context.Context, entry AuditEntry) {
 	if a.rdb == nil {
 		slog.Debug("审计日志跳过（Redis 不可用）", "action", entry.Action)
@@ -49,13 +49,13 @@ func (a *Auditor) Log(ctx context.Context, entry AuditEntry) {
 	entry.Timestamp = time.Now()
 	data, err := json.Marshal(entry)
 	if err != nil {
-		slog.Error("审计日志序列化失�?, "error", err)
+		slog.Error("审计日志序列化失败", "error", err)
 		return
 	}
 
 	_, err = a.rdb.XAdd(ctx, &redis.XAddArgs{
 		Stream: a.stream,
-		MaxLen: 100000, // 最多保�?10 万条
+		MaxLen: 100000, // 最多保留 10 万条
 		Approx: true,
 		Values: map[string]any{
 			"tenant_id": entry.TenantID,
@@ -72,7 +72,7 @@ func (a *Auditor) Log(ctx context.Context, entry AuditEntry) {
 		return
 	}
 
-	slog.Debug("审计日志已记�?,
+	slog.Debug("审计日志已记录",
 		"action", entry.Action,
 		"user", entry.UserID,
 		"tenant", entry.TenantID,
@@ -80,12 +80,12 @@ func (a *Auditor) Log(ctx context.Context, entry AuditEntry) {
 	)
 }
 
-// UserExtractor 从请求中提取用户信息的函数类�?
+// UserExtractor 从请求中提取用户信息的函数类型
 // 返回 (userID, tenantID)
 type UserExtractor func(r *http.Request) (string, string)
 
-// LogAuditMiddleware 审计日志中间�?
-// extractUser: 从请求中提取用户信息的函数，可以�?nil
+// LogAuditMiddleware 审计日志中间件
+// extractUser: 从请求中提取用户信息的函数，可以为 nil
 func LogAuditMiddleware(auditor *Auditor, extractUser UserExtractor) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -124,7 +124,7 @@ func (w *auditResponseWriter) WriteHeader(code int) {
 }
 
 // AuditLog 全局审计日志函数（简化接口）
-// 用于 middleware.go 中的快速调�?
+// 用于 middleware.go 中的快速调用
 func AuditLog(ctx context.Context, userID, action, resource, detail, ip string, meta map[string]interface{}) {
 	if Redis == nil {
 		return
@@ -160,7 +160,7 @@ func AuditLog(ctx context.Context, userID, action, resource, detail, ip string, 
 	}
 }
 
-// AuditConsumer 审计日志消费�?
+// AuditConsumer 审计日志消费者
 type AuditConsumer struct {
 	rdb      RedisClient
 	stream   string
@@ -168,7 +168,7 @@ type AuditConsumer struct {
 	handler  func(ctx context.Context, entry AuditEntry) error
 }
 
-// NewAuditConsumer 创建审计日志消费�?
+// NewAuditConsumer 创建审计日志消费者
 func NewAuditConsumer(rdb RedisClient, handler func(ctx context.Context, entry AuditEntry) error) *AuditConsumer {
 	return &AuditConsumer{
 		rdb:     rdb,
@@ -178,7 +178,7 @@ func NewAuditConsumer(rdb RedisClient, handler func(ctx context.Context, entry A
 	}
 }
 
-// Start 启动消费�?
+// Start 启动消费者
 func (c *AuditConsumer) Start(ctx context.Context) error {
 	if c.rdb == nil {
 		return nil

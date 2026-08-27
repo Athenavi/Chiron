@@ -20,8 +20,8 @@ import (
 )
 
 // allowedPluginCommands 返回 PLUGIN_COMMAND_ALLOWLIST 环境变量配置的命令白名单
-// （以逗号分隔的可执行文件 basename）。空列表 = 默认禁用自定义插件命�?
-// （安全默认：防止任意登录用户配置任意命令并在网关/引擎主机执行）�?
+// （以逗号分隔的可执行文件 basename）。空列表 = 默认禁用自定义插件命令
+// （安全默认：防止任意登录用户配置任意命令并在网关/引擎主机执行）。
 func allowedPluginCommands() map[string]bool {
 	raw := strings.TrimSpace(os.Getenv("PLUGIN_COMMAND_ALLOWLIST"))
 	if raw == "" {
@@ -37,7 +37,7 @@ func allowedPluginCommands() map[string]bool {
 	return allowed
 }
 
-// checkPluginCommandAllowed 校验命令 basename 是否在白名单内�?
+// checkPluginCommandAllowed 校验命令 basename 是否在白名单内。
 func checkPluginCommandAllowed(command string) error {
 	if strings.TrimSpace(command) == "" {
 		return fmt.Errorf("command is required")
@@ -53,7 +53,7 @@ func checkPluginCommandAllowed(command string) error {
 	return nil
 }
 
-// isAdminRole 判断当前请求是否�?owner/admin（插件命令执行敏感操作）�?
+// isAdminRole 判断当前请求是否为 owner/admin（插件命令执行敏感操作）。
 func isAdminRole(r *http.Request) bool {
 	claims := auth.GetClaims(r.Context())
 	if claims == nil {
@@ -62,7 +62,7 @@ func isAdminRole(r *http.Request) bool {
 	return claims.Role == "owner" || claims.Role == "admin"
 }
 
-// maskSensitiveEnv �?MCPPlugin.Env 中疑似敏感字段做脱敏处理
+// maskSensitiveEnv 对 MCPPlugin.Env 中疑似敏感字段做脱敏处理
 func maskSensitiveEnv(plugins []MCPPlugin) {
 	sensitiveKeys := []string{"key", "secret", "token", "password", "api_key", "apikey"}
 	for i := range plugins {
@@ -81,8 +81,8 @@ func maskSensitiveEnv(plugins []MCPPlugin) {
 }
 
 // PluginHandler manages per-user MCP plugin configurations.
-// 配置存储：{PluginDataDir}/{user_id}/plugins.json（用户级隔离，S 安全修复�?
-// 原实现全局单文件，任何登录用户都可读写/修改其他用户的插件配置）�?
+// 配置存储：{PluginDataDir}/{user_id}/plugins.json（用户级隔离，S 安全修复：
+// 原实现全局单文件，任何登录用户都可读写/修改其他用户的插件配置）。
 type PluginHandler struct {
 	cfg           *config.Config
 	authenticator *auth.Authenticator
@@ -115,9 +115,9 @@ func NewPluginHandler(cfg *config.Config, authenticator *auth.Authenticator) *Pl
 	return &PluginHandler{cfg: cfg, authenticator: authenticator, dataDir: dir}
 }
 
-// userPluginPath 返回当前用户的插件配置文件路径�?
+// userPluginPath 返回当前用户的插件配置文件路径。
 func (h *PluginHandler) userPluginPath(userID string) string {
-	// 安全：清�?userID 防止路径遍历（如 ../tenant/evil�?
+	// 安全：清理 userID 防止路径遍历（如 ../tenant/evil）
 	safe := filepath.Clean(filepath.Base(userID))
 	if safe == "." || safe == "" {
 		safe = "unknown"
@@ -125,7 +125,7 @@ func (h *PluginHandler) userPluginPath(userID string) string {
 	return filepath.Join(h.dataDir, safe, "plugins.json")
 }
 
-// resolveUser 从请求认证信息取当前用户 ID（authMW 已保证登录）�?
+// resolveUser 从请求认证信息取当前用户 ID（authMW 已保证登录）。
 func (h *PluginHandler) resolveUser(r *http.Request) string {
 	claims := auth.GetClaims(r.Context())
 	if claims != nil {
@@ -134,7 +134,7 @@ func (h *PluginHandler) resolveUser(r *http.Request) string {
 	return ""
 }
 
-// resolveTenant 取当前租�?ID：claims 优先，缺省回退默认租户（市场门控用）�?
+// resolveTenant 取当前租户 ID：claims 优先，缺省回退默认租户（市场门控用）。
 func (h *PluginHandler) resolveTenant(r *http.Request) string {
 	claims := auth.GetClaims(r.Context())
 	if claims != nil && claims.TenantID != "" {
@@ -174,7 +174,7 @@ func (h *PluginHandler) List(w http.ResponseWriter, r *http.Request) {
 	OK(w, plugins)
 }
 
-// overlayMarketPlugins 将租户已安装且启用的市场插件追加到列表（去重）�?
+// overlayMarketPlugins 将租户已安装且启用的市场插件追加到列表（去重）。
 func (h *PluginHandler) overlayMarketPlugins(r *http.Request, plugins []MCPPlugin) []MCPPlugin {
 	items, err := ListEnabledMarketItems(r.Context(), "plugin", h.resolveTenant(r))
 	if err != nil {
@@ -228,8 +228,8 @@ func (h *PluginHandler) Install(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 企业市场门控：市场存在同�?published 条目且租户未启用时禁止安�?
-	// （查询失�?/ 未上架能力由 IsItemEnabledForTenant 内部 fail-open 放行�?
+	// 企业市场门控：市场存在同名 published 条目且租户未启用时禁止安装
+	// （查询失败 / 未上架能力由 IsItemEnabledForTenant 内部 fail-open 放行）
 	if enabled, _ := IsItemEnabledForTenant(r.Context(), "plugin", name, h.resolveTenant(r)); !enabled {
 		Forbidden(w, "plugin is not enabled for this tenant by market policy")
 		return
@@ -442,7 +442,7 @@ func (h *PluginHandler) Update(w http.ResponseWriter, r *http.Request) {
 // ── Test ──
 
 func (h *PluginHandler) Test(w http.ResponseWriter, r *http.Request) {
-	// P0-S7 修复：执行用户自定义命令的测试端点仅�?owner/admin
+	// P0-S7 修复：执行用户自定义命令的测试端点仅限 owner/admin
 	if !isAdminRole(r) {
 		Forbidden(w, "plugin test requires admin role")
 		return
@@ -527,7 +527,7 @@ func (h *PluginHandler) Test(w http.ResponseWriter, r *http.Request) {
 		ok := resp.err == nil && strings.Contains(resp.line, "jsonrpc")
 		msg := "MCP 握手成功"
 		if !ok {
-			msg = "无有�?MCP initialize 响应" + strings.TrimSpace(resp.line)
+			msg = "无有效 MCP initialize 响应" + strings.TrimSpace(resp.line)
 			if resp.err != nil {
 				msg = "读取响应失败: " + resp.err.Error()
 			}
@@ -538,7 +538,7 @@ func (h *PluginHandler) Test(w http.ResponseWriter, r *http.Request) {
 		})
 	case <-ctx.Done():
 		OK(w, map[string]interface{}{
-			"ok": false, "message": "连接超时（无 MCP initialize 响应�?,
+			"ok": false, "message": "连接超时（无 MCP initialize 响应）",
 			"duration_ms": time.Since(start).Milliseconds(),
 		})
 	}

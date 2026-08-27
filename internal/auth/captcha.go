@@ -14,16 +14,16 @@ import (
 
 // ── 人机验证（CAPTCHA）防接口滥用 ─────────────────────────
 //
-// 支持的验证服务商�?
-//   - turnstile : Cloudflare Turnstile（默认，免费无感�?
+// 支持的验证服务商：
+//   - turnstile : Cloudflare Turnstile（默认，免费无感）
 //   - recaptcha : Google reCAPTCHA v2/v3
 //   - hcaptcha  : hCaptcha
-//   - tencent   : 腾讯云验证码（TCaptcha，需 Ticket + Randstr�?
-//   - custom    : 自定�?HTTP 端点（约定契约见 CustomCaptchaContract�?
+//   - tencent   : 腾讯云验证码（TCaptcha，需 Ticket + Randstr）
+//   - custom    : 自定义 HTTP 端点（约定契约见 CustomCaptchaContract）
 //
-// 所有服务商的服务端校验均为 HTTP 调用，不引入�?SDK�?
+// 所有服务商的服务端校验均为 HTTP 调用，不引入大 SDK。
 
-// CaptchaProvider 是支持的验证码服务商类型�?
+// CaptchaProvider 是支持的验证码服务商类型。
 const (
 	CaptchaTurnstile = "turnstile"
 	CaptchaRecaptcha = "recaptcha"
@@ -32,12 +32,12 @@ const (
 	CaptchaCustom    = "custom"
 )
 
-// CaptchaKnownProviders 返回全部受支持的验证码服务商（配置校验用）�?
+// CaptchaKnownProviders 返回全部受支持的验证码服务商（配置校验用）。
 func CaptchaKnownProviders() []string {
 	return []string{CaptchaTurnstile, CaptchaRecaptcha, CaptchaHCaptcha, CaptchaTencent, CaptchaCustom}
 }
 
-// IsKnownCaptchaProvider 判断 provider 类型是否受支持�?
+// IsKnownCaptchaProvider 判断 provider 类型是否受支持。
 func IsKnownCaptchaProvider(p string) bool {
 	switch p {
 	case CaptchaTurnstile, CaptchaRecaptcha, CaptchaHCaptcha, CaptchaTencent, CaptchaCustom:
@@ -46,7 +46,7 @@ func IsKnownCaptchaProvider(p string) bool {
 	return false
 }
 
-// 各服务商默认服务端校验端点（cfg.VerifyURL 非空时覆盖，供测试与代理场景）�?
+// 各服务商默认服务端校验端点（cfg.VerifyURL 非空时覆盖，供测试与代理场景）。
 var defaultCaptchaEndpoints = map[string]string{
 	CaptchaTurnstile: "https://challenges.cloudflare.com/turnstile/v0/siteverify",
 	CaptchaRecaptcha: "https://www.google.com/recaptcha/api/siteverify",
@@ -54,38 +54,38 @@ var defaultCaptchaEndpoints = map[string]string{
 	CaptchaTencent:   "https://ssl.captcha.qq.com/ticket/verify",
 }
 
-// CaptchaConfig 是一次验证所需的完整配置（secret 已解密）�?
+// CaptchaConfig 是一次验证所需的完整配置（secret 已解密）。
 type CaptchaConfig struct {
 	Provider  string // turnstile/recaptcha/hcaptcha/tencent/custom
 	SiteKey   string
 	Secret    string
-	VerifyURL string // custom 必填；其余为覆盖�?
+	VerifyURL string // custom 必填；其余为覆盖项
 }
 
-// CaptchaToken 是前端提交的验证凭据�?
+// CaptchaToken 是前端提交的验证凭据。
 type CaptchaToken struct {
-	Token  string // turnstile/recaptcha/hcaptcha �?token；tencent �?Ticket；custom �?token
-	Randstr string // 腾讯云验证码专用随机�?
+	Token  string // turnstile/recaptcha/hcaptcha 的 token；tencent 的 Ticket；custom 的 token
+	Randstr string // 腾讯云验证码专用随机串
 }
 
-// ErrCaptchaFailed 表示验证码校验未通过（业务可�?400/403）�?
+// ErrCaptchaFailed 表示验证码校验未通过（业务可回 400/403）。
 var ErrCaptchaFailed = errors.New("captcha verification failed")
 
-// ErrCaptchaUnreachable 表示验证服务商不可达（业务可�?502，fail-loud）�?
+// ErrCaptchaUnreachable 表示验证服务商不可达（业务可回 502，fail-loud）。
 var ErrCaptchaUnreachable = errors.New("captcha provider unreachable")
 
-// CaptchaVerifier 抽象验证码服务端校验，测试可替换�?
+// CaptchaVerifier 抽象验证码服务端校验，测试可替换。
 type CaptchaVerifier interface {
-	// Verify 向服务商校验 token；通过返回 nil�?
+	// Verify 向服务商校验 token；通过返回 nil。
 	Verify(ctx context.Context, cfg *CaptchaConfig, tok *CaptchaToken, remoteIP string) error
 }
 
-// HTTPCaptchaVerifier 是真实实现：�?provider 分派请求/响应格式�?
+// HTTPCaptchaVerifier 是真实实现：按 provider 分派请求/响应格式。
 type HTTPCaptchaVerifier struct {
 	client *http.Client
 }
 
-// NewHTTPCaptchaVerifier 构造验证器�?0s 超时）�?
+// NewHTTPCaptchaVerifier 构造验证器（10s 超时）。
 func NewHTTPCaptchaVerifier() *HTTPCaptchaVerifier {
 	return &HTTPCaptchaVerifier{client: &http.Client{Timeout: 10 * time.Second}}
 }
@@ -101,7 +101,7 @@ func (v *HTTPCaptchaVerifier) endpoint(cfg *CaptchaConfig) (string, error) {
 	return ep, nil
 }
 
-// Verify 按服务商协议校验 token�?
+// Verify 按服务商协议校验 token。
 func (v *HTTPCaptchaVerifier) Verify(ctx context.Context, cfg *CaptchaConfig, tok *CaptchaToken, remoteIP string) error {
 	if cfg == nil {
 		return errors.New("captcha: nil config")
@@ -127,13 +127,13 @@ func (v *HTTPCaptchaVerifier) Verify(ctx context.Context, cfg *CaptchaConfig, to
 	case CaptchaCustom:
 		return v.verifyCustom(ctx, endpoint, cfg, tok, remoteIP)
 	default:
-		// turnstile / recaptcha / hcaptcha 共用同一�?form 表单 + {"success": bool} 契约
+		// turnstile / recaptcha / hcaptcha 共用同一套 form 表单 + {"success": bool} 契约
 		return v.verifyFormJSON(ctx, endpoint, cfg, tok, remoteIP)
 	}
 }
 
-// verifyFormJSON 覆盖 turnstile / recaptcha / hcaptcha�?
-// POST application/x-www-form-urlencoded（secret/response/remoteip）→ {"success": bool}�?
+// verifyFormJSON 覆盖 turnstile / recaptcha / hcaptcha：
+// POST application/x-www-form-urlencoded（secret/response/remoteip）→ {"success": bool}。
 func (v *HTTPCaptchaVerifier) verifyFormJSON(ctx context.Context, endpoint string, cfg *CaptchaConfig, tok *CaptchaToken, remoteIP string) error {
 	form := url.Values{}
 	form.Set("secret", cfg.Secret)
@@ -159,10 +159,10 @@ func (v *HTTPCaptchaVerifier) verifyFormJSON(ctx context.Context, endpoint strin
 }
 
 // verifyTencent 腾讯云验证码（TCaptcha）：
-// POST form（aid=site_key, AppSecretKey=secret, Ticket, Randstr, UserIP）→ {"response":"1"}�?
+// POST form（aid=site_key, AppSecretKey=secret, Ticket, Randstr, UserIP）→ {"response":"1"}。
 func (v *HTTPCaptchaVerifier) verifyTencent(ctx context.Context, endpoint string, cfg *CaptchaConfig, tok *CaptchaToken, remoteIP string) error {
 	if tok.Randstr == "" {
-		return ErrCaptchaFailed // 腾讯验证码必须携�?Randstr
+		return ErrCaptchaFailed // 腾讯验证码必须携带 Randstr
 	}
 	form := url.Values{}
 	form.Set("aid", cfg.SiteKey)
@@ -194,9 +194,9 @@ func (v *HTTPCaptchaVerifier) verifyTencent(ctx context.Context, endpoint string
 //	Content-Type: application/json
 //	{"secret": "...", "token": "...", "randstr": "...", "remote_ip": "..."}
 //
-//	�?HTTP 200 �?{"success": true} 视为通过；其余一律拒绝�?
+//	→ HTTP 200 且 {"success": true} 视为通过；其余一律拒绝。
 //
-// 该契约足以接入任意自�?第三方验证服务（网关侧做适配层即可）�?
+// 该契约足以接入任意自建/第三方验证服务（网关侧做适配层即可）。
 func (v *HTTPCaptchaVerifier) verifyCustom(ctx context.Context, endpoint string, cfg *CaptchaConfig, tok *CaptchaToken, remoteIP string) error {
 	payload, err := json.Marshal(map[string]string{
 		"secret":   cfg.Secret,

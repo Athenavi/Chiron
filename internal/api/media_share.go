@@ -22,7 +22,7 @@ func (h *MediaHandler) Download(w http.ResponseWriter, r *http.Request) {
 	}
 	tenantID := claims.TenantID
 	var fileURL string
-	if err := db.GlobalDBManager.QueryRow(r.Context(),
+	if err := db.ReadPool().QueryRow(r.Context(),
 		`SELECT COALESCE(file_url,'') FROM media_assets WHERE id=$1 AND tenant_id=$2 AND user_id=$3`,
 		id, tenantID, claims.UserID).Scan(&fileURL); err != nil {
 		NotFound(w, "media asset not found")
@@ -62,14 +62,14 @@ func (h *MediaHandler) Share(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var fileName, userID string
-	if err := db.GlobalDBManager.QueryRow(r.Context(),
+	if err := db.ReadPool().QueryRow(r.Context(),
 		`SELECT COALESCE(name,''), COALESCE(user_id,'') FROM media_assets WHERE id=$1 AND tenant_id=$2 AND user_id=$3`,
 		id, claims.TenantID, claims.UserID).Scan(&fileName, &userID); err != nil {
 		NotFound(w, "media asset not found")
 		return
 	}
 
-	// 类型断言�?S3 后端（与 PresignUpload 相同模式�?
+	// 类型断言取 S3 后端（与 PresignUpload 相同模式）
 	inner := h.store
 	if atomic, ok := h.store.(*storage.AtomicStore); ok {
 		inner = atomic.LoadRaw()

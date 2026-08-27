@@ -19,18 +19,18 @@ import (
 	"time"
 )
 
-// AlipayClient 对接支付宝开放平台（当面�?trade.precreate + 异步通知验签）�?
-// 自研 RSA2 签名，不依赖第三�?SDK�?
+// AlipayClient 对接支付宝开放平台（当面付 trade.precreate + 异步通知验签）。
+// 自研 RSA2 签名，不依赖第三方 SDK。
 type AlipayClient struct {
 	appID       string
 	privateKey  *rsa.PrivateKey
-	publicKey   *rsa.PublicKey // 支付宝公钥（用于响应/回调验签�?
+	publicKey   *rsa.PublicKey // 支付宝公钥（用于响应/回调验签）
 	gateway     string
 	notifyURL   string
 	httpClient  *http.Client
 }
 
-// NewAlipayClient �?PEM 私钥/公钥构造客户端。gateway 为空时使用生产网关�?
+// NewAlipayClient 用 PEM 私钥/公钥构造客户端。gateway 为空时使用生产网关。
 func NewAlipayClient(appID, privateKeyPEM, alipayPublicKeyPEM, gateway, notifyURL string) (*AlipayClient, error) {
 	priv, err := parseRSAPrivateKey(privateKeyPEM)
 	if err != nil {
@@ -56,7 +56,7 @@ func NewAlipayClient(appID, privateKeyPEM, alipayPublicKeyPEM, gateway, notifyUR
 func parseRSAPrivateKey(pemStr string) (*rsa.PrivateKey, error) {
 	block, _ := pem.Decode([]byte(pemStr))
 	if block == nil {
-		// 兼容�?PEM 头的�?base64 私钥
+		// 兼容无 PEM 头的裸 base64 私钥
 		der, err := base64.StdEncoding.DecodeString(strings.TrimSpace(pemStr))
 		if err != nil {
 			return nil, fmt.Errorf("decode private key: %w", err)
@@ -94,7 +94,7 @@ func parseRSAPublicKey(pemStr string) (*rsa.PublicKey, error) {
 	return nil, fmt.Errorf("unsupported public key format")
 }
 
-// buildSignContent 拼接待签名串：非空参数按 key 字典序，key=value �?& 连接�?
+// buildSignContent 拼接待签名串：非空参数按 key 字典序，key=value 用 & 连接。
 func buildSignContent(params map[string]string) string {
 	keys := make([]string, 0, len(params))
 	for k, v := range params {
@@ -111,7 +111,7 @@ func buildSignContent(params map[string]string) string {
 	return strings.Join(parts, "&")
 }
 
-// sign 对参数做 RSA2（SHA256withRSA）签名，返回 base64�?
+// sign 对参数做 RSA2（SHA256withRSA）签名，返回 base64。
 func (c *AlipayClient) sign(params map[string]string) (string, error) {
 	content := buildSignContent(params)
 	digest := sha256.Sum256([]byte(content))
@@ -122,7 +122,7 @@ func (c *AlipayClient) sign(params map[string]string) (string, error) {
 	return base64.StdEncoding.EncodeToString(sig), nil
 }
 
-// verify 用支付宝公钥验签�?
+// verify 用支付宝公钥验签。
 func (c *AlipayClient) verify(params map[string]string, signature string) error {
 	content := buildSignContent(params)
 	digest := sha256.Sum256([]byte(content))
@@ -133,7 +133,7 @@ func (c *AlipayClient) verify(params map[string]string, signature string) error 
 	return rsa.VerifyPKCS1v15(c.publicKey, crypto.SHA256, digest[:], sig)
 }
 
-// Precreate 支付宝当面付预下单，返回二维码内容与渠道订单号�?
+// Precreate 支付宝当面付预下单，返回二维码内容与渠道订单号。
 func (c *AlipayClient) Precreate(ctx context.Context, outTradeNo string, amountCents int64, subject string) (qrCode string, err error) {
 	biz := map[string]any{
 		"out_trade_no": outTradeNo,
@@ -206,7 +206,7 @@ func (c *AlipayClient) Precreate(ctx context.Context, outTradeNo string, amountC
 	return r.Response.QRCode, nil
 }
 
-// Query 查询订单支付状态。返�?(tradeNo, paid, err)�?
+// Query 查询订单支付状态。返回 (tradeNo, paid, err)。
 func (c *AlipayClient) Query(ctx context.Context, outTradeNo string) (string, bool, error) {
 	biz, _ := json.Marshal(map[string]any{"out_trade_no": outTradeNo})
 	params := map[string]string{
@@ -259,8 +259,8 @@ func (c *AlipayClient) Query(ctx context.Context, outTradeNo string) (string, bo
 	return r.Response.TradeNo, paid, nil
 }
 
-// VerifyCallback 校验支付宝异步通知参数（验�?+ 交易成功状态）�?
-// 返回 (outTradeNo, tradeNo, ok)�?
+// VerifyCallback 校验支付宝异步通知参数（验签 + 交易成功状态）。
+// 返回 (outTradeNo, tradeNo, ok)。
 func (c *AlipayClient) VerifyCallback(params map[string]string) (string, string, bool) {
 	sign := params["sign"]
 	if sign == "" || params["app_id"] != c.appID {

@@ -24,9 +24,9 @@ import (
 	"github.com/athenavi/chiron/internal/storage"
 )
 
-// metricsAuthMW 允许两种鉴权方式抓取 /metrics�?
-// 1. METRICS_TOKEN 配置�?Bearer token（Prometheus 抓取，常量时间比较）�?
-// 2. JWT admin 权限（PermAdminRead）�?
+// metricsAuthMW 允许两种鉴权方式抓取 /metrics：
+// 1. METRICS_TOKEN 配置的 Bearer token（Prometheus 抓取，常量时间比较）；
+// 2. JWT admin 权限（PermAdminRead）。
 func metricsAuthMW(cfg *config.Config, authMW routeMiddleware, h http.HandlerFunc) http.Handler {
 	if cfg == nil || cfg.MetricsToken == "" {
 		return authMW(RequirePermission(auth.PermAdminRead)(h))
@@ -67,7 +67,7 @@ func requestIDHeader(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var buf [8]byte
 		if _, err := rand.Read(buf[:]); err != nil {
-			// 极端回退：rand 失败用时间纳秒填�?
+			// 极端回退：rand 失败用时间纳秒填充
 			nano := time.Now().UnixNano()
 			for i := range buf {
 				buf[i] = byte(nano >> (i * 8))
@@ -81,8 +81,8 @@ func requestIDHeader(next http.Handler) http.Handler {
 }
 
 // realIPHeader extracts the real IP from X-Forwarded-For / X-Real-IP,
-// but ONLY when the direct peer is a trusted reverse proxy (P1 修复)�?
-// 无条件信任客户端可伪造的 XFF 会绕过按 IP 的限流与验证码失败升级�?
+// but ONLY when the direct peer is a trusted reverse proxy (P1 修复)：
+// 无条件信任客户端可伪造的 XFF 会绕过按 IP 的限流与验证码失败升级。
 func realIPHeader(trustedCIDRs []string) func(http.Handler) http.Handler {
 	var trusted []*net.IPNet
 	for _, c := range trustedCIDRs {
@@ -127,10 +127,10 @@ func realIPHeader(trustedCIDRs []string) func(http.Handler) http.Handler {
 	}
 }
 
-// NewSetupRouter 安装模式路由：系统尚未配�?APP_SECRET / 数据库时�?
+// NewSetupRouter 安装模式路由：系统尚未配置 APP_SECRET / 数据库时，
 // 仅提供安装向导端点（/v1/install/*，需安装令牌）与健康检查；
-// 其余一切业务路由返�?503（未安装，请完成安装后重启）�?
-// 前端静态页面由 nginx 等反向代理提供，Go 网关不负责托管�?
+// 其余一切业务路由返回 503（未安装，请完成安装后重启）。
+// 前端静态页面由 nginx 等反向代理提供，Go 网关不负责托管。
 func NewSetupRouter(cfg *config.Config) http.Handler {
 	mux := http.NewServeMux()
 
@@ -149,7 +149,7 @@ func NewSetupRouter(cfg *config.Config) http.Handler {
 
 	installHandler := NewInstallHandler(cfg)
 
-	// 安装端点：必须携带安装令牌（X-Install-Token header �??token= 查询参数�?
+	// 安装端点：必须携带安装令牌（X-Install-Token header 或 ?token= 查询参数）
 	mux.Handle("GET /v1/install/step1", publicMW(installMW(http.HandlerFunc(installHandler.Step1))))
 	mux.Handle("POST /v1/install/step2", publicMW(installMW(http.HandlerFunc(installHandler.Step2))))
 	// Step 3: 创建管理员账户，此时数据库和 APP_SECRET 已配置，无需安装令牌
@@ -162,7 +162,7 @@ func NewSetupRouter(cfg *config.Config) http.Handler {
 	mux.Handle("GET /health", publicMW(http.HandlerFunc(handleHealth)))
 	mux.Handle("GET /ready", publicMW(http.HandlerFunc(handleReadiness)))
 
-	// 其余所有未注册路由：业务不可用（未安装�?
+	// 其余所有未注册路由：业务不可用（未安装）
 	mux.Handle("/", publicMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ServiceUnavailable(w, "system not installed: configure database and create admin via /install")
 	})))
@@ -182,12 +182,12 @@ func NewGatewayRouter(
 ) http.Handler {
 	mux := http.NewServeMux()
 
-	// Rate limiter �?�?Redis 可用时使用分布式限流器�?
-	// P1-2: 单实例内存限流在多副本部署下计数独立，等于限流失效�?
-	// 生产策略�?
+	// Rate limiter — 当 Redis 可用时使用分布式限流器。
+	// P1-2: 单实例内存限流在多副本部署下计数独立，等于限流失效。
+	// 生产策略：
 	//   - Redis 可用：用分布式限流器（推荐）
-	//   - Redis 不可�?+ 生产环境（cfg.RateLimitFailClose=true）：写操作拒�?
-	//   - Redis 不可�?+ 开�?测试：降级内存限流（单实例有效，多副本失效）
+	//   - Redis 不可用 + 生产环境（cfg.RateLimitFailClose=true）：写操作拒绝
+	//   - Redis 不可用 + 开发/测试：降级内存限流（单实例有效，多副本失效）
 	var rlMW func(http.Handler) http.Handler
 	var distLimiter *DistributedRateLimiter
 	rateLimitRPM := cfg.RateLimitRPM
@@ -205,7 +205,7 @@ func NewGatewayRouter(
 		rlMW = DistributedRateLimitMiddleware(distLimiter)
 		slog.Info("distributed rate limiter enabled", "global", rateLimitRPM*10)
 	} else if cfg.RateLimitFailClose {
-		// 生产 fail-close：只读放行，写操作拒�?
+		// 生产 fail-close：只读放行，写操作拒绝
 		rlMW = func(next http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -217,7 +217,7 @@ func NewGatewayRouter(
 		}
 		slog.Warn("Redis unavailable + fail-close enabled: write operations rejected")
 	} else {
-		// 开�?测试降级：内存限流（单实例有效，多副本部署下应改�?Redis�?
+		// 开发/测试降级：内存限流（单实例有效，多副本部署下应改用 Redis）
 		rateLimiter := NewRateLimiter(rateLimitRPM)
 		rateLimiter.CleanupVisitors(5 * time.Minute)
 		rlMW = rateLimiter.Middleware
@@ -246,7 +246,7 @@ func NewGatewayRouter(
 	authHandler := NewAuthHandler(cfg)
 	authMW := AuthMiddleware(authenticator)
 
-	// SSO 三方登录 + 人机验证（防接口滥用�? 短信验证码登�?
+	// SSO 三方登录 + 人机验证（防接口滥用）+ 短信验证码登录
 	ssoHandler := NewSSOHandler(authenticator, cfg)
 	captchaHandler := NewCaptchaHandler(cfg)
 	authHandler.SetCaptchaHandler(captchaHandler)
@@ -257,8 +257,8 @@ func NewGatewayRouter(
 	billingStore.EnsureTables(context.Background())
 	billingMgr := billing.NewManager(billingStore)
 	billingMgr.Subscribe(billing.NewTransactionRecorder(billingStore))
-	// P0-P1 修复：余额已�?Deduct/AddCredits 同步写库（PG 原子 UPDATE），
-	// 移除 BalanceSyncer 异步落库订阅，避免多副本 split-brain 与重复扣费�?
+	// P0-P1 修复：余额已由 Deduct/AddCredits 同步写库（PG 原子 UPDATE），
+	// 移除 BalanceSyncer 异步落库订阅，避免多副本 split-brain 与重复扣费。
 
 	// Agent execution semaphore
 	agentSem := make(chan struct{}, cfg.AgentMaxConcurrency)
@@ -296,13 +296,13 @@ func NewGatewayRouter(
 	uploadHandler := NewUploadHandler(authenticator, cfg.StorageRoot)
 	uploadHandler.RegisterRoutes(mux, authMW, rlMW)
 
-	// 用户侧市场（技�?Agent/MCP 浏览与一键安装）
+	// 用户侧市场（技能/Agent/MCP 浏览与一键安装）
 	userMarketHandler := NewUserMarketHandler(cfg, pythonClient)
 	registerUserMarketRoutes(mux, userMarketHandler, authMW, rlMW)
 
-	// 模型路由：对话可用模型列�?
+	// 模型路由：对话可用模型列表
 	mux.Handle("GET /v1/models", authMW(rlMW(http.HandlerFunc(ListUserModels))))
-	// 模板市场：工作流/Agent/技�?一键使�?
+	// 模板市场：工作流/Agent/技能 一键使用
 	templateHandler := NewTemplateHandler(pythonClient)
 	templateHandler.RegisterRoutes(mux, authMW, rlMW)
 
@@ -326,8 +326,8 @@ func NewGatewayRouter(
 		traceHandler = NewTraceHandler(atomicRedis.LoadRaw())
 	}
 
-	// Knowledge base �?proxied to Python engine
-	// SaaS 安全: 知识库独立限�?(每租�?QPS=50, Burst=100)
+	// Knowledge base — proxied to Python engine
+	// SaaS 安全: 知识库独立限流 (每租户 QPS=50, Burst=100)
 	var kbRateRedis db.RedisClient
 	if atomicRedis != nil {
 		kbRateRedis = atomicRedis.LoadRaw()
@@ -346,21 +346,21 @@ func NewGatewayRouter(
 	registerAgentRoutes(mux, authMW, rlMW, publicMW, sanitizeMW, submitHandler, billingMgr, agentSem, eventHub, sessionMgr, authenticator, rpaHub, cfg.InternalToken)
 	registerAuthRoutes(mux, authHandler, authMW, rlMW)
 
-	// ── SSO 三方登录（公开流程 rlMW；用户自�?authMW；管�?authMW + sso:manage）──
+	// ── SSO 三方登录（公开流程 rlMW；用户自助 authMW；管理 authMW + sso:manage）──
 	ssoHandler.RegisterPublicRoutes(mux, rlMW)
 	ssoHandler.RegisterUserRoutes(mux, authMW)
 	ssoHandler.RegisterAdminRoutes(mux, authMW)
 
-	// ── 人机验证：公开配置下发（登录页拉取�? 管理配置 ──
+	// ── 人机验证：公开配置下发（登录页拉取）+ 管理配置 ──
 	captchaHandler.RegisterPublicRoutes(mux, rlMW)
 	captchaHandler.RegisterAdminRoutes(mux, authMW)
 
-	// ── 短信验证码登录（公开流程 rlMW；用户自�?authMW；管�?authMW + sso:manage）──
+	// ── 短信验证码登录（公开流程 rlMW；用户自助 authMW；管理 authMW + sso:manage）──
 	smsHandler.RegisterPublicRoutes(mux, rlMW)
 	smsHandler.RegisterUserRoutes(mux, authMW)
 	smsHandler.RegisterAdminRoutes(mux, authMW)
 	registerSystemRoutes(mux, authMW, rlMW, sanitizeMW, installHandler, editorHandler, toolHandler, systemHandler, traceHandler)
-	// 六大工作台互联：跨台最近活动聚合（租户+用户隔离�?
+	// 六大工作台互联：跨台最近活动聚合（租户+用户隔离）
 	mux.Handle("GET /v1/activities", authMW(rlMW(http.HandlerFunc(handleActivities))))
 	registerConversationRoutes(mux, conversationHandler, shareHandler, authMW, rlMW)
 	registerMediaRoutes(mux, mediaHandler, authMW, rlMW, cfg.StorageRoot)
@@ -379,8 +379,8 @@ func NewGatewayRouter(
 	mux.Handle("POST /v1/agents/{id}/run", authMW(rlMW(http.HandlerFunc(agentHandler.Run))))
 	mux.Handle("GET /v1/agents/sessions", authMW(rlMW(http.HandlerFunc(agentHandler.ListSessions))))
 	mux.Handle("GET /v1/agents/sessions/{id}", authMW(rlMW(http.HandlerFunc(agentHandler.GetSession))))
-	// dispatch 保留 Python 代理（agent 工具链内部调用，非页面主链路�?
-	// 安全：必须经�?authMW，否则未认证可触发工具执�?
+	// dispatch 保留 Python 代理（agent 工具链内部调用，非页面主链路）
+	// 安全：必须经过 authMW，否则未认证可触发工具执行
 	mux.Handle("POST /v1/agents/dispatch", authMW(rlMW(sanitizeMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if pythonClient == nil {
 			InternalError(w, "python engine not available")
@@ -391,8 +391,8 @@ func NewGatewayRouter(
 			BadRequest(w, "invalid request")
 			return
 		}
-		// 身份注入（P1）：引擎无鉴权，必须�?JWT claims 覆盖透传的租�?用户身份�?
-		// 防止客户端伪�?tenant_id/user_id 冒充他人�?
+		// 身份注入（P1）：引擎无鉴权，必须用 JWT claims 覆盖透传的租户/用户身份，
+		// 防止客户端伪造 tenant_id/user_id 冒充他人。
 		if claims := auth.GetClaims(r.Context()); claims != nil {
 			body["tenant_id"] = claims.TenantID
 			body["user_id"] = claims.UserID
@@ -411,10 +411,10 @@ func NewGatewayRouter(
 	// Enterprise audit (auth + RequireEntPerm("audit:read"))
 	NewEntAuditHandler().RegisterRoutes(mux, authMW)
 
-	// Enterprise identity (auth + RequireEntPerm("ent:manage"))：用�?角色/群组/租户
+	// Enterprise identity (auth + RequireEntPerm("ent:manage"))：用户/角色/群组/租户
 	NewEntIdentityHandler().RegisterRoutes(mux, authMW)
 
-	// Enterprise cost center（authMW，内部按 PermAdminRead/Write 分级�?
+	// Enterprise cost center（authMW，内部按 PermAdminRead/Write 分级）
 	NewEntCostCenterHandler(nil, nil).RegisterRoutes(mux, authMW)
 
 	// Enterprise policy（authMW + RequireEntPerm("policy:manage")）：隐私模式 + 模型策略
@@ -448,17 +448,17 @@ func registerPublicEndpoints(
 	mux.Handle("GET /search", authMW(rlMW(http.HandlerFunc(searchHandler.Search))))
 
 	// Public share view (no auth; revoked shares return 410 Gone)
-	// 修复 P1：移除内�?publicMW 重复包裹（外�?publicMW(mux) 已包含日�?审计/追踪），
-	// 避免审计 XAdd 双写、请�?ID 被内层重新生成�?
+	// 修复 P1：移除内层 publicMW 重复包裹（外层 publicMW(mux) 已包含日志/审计/追踪），
+	// 避免审计 XAdd 双写、请求 ID 被内层重新生成。
 	mux.Handle("GET /v1/share/{id}", rlMW(http.HandlerFunc(shareHandler.PublicGet)))
 
 	mux.Handle("GET /health", rlMW(http.HandlerFunc(handleHealth)))
-	// Prometheus 指标端点：生产收敛为需�?PermAdminRead 权限，避免泄漏业务指�?
+	// Prometheus 指标端点：生产收敛为需要 PermAdminRead 权限，避免泄漏业务指标
 	mux.Handle("GET /metrics", rlMW(metricsAuthMW(cfg, authMW, systemHandler.PrometheusMetrics)))
-	// API 文档（OpenAPI spec，公开，供 Swagger/Redoc 展示�?
+	// API 文档（OpenAPI spec，公开，供 Swagger/Redoc 展示）
 	mux.Handle("GET /docs/", http.StripPrefix("/docs/", http.FileServer(http.Dir("docs"))))
 	mux.Handle("GET /ready", rlMW(http.HandlerFunc(handleReadiness)))
-	// 引擎配置下发（X-Internal-Token 保护，Python 引擎启动拉取�?
+	// 引擎配置下发（X-Internal-Token 保护，Python 引擎启动拉取）
 	mux.Handle("GET /v1/internal/engine-config", rlMW(internalTokenMW(cfg, EngineConfig(cfg))))
 }
 
@@ -507,7 +507,7 @@ func registerAgentRoutes(
 				if balance, balErr := billingMgr.GetBalance(userID); balErr == nil && balance <= 0 {
 					JSON(w, http.StatusPaymentRequired, APIResponse{
 						Success: false,
-						Error:   "insufficient credits �?please recharge in Billing",
+						Error:   "insufficient credits — please recharge in Billing",
 					})
 					return
 				}
@@ -551,7 +551,7 @@ func registerAgentRoutes(
 	mux.Handle("GET /events", authMW(rlMW(SSEHandler(eventHub, sessionMgr))))
 	mux.HandleFunc("GET /ws/{sessionId}", WebSocketHandler(NewWebSocketHub(), eventHub, authenticator, sessionMgr))
 	mux.HandleFunc("GET /ws/rpa", RPAWebSocketHandler(rpaHub, authenticator))
-	// 浏览�?RPA 桥（Python engine �?网关 �?插件；仅共享 internal token 可调�?
+	// 浏览器 RPA 桥（Python engine → 网关 → 插件；仅共享 internal token 可调）
 	mux.Handle("POST /v1/rpa/exec", rlMW(http.HandlerFunc(RPAExecHandler(rpaHub, internalToken))))
 	mux.Handle("GET /v1/rpa/clients", rlMW(http.HandlerFunc(RPAClientsHandler(rpaHub, internalToken))))
 }
@@ -564,7 +564,7 @@ func registerAuthRoutes(mux *http.ServeMux, authHandler *AuthHandler, authMW, rl
 	mux.Handle("POST /v1/auth/register", rlMW(http.HandlerFunc(authHandler.Register)))
 	mux.Handle("POST /v1/auth/refresh", rlMW(http.HandlerFunc(authHandler.Refresh)))
 	mux.Handle("POST /v1/auth/logout", rlMW(http.HandlerFunc(authHandler.Logout)))
-	// SSO cookie �?Bearer token 会话引导（公开：httpOnly cookie 自带凭据�?
+	// SSO cookie → Bearer token 会话引导（公开：httpOnly cookie 自带凭据）
 	mux.Handle("GET /v1/auth/session", rlMW(http.HandlerFunc(authHandler.Session)))
 	mux.Handle("GET /v1/auth/profile", authMW(rlMW(http.HandlerFunc(authHandler.Profile))))
 	mux.Handle("PUT /v1/auth/profile", authMW(rlMW(http.HandlerFunc(authHandler.UpdateProfile))))
@@ -591,7 +591,7 @@ func registerSystemRoutes(
 
 	// Editor (admin 权限 + rate limited)
 	// S 安全修复：编辑器直接读写共享服务器工作区（含沙箱/分片/插件数据），
-	// 仅限管理员（列表/�?PermAdminRead，写=PermAdminWrite），普�?user 无权访问�?
+	// 仅限管理员（列表/读=PermAdminRead，写=PermAdminWrite），普通 user 无权访问。
 	mux.Handle("GET /api/editor/files", authMW(rlMW(RequirePermission(auth.PermAdminRead)(http.HandlerFunc(editorHandler.ListFiles)))))
 	mux.Handle("GET /api/editor/read", authMW(rlMW(RequirePermission(auth.PermAdminRead)(http.HandlerFunc(editorHandler.ReadFile)))))
 	mux.Handle("POST /api/editor/write", authMW(rlMW(RequirePermission(auth.PermAdminWrite)(http.HandlerFunc(editorHandler.WriteFile)))))
@@ -656,7 +656,7 @@ func registerMediaRoutes(
 	mux.Handle("POST /v1/media/{id}/share", authMW(rlMW(http.HandlerFunc(mediaHandler.Share))))
 	mux.Handle("DELETE /v1/media/{id}", authMW(rlMW(http.HandlerFunc(mediaHandler.Delete))))
 
-	// Media file serving（P0 存储�?XSS 防护：html/xml 直接拒服务；svg �?CSP sandbox 输出；全�?nosniff�?
+	// Media file serving（P0 存储型 XSS 防护：html/xml 直接拒服务；svg 以 CSP sandbox 输出；全量 nosniff）
 	mediaFileServer := http.StripPrefix("/media/", http.FileServer(http.Dir(storageRoot+"/media")))
 	mux.Handle("GET /media/", rlMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch strings.ToLower(filepath.Ext(r.URL.Path)) {
@@ -669,12 +669,12 @@ func registerMediaRoutes(
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		mediaFileServer.ServeHTTP(w, r)
 	})))
-	// 签名 URL（P0 修复）：签发 + 校验后服�?
+	// 签名 URL（P0 修复）：签发 + 校验后服务
 	mux.Handle("POST /v1/media/{id}/sign", authMW(rlMW(http.HandlerFunc(mediaHandler.SignMedia))))
 	mux.Handle("GET /media/s/{assetID}", rlMW(http.HandlerFunc(mediaHandler.ServeSignedMedia)))
 }
 
-// registerUserMarketRoutes 用户侧市场路由（技�?Agent/MCP 浏览与一键安装）�?
+// registerUserMarketRoutes 用户侧市场路由（技能/Agent/MCP 浏览与一键安装）。
 func registerUserMarketRoutes(mux *http.ServeMux, h *UserMarketHandler, authMW, rlMW routeMiddleware) {
 	mux.Handle("GET /v1/market", authMW(rlMW(http.HandlerFunc(h.List))))
 	mux.Handle("POST /v1/market/{type}/{itemID}/install", authMW(rlMW(http.HandlerFunc(h.Install))))
@@ -700,7 +700,7 @@ func registerBillingRoutes(mux *http.ServeMux, billingHandler *BillingHandler, a
 	mux.Handle("POST /v1/billing/recharge", authMW(rlMW(http.HandlerFunc(billingHandler.Recharge))))
 	mux.Handle("POST /v1/billing/pay", authMW(rlMW(http.HandlerFunc(billingHandler.CreatePayment))))
 	mux.Handle("GET /v1/billing/orders/{id}", authMW(rlMW(http.HandlerFunc(billingHandler.GetOrder))))
-	// 支付渠道异步回调（无 auth：支付宝验签 / 微信平台证书验签 + AES-GCM 解密�?
+	// 支付渠道异步回调（无 auth：支付宝验签 / 微信平台证书验签 + AES-GCM 解密）
 	mux.Handle("POST /v1/billing/callback/alipay", rlMW(http.HandlerFunc(billingHandler.AlipayCallback)))
 	mux.Handle("POST /v1/billing/callback/wechat", rlMW(http.HandlerFunc(billingHandler.WechatCallback)))
 	mux.Handle("POST /v1/billing/paypal-capture", authMW(rlMW(http.HandlerFunc(billingHandler.PayPalCapture))))
@@ -733,7 +733,7 @@ func registerProxyRoutes(
 					Unauthorized(w, "missing tenant context")
 					return
 				}
-				// 多租户隔离：透传 tenant_id �?Python 引擎（query 参数兼容，header �?pythonClient.WithTenant�?
+				// 多租户隔离：透传 tenant_id 给 Python 引擎（query 参数兼容，header 见 pythonClient.WithTenant）
 				proxiedPath := buildPath(r) + "?user_id=" + claims.UserID + "&tenant_id=" + claims.TenantID
 				var resp interface{}
 				var err error
@@ -779,7 +779,7 @@ func registerProxyRoutes(
 			return prefix + "/" + r.PathValue("id") + suffix
 		}
 	}
-	// pathParamNamed 支持自定义路径参数名（如 {conflict_id}），用于修复参数丢失的代理路由�?
+	// pathParamNamed 支持自定义路径参数名（如 {conflict_id}），用于修复参数丢失的代理路由。
 	pathParamNamed := func(prefix, param, suffix string) func(*http.Request) string {
 		return func(r *http.Request) string {
 			return prefix + "/" + r.PathValue(param) + suffix
@@ -794,7 +794,7 @@ func registerProxyRoutes(
 	mux.Handle("DELETE /v1/graphs/{id}", authMW(rlMW(graphP(pathParam("/v1/graphs")))))
 	mux.Handle("POST /v1/graphs/{id}/execute", authMW(rlMW(graphP(pathParamSuffix("/v1/graphs", "/execute")))))
 
-	// Workflow 执行状态与历史（代�?Python；status 支持内存实例 + DB 回退�?
+	// Workflow 执行状态与历史（代理 Python；status 支持内存实例 + DB 回退）
 	mux.Handle("GET /v1/workflows/instances", authMW(rlMW(graphP(pathFn("/v1/workflows/instances")))))
 	mux.Handle("GET /v1/workflows/{id}/status", authMW(rlMW(graphP(pathParamSuffix("/v1/workflows", "/status")))))
 
@@ -816,8 +816,8 @@ func registerProxyRoutes(
 	mux.Handle("GET /v1/kb/{id}/documents", authMW(kbRateMW(kbP(pathParamSuffix("/v1/kb", "/documents")))))
 	mux.Handle("POST /v1/kb/{id}/build", authMW(kbRateMW(kbP(pathParamSuffix("/v1/kb", "/build")))))
 	mux.Handle("POST /v1/kb/{id}/query", authMW(kbRateMW(kbP(pathParamSuffix("/v1/kb", "/query")))))
-	// 知识库删除文档（P1 修复：Python 端已�?DELETE /{kb_id}/documents?doc_id=�?
-	// 网关此前缺失该路由导致前端删除文�?404�?
+	// 知识库删除文档（P1 修复：Python 端已有 DELETE /{kb_id}/documents?doc_id=，
+	// 网关此前缺失该路由导致前端删除文档 404）
 	mux.Handle("PUT /v1/kb/{id}/visibility", authMW(kbRateMW(http.HandlerFunc(handleKBVisibility))))
 	mux.Handle("DELETE /v1/kb/{id}/documents", authMW(kbRateMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if pythonClient == nil {
@@ -829,7 +829,7 @@ func registerProxyRoutes(
 			Unauthorized(w, "missing tenant context")
 			return
 		}
-		// 保留原始 doc_id 查询参数（newProxy �?buildPath 会丢弃原�?query�?
+		// 保留原始 doc_id 查询参数（newProxy 的 buildPath 会丢弃原始 query）
 		target := "/v1/kb/" + r.PathValue("id") + "/documents?doc_id=" + url.QueryEscape(r.URL.Query().Get("doc_id")) +
 			"&user_id=" + claims.UserID + "&tenant_id=" + claims.TenantID
 		var resp interface{}
@@ -844,15 +844,15 @@ func registerProxyRoutes(
 	chatP := newProxy("", proxyOpt{logTag: "chat"})
 	mux.Handle("POST /v1/chat/submit", authMW(rlMW(chatP(pathFn("/v1/chat/submit")))))
 	mux.Handle("GET /v1/chat/sessions/{id}/messages", authMW(rlMW(chatP(pathParamSuffix("/v1/chat/sessions", "/messages")))))
-	// quick-execute �?chat/submit 的语义别名（前端快捷执行入口�?
+	// quick-execute 为 chat/submit 的语义别名（前端快捷执行入口）
 	mux.Handle("POST /v1/quick-execute", authMW(rlMW(chatP(pathFn("/v1/chat/submit")))))
 
-	// Capabilities discovery (能力注册中心: 六大工作台能力发�?
+	// Capabilities discovery (能力注册中心: 六大工作台能力发现)
 	capP := newProxy("", proxyOpt{logTag: "capabilities"})
 	mux.Handle("GET /v1/capabilities", authMW(rlMW(capP(pathFn("/v1/capabilities")))))
 	mux.Handle("POST /v1/capabilities/search", authMW(rlMW(capP(pathFn("/v1/capabilities/search")))))
 
-	// Memory (用户长期记忆 L2 档案�? 列表/CRUD/语义检�?智能整理, 代理 Python)
+	// Memory (用户长期记忆 L2 档案卡: 列表/CRUD/语义检索/智能整理, 代理 Python)
 	memP := newProxy("", proxyOpt{logTag: "memory"})
 	mux.Handle("GET /v1/memory/profile", authMW(rlMW(memP(pathFn("/v1/memory/profile")))))
 	mux.Handle("POST /v1/memory/profile", authMW(rlMW(memP(pathFn("/v1/memory/profile")))))
@@ -878,11 +878,11 @@ func registerAdminRoutes(
 	pythonClient *engine.PythonClient,
 ) {
 	// Admin routes (auth + admin permission + rate limit)
-	// P1-3: 所�?admin 路由必须挂限流，防止被劫持的 admin token 无限调用
-	// 造成破坏（backup/restore/users DELETE 等敏感操作）�?
-	// 读操作用 PermAdminRead，写操作（PUT/DELETE/POST）必�?PermAdminWrite�?
-	// P1-4: 用户管理路由（PUT/DELETE /v1/admin/users）必�?PermUsersManage�?
-	// 该权限仅 owner 角色持有，普�?admin 不应能删/改用户�?
+	// P1-3: 所有 admin 路由必须挂限流，防止被劫持的 admin token 无限调用
+	// 造成破坏（backup/restore/users DELETE 等敏感操作）。
+	// 读操作用 PermAdminRead，写操作（PUT/DELETE/POST）必须 PermAdminWrite。
+	// P1-4: 用户管理路由（PUT/DELETE /v1/admin/users）必须 PermUsersManage，
+	// 该权限仅 owner 角色持有，普通 admin 不应能删/改用户。
 	adminReadMW := RequirePermission(auth.PermAdminRead)
 	adminWriteMW := RequirePermission(auth.PermAdminWrite)
 	usersManageMW := RequirePermission(auth.PermUsersManage)
@@ -893,7 +893,7 @@ func registerAdminRoutes(
 	mux.Handle("GET /v1/admin/metrics", authMW(rlMW(adminReadMW(adminStrip))))
 	mux.Handle("GET /v1/admin/users", authMW(rlMW(adminReadMW(adminStrip))))
 	mux.Handle("GET /v1/admin/users/{id}", authMW(rlMW(adminReadMW(adminStrip))))
-	// 用户写操作收紧为 PermUsersManage（仅 owner�?
+	// 用户写操作收紧为 PermUsersManage（仅 owner）
 	mux.Handle("PUT /v1/admin/users/{id}", authMW(rlMW(usersManageMW(adminStrip))))
 	mux.Handle("DELETE /v1/admin/users/{id}", authMW(rlMW(usersManageMW(adminStrip))))
 	mux.Handle("GET /v1/admin/system", authMW(rlMW(adminReadMW(adminStrip))))

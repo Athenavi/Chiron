@@ -23,7 +23,7 @@ var validModes = map[string]bool{ModeAsk: true, ModeAuto: true, ModeYOLO: true}
 
 type ModeStore struct {
 	mu    sync.RWMutex
-	modes map[string]string // session_id â†?mode
+	modes map[string]string // session_id â†’ mode
 }
 
 func NewModeStore() *ModeStore {
@@ -69,7 +69,7 @@ type PermissionResult struct {
 
 type PermissionManager struct {
 	mu      sync.Mutex
-	pending map[string]*PermissionResult // task_id â†?result
+	pending map[string]*PermissionResult // task_id â†’ result
 }
 
 func NewPermissionManager() *PermissionManager {

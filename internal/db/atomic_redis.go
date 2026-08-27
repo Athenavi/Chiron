@@ -24,7 +24,7 @@ func NewAtomicRedis(initial RedisClient) *AtomicRedis {
 func (a *AtomicRedis) load() RedisClient {
 	p := a.current.Load()
 	if p == nil {
-		panic("AtomicRedis: not initialized â€?use NewAtomicRedis")
+		panic("AtomicRedis: not initialized â€” use NewAtomicRedis")
 	}
 	return *p
 }

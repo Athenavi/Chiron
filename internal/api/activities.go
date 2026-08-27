@@ -11,12 +11,12 @@ import (
 	"github.com/athenavi/chiron/internal/db"
 )
 
-// Activity 聚合最近活动（跨工作台），供前�?WorkstationNav 使用�?
+// Activity 聚合最近活动（跨工作台），供前端 WorkstationNav 使用。
 type Activity struct {
 	Workstation string `json:"workstation"`   // dialogue / agent / workflow / skill / knowledge / plugin
 	Route       string `json:"route"`         // 跳转路由
 	Title       string `json:"title"`         // 活动标题
-	Status      string `json:"status"`        // 原始状�?
+	Status      string `json:"status"`        // 原始状态
 	StatusText  string `json:"status_text"`   // 展示文案
 	Timestamp   int64  `json:"timestamp"`     // Unix 毫秒
 }
@@ -24,20 +24,20 @@ type Activity struct {
 func activityStatusText(status string) string {
 	switch status {
 	case "running", "processing", "pending":
-		return "进行�?
+		return "进行中"
 	case "completed", "done", "active", "success":
-		return "已完�?
+		return "已完成"
 	case "failed", "error":
 		return "失败"
 	case "uploading", "building":
-		return "处理�?
+		return "处理中"
 	default:
 		return status
 	}
 }
 
-// handleActivities 返回当前用户跨六大工作台的最近活动（按时间倒序，租�?用户隔离）�?
-// 优化：通过 UNION ALL 合并三次查询为单次数据库往返�?
+// handleActivities 返回当前用户跨六大工作台的最近活动（按时间倒序，租户+用户隔离）。
+// 优化：通过 UNION ALL 合并三次查询为单次数据库往返。
 func handleActivities(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	if claims == nil || claims.TenantID == "" {
@@ -61,6 +61,13 @@ func handleActivities(w http.ResponseWriter, r *http.Request) {
 	items := make([]item, 0, limit*3)
 	ctx := r.Context()
 
+	// Check if database pool is available
+	pool := db.ReadPool()
+	if pool == nil {
+		ServiceUnavailable(w, "database not available")
+		return
+	}
+
 	// Single combined query: UNION ALL across all three tables
 	// Each sub-query returns (workstation, route, title, status, ts)
 	const combinedSQL = `
@@ -81,7 +88,7 @@ func handleActivities(w http.ResponseWriter, r *http.Request) {
 		ORDER BY 5 DESC
 		LIMIT $3
 	`
-	if rows, err := db.GlobalDBManager.Query(ctx, combinedSQL, claims.TenantID, claims.UserID, limit*3); err == nil {
+	if rows, err := pool.Query(ctx, combinedSQL, claims.TenantID, claims.UserID, limit*3); err == nil {
 		for rows.Next() {
 			var ws, route, title, status string
 			var ts time.Time

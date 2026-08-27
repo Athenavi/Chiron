@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"context"
@@ -185,7 +185,7 @@ func (h *TraceHandler) ListTraces(w http.ResponseWriter, r *http.Request) {
 // queryTraces fetches all spans for a trace_id from Redis Stream.
 func (h *TraceHandler) queryTraces(traceID, tenantID string) ([]TraceSpan, error) {
 	if h.rdb == nil {
-		return nil, nil // Redis unavailable �?return empty
+		return nil, nil // Redis unavailable 鈫?return empty
 	}
 
 	streamKey := "chiron:traces:" + tenantID

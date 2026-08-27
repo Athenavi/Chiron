@@ -18,27 +18,27 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// ── 短信验证码登�?+ 手机号绑�?─────────────────────────
+// ── 短信验证码登录 + 手机号绑定 ─────────────────────────
 //
-// 防滥用四保险（复用既有设施）�?
-//  1. 人机验证栅栏：发�?登录均过 CaptchaHandler.Enforce（启�?失败升级强制）；
+// 防滥用四保险（复用既有设施）：
+//  1. 人机验证栅栏：发码/登录均过 CaptchaHandler.Enforce（启用/失败升级强制）；
 //  2. 发送冷却：同号冷却期内拒绝重发（Redis TTL 标记）；
 //  3. 每日上限：同号每日发送次数受限（Redis 24h 计数）；
-//  4. 验证码尝试次数：�?5 次作废，需重新获取；登录失败计�?IP 失败计数�?
+//  4. 验证码尝试次数：错 5 次作废，需重新获取；登录失败计入 IP 失败计数。
 
 const (
 	smsMaxTries         = 5                // 验证码最大尝试次数，超过作废
-	smsCodeKeyPrefix    = "sms:code:"      // 验证�?
+	smsCodeKeyPrefix    = "sms:code:"      // 验证码
 	smsTriesKeyPrefix   = "sms:tries:"     // 尝试计数
-	smsCoolKeyPrefix    = "sms:cool:"      // 发送冷却标�?
-	smsDailyKeyPrefix   = "sms:day:"       // 每日发送计�?
-	smsCodeDigits       = 6                // 验证码位�?
+	smsCoolKeyPrefix    = "sms:cool:"      // 发送冷却标记
+	smsDailyKeyPrefix   = "sms:day:"       // 每日发送计数
+	smsCodeDigits       = 6                // 验证码位数
 	smsDailyWindow      = 24 * time.Hour   // 每日计数窗口
 	smsMaxDailyLimit    = 100              // 每日上限配置上限
 	smsMaxCodeTTL       = 15 * time.Minute // 验证码有效期上限
 )
 
-// smsCodeStore 抽象验证码存取（生产 Redis，测试内�?fake）�?
+// smsCodeStore 抽象验证码存取（生产 Redis，测试内存 fake）。
 type smsCodeStore interface {
 	SetCode(ctx context.Context, phone, code string, ttl time.Duration) error
 	GetCode(ctx context.Context, phone string) (string, error)
@@ -50,7 +50,7 @@ type smsCodeStore interface {
 	IncrDaily(ctx context.Context, phone string) (int, error)
 }
 
-// redisSmsCodeStore �?Redis 实现�?
+// redisSmsCodeStore 是 Redis 实现。
 type redisSmsCodeStore struct {
 	rdb db.RedisClient
 }
@@ -68,7 +68,7 @@ func (s redisSmsCodeStore) GetCode(ctx context.Context, phone string) (string, e
 	}
 	v, err := s.rdb.Get(ctx, smsCodeKeyPrefix+phone).Result()
 	if err != nil {
-		// 过期/不存在视为空�?
+		// 过期/不存在视为空码
 		return "", nil
 	}
 	return v, nil
@@ -136,7 +136,7 @@ func (s redisSmsCodeStore) IncrDaily(ctx context.Context, phone string) (int, er
 	return int(n), nil
 }
 
-// smsConfigRow �?ent_sms_config 的内存形态（secret 保留密文）�?
+// smsConfigRow 是 ent_sms_config 的内存形态（secret 保留密文）。
 type smsConfigRow struct {
 	Provider         string
 	SignName         string
@@ -152,18 +152,18 @@ type smsConfigRow struct {
 	Enabled          bool
 }
 
-// SmsHandler 提供短信验证码登录、手机号绑定/解绑与短信服务配置管理�?
+// SmsHandler 提供短信验证码登录、手机号绑定/解绑与短信服务配置管理。
 type SmsHandler struct {
 	auth    *auth.Authenticator
 	cfg     *config.Config
 	db      entQuerier
 	encKey  []byte
 	sender  auth.SmsSender
-	captcha *CaptchaHandler // 可选：nil 跳过人机验证（单测用�?
+	captcha *CaptchaHandler // 可选：nil 跳过人机验证（单测用）
 	store   smsCodeStore
 }
 
-// NewSmsHandler 构造短�?handler；加密密钥沿�?SSO 密钥，验证码存储依赖 Redis�?
+// NewSmsHandler 构造短信 handler；加密密钥沿用 SSO 密钥，验证码存储依赖 Redis。
 func NewSmsHandler(authenticator *auth.Authenticator, cfg *config.Config, captcha *CaptchaHandler) *SmsHandler {
 	return &SmsHandler{
 		auth:    authenticator,
@@ -176,21 +176,21 @@ func NewSmsHandler(authenticator *auth.Authenticator, cfg *config.Config, captch
 	}
 }
 
-// RegisterPublicRoutes 挂载公开路由（无 authMW；外层须�?rlMW）�?
+// RegisterPublicRoutes 挂载公开路由（无 authMW；外层须套 rlMW）。
 func (h *SmsHandler) RegisterPublicRoutes(mux *http.ServeMux, rlMW func(http.Handler) http.Handler) {
 	mux.Handle("GET /v1/auth/sms/status", rlMW(http.HandlerFunc(h.PublicStatus)))
 	mux.Handle("POST /v1/auth/sms/code", rlMW(http.HandlerFunc(h.SendCode)))
 	mux.Handle("POST /v1/auth/sms/login", rlMW(http.HandlerFunc(h.Login)))
 }
 
-// RegisterUserRoutes 挂载用户自助路由（authMW）：手机号查�?/ 绑定 / 解绑�?
+// RegisterUserRoutes 挂载用户自助路由（authMW）：手机号查询 / 绑定 / 解绑。
 func (h *SmsHandler) RegisterUserRoutes(mux *http.ServeMux, authMW func(http.Handler) http.Handler) {
 	mux.Handle("GET /v1/auth/sms/bind", authMW(http.HandlerFunc(h.GetBind)))
 	mux.Handle("POST /v1/auth/sms/bind", authMW(http.HandlerFunc(h.Bind)))
 	mux.Handle("DELETE /v1/auth/sms/bind", authMW(http.HandlerFunc(h.Unbind)))
 }
 
-// RegisterAdminRoutes 挂载管理路由（authMW + RequireEntPerm("sso:manage")）�?
+// RegisterAdminRoutes 挂载管理路由（authMW + RequireEntPerm("sso:manage")）。
 func (h *SmsHandler) RegisterAdminRoutes(mux *http.ServeMux, authMW func(http.Handler) http.Handler) {
 	guard := func(hf http.HandlerFunc) http.Handler {
 		return authMW(RequireEntPerm("sso:manage")(hf))
@@ -202,7 +202,7 @@ func (h *SmsHandler) RegisterAdminRoutes(mux *http.ServeMux, authMW func(http.Ha
 // ── 公开路由 ────────────────────────────────────────────
 
 // PublicStatus GET /v1/auth/sms/status
-// 前端据此决定是否展示"短信登录"标签页�?
+// 前端据此决定是否展示"短信登录"标签页。
 func (h *SmsHandler) PublicStatus(w http.ResponseWriter, r *http.Request) {
 	row, err := h.loadConfig(r.Context())
 	if err != nil {
@@ -223,8 +223,8 @@ type sendSmsCodeRequest struct {
 	Purpose        string `json:"purpose"` // login（默认）| bind
 }
 
-// SendCode POST /v1/auth/sms/code（公开，须�?rlMW�?
-// 防滥用：人机验证 + 发送冷�?+ 每日上限�?
+// SendCode POST /v1/auth/sms/code（公开，须套 rlMW）
+// 防滥用：人机验证 + 发送冷却 + 每日上限。
 func (h *SmsHandler) SendCode(w http.ResponseWriter, r *http.Request) {
 	var req sendSmsCodeRequest
 	if err := DecodeJSON(w, r, &req); err != nil {
@@ -252,12 +252,12 @@ func (h *SmsHandler) SendCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if row == nil || !row.Enabled {
-		Forbidden(w, "短信服务未启�?)
+		Forbidden(w, "短信服务未启用")
 		return
 	}
 	if req.Purpose == "login" || req.Purpose == "" {
 		if !row.LoginEnabled {
-			Forbidden(w, "短信登录未启�?)
+			Forbidden(w, "短信登录未启用")
 			return
 		}
 	}
@@ -307,7 +307,7 @@ func (h *SmsHandler) SendCode(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		db.AuditLog(ctx, "", "sms_send_failed", r.URL.Path, "phone="+phone, r.RemoteAddr, nil)
-		logAndRespond(w, err, http.StatusBadGateway, "短信发送失�?)
+		logAndRespond(w, err, http.StatusBadGateway, "短信发送失败")
 		return
 	}
 
@@ -338,7 +338,7 @@ type smsLoginRequest struct {
 	CaptchaRandstr string `json:"captcha_randstr"`
 }
 
-// Login POST /v1/auth/sms/login（公开，须�?rlMW�?
+// Login POST /v1/auth/sms/login（公开，须套 rlMW）
 func (h *SmsHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var req smsLoginRequest
 	if err := DecodeJSON(w, r, &req); err != nil {
@@ -351,7 +351,7 @@ func (h *SmsHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.TrimSpace(req.Code) == "" {
-		BadRequest(w, "验证码不能为�?)
+		BadRequest(w, "验证码不能为空")
 		return
 	}
 
@@ -370,7 +370,7 @@ func (h *SmsHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if row == nil || !row.Enabled || !row.LoginEnabled {
-		Forbidden(w, "短信登录未启�?)
+		Forbidden(w, "短信登录未启用")
 		return
 	}
 
@@ -385,7 +385,7 @@ func (h *SmsHandler) Login(w http.ResponseWriter, r *http.Request) {
 		db.DefaultTenantID, phone).Scan(&user.ID, &user.Email, &user.Name, &user.Role)
 	if errors.Is(err, pgx.ErrNoRows) {
 		if !row.AutoRegister {
-			NotFound(w, "该手机号未注�?)
+			NotFound(w, "该手机号未注册")
 			return
 		}
 		user, err = h.provisionSmsUser(ctx, phone)
@@ -414,7 +414,7 @@ func (h *SmsHandler) Login(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// provisionSmsUser 自动建号：email 以手机号兜底、随机不可登录密码（password_set=FALSE）�?
+// provisionSmsUser 自动建号：email 以手机号兜底、随机不可登录密码（password_set=FALSE）。
 func (h *SmsHandler) provisionSmsUser(ctx context.Context, phone string) (UserResponse, error) {
 	randomPassword := make([]byte, 32)
 	if _, err := rand.Read(randomPassword); err != nil {
@@ -434,7 +434,7 @@ func (h *SmsHandler) provisionSmsUser(ctx context.Context, phone string) (UserRe
 		 RETURNING id, email, name, role`,
 		db.DefaultTenantID, email, name, string(passwordHash), phone).Scan(&user.ID, &user.Email, &user.Name, &user.Role)
 	if errors.Is(err, pgx.ErrNoRows) {
-		// 并发建号：另一请求已用该手机号建号，直接复�?
+		// 并发建号：另一请求已用该手机号建号，直接复用
 		err = h.db.QueryRow(ctx,
 			`SELECT id, email, name, role FROM users WHERE tenant_id = $1 AND phone = $2`,
 			db.DefaultTenantID, phone).Scan(&user.ID, &user.Email, &user.Name, &user.Role)
@@ -446,8 +446,8 @@ func (h *SmsHandler) provisionSmsUser(ctx context.Context, phone string) (UserRe
 	return user, nil
 }
 
-// verifyCode 校验验证码；失败时已写响应并返回 false�?
-// 错误累计 smsMaxTries 次后作废验证码，并计�?IP 失败计数（触发人机验证升级）�?
+// verifyCode 校验验证码；失败时已写响应并返回 false。
+// 错误累计 smsMaxTries 次后作废验证码，并计入 IP 失败计数（触发人机验证升级）。
 func (h *SmsHandler) verifyCode(w http.ResponseWriter, r *http.Request, phone, code string) bool {
 	ctx := r.Context()
 	stored, err := h.store.GetCode(ctx, phone)
@@ -470,10 +470,10 @@ func (h *SmsHandler) verifyCode(w http.ResponseWriter, r *http.Request, phone, c
 		if tries >= smsMaxTries {
 			_ = h.store.DelCode(ctx, phone)
 			_ = h.store.ResetTries(ctx, phone)
-			BadRequest(w, "验证码错误次数过多，请重新获�?)
+			BadRequest(w, "验证码错误次数过多，请重新获取")
 			return false
 		}
-		BadRequest(w, "验证码错�?)
+		BadRequest(w, "验证码错误")
 		return false
 	}
 	// 验证通过即作废（一次性），防重放
@@ -484,7 +484,7 @@ func (h *SmsHandler) verifyCode(w http.ResponseWriter, r *http.Request, phone, c
 
 // ── 用户自助：手机号绑定 ────────────────────────────────
 
-// GetBind GET /v1/auth/sms/bind（authMW）返回当前绑定手机号�?
+// GetBind GET /v1/auth/sms/bind（authMW）返回当前绑定手机号。
 func (h *SmsHandler) GetBind(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	if claims == nil {
@@ -514,7 +514,7 @@ type smsBindRequest struct {
 	Code  string `json:"code"`
 }
 
-// Bind POST /v1/auth/sms/bind（authMW）验证码校验后绑定手机号�?
+// Bind POST /v1/auth/sms/bind（authMW）验证码校验后绑定手机号。
 func (h *SmsHandler) Bind(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	if claims == nil {
@@ -537,7 +537,7 @@ func (h *SmsHandler) Bind(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if row == nil || !row.Enabled {
-		Forbidden(w, "短信服务未启�?)
+		Forbidden(w, "短信服务未启用")
 		return
 	}
 	if !h.verifyCode(w, r, phone, req.Code) {
@@ -549,7 +549,7 @@ func (h *SmsHandler) Bind(w http.ResponseWriter, r *http.Request) {
 		`UPDATE users SET phone = $2, updated_at = NOW() WHERE id = $1`,
 		claims.UserID, phone); err != nil {
 		if isUniqueViolation(err) {
-			JSON(w, http.StatusConflict, APIResponse{Success: false, Error: "该手机号已绑定其他账�?})
+			JSON(w, http.StatusConflict, APIResponse{Success: false, Error: "该手机号已绑定其他账号"})
 			return
 		}
 		logAndRespond(w, err, http.StatusInternalServerError, ErrDBUnavailable)
@@ -559,8 +559,8 @@ func (h *SmsHandler) Bind(w http.ResponseWriter, r *http.Request) {
 	OK(w, map[string]any{"status": "bound", "phone": phone})
 }
 
-// Unbind DELETE /v1/auth/sms/bind（authMW�?
-// 守卫：无口令密码且无三方身份时拒绝解绑（保留至少一种登录方式）�?
+// Unbind DELETE /v1/auth/sms/bind（authMW）
+// 守卫：无口令密码且无三方身份时拒绝解绑（保留至少一种登录方式）。
 func (h *SmsHandler) Unbind(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	if claims == nil {
@@ -589,7 +589,7 @@ func (h *SmsHandler) Unbind(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !passwordSet && identityCount == 0 {
-		Forbidden(w, "解绑后将无可用登录方式，请先设置密码或绑定其他登录方�?)
+		Forbidden(w, "解绑后将无可用登录方式，请先设置密码或绑定其他登录方式")
 		return
 	}
 	if _, err := h.db.Exec(ctx,
@@ -601,9 +601,9 @@ func (h *SmsHandler) Unbind(w http.ResponseWriter, r *http.Request) {
 	OK(w, map[string]string{"status": "unbound"})
 }
 
-// ── 管理端配�?──────────────────────────────────────────
+// ── 管理端配置 ──────────────────────────────────────────
 
-// GetConfig GET /v1/ent/sms/config（secret 脱敏）�?
+// GetConfig GET /v1/ent/sms/config（secret 脱敏）。
 func (h *SmsHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 	row, err := h.loadConfig(r.Context())
 	if err != nil {
@@ -642,7 +642,7 @@ type updateSmsConfigRequest struct {
 	SignName          *string `json:"sign_name"`
 	TemplateID        *string `json:"template_id"`
 	AccessKeyID       *string `json:"access_key_id"`
-	Secret            *string `json:"secret"` // 空串/脱敏占位 = 保留原�?
+	Secret            *string `json:"secret"` // 空串/脱敏占位 = 保留原值
 	Endpoint          *string `json:"endpoint"`
 	CodeTTLSeconds    *int    `json:"code_ttl_seconds"`
 	SendIntervalSecs  *int    `json:"send_interval_seconds"`
@@ -652,7 +652,7 @@ type updateSmsConfigRequest struct {
 	Enabled           *bool   `json:"enabled"`
 }
 
-// UpdateConfig PUT /v1/ent/sms/config（单租户单行 upsert）�?
+// UpdateConfig PUT /v1/ent/sms/config（单租户单行 upsert）。
 func (h *SmsHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 	var req updateSmsConfigRequest
 	if err := DecodeJSON(w, r, &req); err != nil {
@@ -665,7 +665,7 @@ func (h *SmsHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 以既有值（或缺省）为底，逐字段覆�?
+	// 以既有值（或缺省）为底，逐字段覆盖
 	row := &smsConfigRow{
 		Provider: auth.SmsAliyun, CodeTTLSeconds: 300, SendIntervalSecs: 60, DailyLimit: 10,
 	}
@@ -710,7 +710,7 @@ func (h *SmsHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 		row.Enabled = *req.Enabled
 	}
 
-	// secret：新值加密；空串/占位保留原密�?
+	// secret：新值加密；空串/占位保留原密文
 	secretEnc := ""
 	if existing != nil {
 		secretEnc = existing.SecretEnc
@@ -728,17 +728,17 @@ func (h *SmsHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 		secretEnc = enc
 	}
 
-	// 数值边�?
+	// 数值边界
 	if row.CodeTTLSeconds < 60 || row.CodeTTLSeconds > int(smsMaxCodeTTL.Seconds()) {
-		BadRequest(w, fmt.Sprintf("code_ttl_seconds 需�?60-%d 之间", int(smsMaxCodeTTL.Seconds())))
+		BadRequest(w, fmt.Sprintf("code_ttl_seconds 需在 60-%d 之间", int(smsMaxCodeTTL.Seconds())))
 		return
 	}
 	if row.SendIntervalSecs < 0 || row.SendIntervalSecs > 3600 {
-		BadRequest(w, "send_interval_seconds 需�?0-3600 之间")
+		BadRequest(w, "send_interval_seconds 需在 0-3600 之间")
 		return
 	}
 	if row.DailyLimit < 1 || row.DailyLimit > smsMaxDailyLimit {
-		BadRequest(w, fmt.Sprintf("daily_limit 需�?1-%d 之间", smsMaxDailyLimit))
+		BadRequest(w, fmt.Sprintf("daily_limit 需在 1-%d 之间", smsMaxDailyLimit))
 		return
 	}
 	if len(row.SignName) > 64 || len(row.TemplateID) > 64 || len(row.AccessKeyID) > 256 || len(row.Endpoint) > 512 {
@@ -746,10 +746,10 @@ func (h *SmsHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 启用前置校验（fail-loud�?
+	// 启用前置校验（fail-loud）
 	if row.Enabled {
 		if secretEnc == "" {
-			BadRequest(w, "短信 AccessKeySecret 必须先配置才能启�?)
+			BadRequest(w, "短信 AccessKeySecret 必须先配置才能启用")
 			return
 		}
 		if row.Provider != auth.SmsCustom {
@@ -763,7 +763,7 @@ func (h *SmsHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if row.Provider == auth.SmsCustom && row.Endpoint == "" {
-			BadRequest(w, "custom 短信服务必须配置发送端点（endpoint�?)
+			BadRequest(w, "custom 短信服务必须配置发送端点（endpoint）")
 			return
 		}
 	}

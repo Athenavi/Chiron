@@ -15,8 +15,8 @@ import (
 	"github.com/athenavi/chiron/internal/id"
 )
 
-// UserMarketHandler 面向用户的三大市场（技�?Agent/MCP）浏览与一键安装�?
-// 管理端发布与租户授权仍走 market_handler.go（ent_catalog_items / ent_catalog_installs）�?
+// UserMarketHandler 面向用户的三大市场（技能/Agent/MCP）浏览与一键安装。
+// 管理端发布与租户授权仍走 market_handler.go（ent_catalog_items / ent_catalog_installs）。
 type UserMarketHandler struct {
 	cfg          *config.Config
 	pythonClient *engine.PythonClient
@@ -26,7 +26,7 @@ func NewUserMarketHandler(cfg *config.Config, pythonClient *engine.PythonClient)
 	return &UserMarketHandler{cfg: cfg, pythonClient: pythonClient}
 }
 
-// marketItemSummary 用户可见的市场条目（已发�?+ 租户授权 fail-open）�?
+// marketItemSummary 用户可见的市场条目（已发布 + 租户授权 fail-open）。
 type marketItemSummary struct {
 	ID        string          `json:"id"`
 	Type      string          `json:"type"` // skill / agent / mcp
@@ -54,7 +54,7 @@ func (h *UserMarketHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := db.GlobalDBManager.Query(r.Context(),
+	rows, err := db.ReadPool().Query(r.Context(),
 		`SELECT id::text, type, name, version, manifest, status FROM ent_catalog_items
 		 WHERE type = $1 AND status = 'published' ORDER BY created_at DESC`, itemType)
 	if err != nil {
@@ -71,7 +71,7 @@ func (h *UserMarketHandler) List(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		it.Manifest = json.RawMessage(manifest)
-		// 租户授权 fail-open：有授权记录则必�?enabled；无记录放行
+		// 租户授权 fail-open：有授权记录则必须 enabled；无记录放行
 		if enabled, err := itemEnabledForTenant(r.Context(), it.ID, claims.TenantID); err == nil {
 			it.Installed = enabled
 		}
@@ -80,10 +80,10 @@ func (h *UserMarketHandler) List(w http.ResponseWriter, r *http.Request) {
 	OK(w, map[string]interface{}{"items": items})
 }
 
-// itemEnabledForTenant 查询租户安装记录（fail-open：无记录视为未安装）�?
+// itemEnabledForTenant 查询租户安装记录（fail-open：无记录视为未安装）。
 func itemEnabledForTenant(ctx context.Context, itemID, tenantID string) (bool, error) {
 	var enabled bool
-	err := db.GlobalDBManager.QueryRow(ctx,
+	err := db.ReadPool().QueryRow(ctx,
 		`SELECT COALESCE(enabled, false) FROM ent_catalog_installs WHERE item_id = $1 AND tenant_id = $2`,
 		itemID, tenantID).Scan(&enabled)
 	if err != nil {
@@ -108,7 +108,7 @@ func (h *UserMarketHandler) Install(w http.ResponseWriter, r *http.Request) {
 
 	var name string
 	var manifest []byte
-	if err := db.GlobalDBManager.QueryRow(r.Context(),
+	if err := db.ReadPool().QueryRow(r.Context(),
 		`SELECT name, manifest FROM ent_catalog_items WHERE id = $1 AND type = $2 AND status = 'published'`,
 		itemID, itemType).Scan(&name, &manifest); err != nil {
 		NotFound(w, "market item not found or not published")
@@ -133,7 +133,7 @@ func (h *UserMarketHandler) Install(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// installSkill 技能安装：�?manifest 定义写入 Python SkillStore（用户可于对�?Agent 中调用）�?
+// installSkill 技能安装：将 manifest 定义写入 Python SkillStore（用户可于对话/Agent 中调用）。
 func (h *UserMarketHandler) installSkill(w http.ResponseWriter, r *http.Request, claims *auth.Claims, m map[string]interface{}) {
 	if h.pythonClient == nil {
 		InternalError(w, "python engine not available")
@@ -160,7 +160,7 @@ func (h *UserMarketHandler) installSkill(w http.ResponseWriter, r *http.Request,
 	OK(w, map[string]interface{}{"success": true, "type": "skill", "name": skillName, "detail": resp})
 }
 
-// installAgent Agent 安装：manifest 快照复制为当前用户的私有 Agent（严格私有）�?
+// installAgent Agent 安装：manifest 快照复制为当前用户的私有 Agent（严格私有）。
 func (h *UserMarketHandler) installAgent(w http.ResponseWriter, r *http.Request, claims *auth.Claims, m map[string]interface{}) {
 	agentID, err := id.UUID()
 	if err != nil {
@@ -179,7 +179,7 @@ func (h *UserMarketHandler) installAgent(w http.ResponseWriter, r *http.Request,
 	maxTurns := intVal(m["max_turns"], 10)
 	timeout := intVal(m["timeout_seconds"], 120)
 
-	if _, err := db.GlobalDBManager.Exec(r.Context(),
+	if _, err := db.Pool.Exec(r.Context(),
 		`INSERT INTO agents (id, tenant_id, user_id, name, description, system_prompt, tools, llm_config, max_turns, timeout_seconds, enabled)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true)`,
 		agentID, claims.TenantID, claims.UserID, name, desc, prompt,
@@ -190,7 +190,7 @@ func (h *UserMarketHandler) installAgent(w http.ResponseWriter, r *http.Request,
 	OK(w, map[string]interface{}{"success": true, "type": "agent", "id": agentID, "name": name})
 }
 
-// installMCP MCP 安装：将 manifest �?MCP server 配置追加到当前用�?plugins.json（命令需命中白名单）�?
+// installMCP MCP 安装：将 manifest 的 MCP server 配置追加到当前用户 plugins.json（命令需命中白名单）。
 func (h *UserMarketHandler) installMCP(w http.ResponseWriter, r *http.Request, claims *auth.Claims, m map[string]interface{}) {
 	pName, _ := m["name"].(string)
 	command, _ := m["command"].(string)
@@ -223,7 +223,7 @@ func (h *UserMarketHandler) installMCP(w http.ResponseWriter, r *http.Request, c
 	OK(w, map[string]interface{}{"success": true, "type": "mcp", "name": pName})
 }
 
-// ── 小工�?──
+// ── 小工具 ──
 
 func mustJSON(v interface{}) string {
 	b, _ := json.Marshal(v)
@@ -272,12 +272,12 @@ func toStringMap(v interface{}) map[string]string {
 	return out
 }
 
-// userPluginPath 返回用户插件配置路径（与 plugin_handler.go 同规则）�?
+// userPluginPath 返回用户插件配置路径（与 plugin_handler.go 同规则）。
 func userPluginPath(dataDir, userID string) string {
 	return dataDir + "/" + userID + "/plugins.json"
 }
 
-// appendPlugin 读取用户 plugins.json 并追�?MCP 插件（幂等：同名覆盖）�?
+// appendPlugin 读取用户 plugins.json 并追加 MCP 插件（幂等：同名覆盖）。
 func appendPlugin(dataDir, userID string, plugin MCPPlugin) error {
 	path := userPluginPath(dataDir, userID)
 	plugins := []MCPPlugin{}

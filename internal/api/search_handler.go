@@ -33,10 +33,16 @@ func (h *SearchHandler) Search(w http.ResponseWriter, r *http.Request) {
 		OK(w, map[string]interface{}{"results": []interface{}{}})
 		return
 	}
-	// 多租户隔离修复（P0-S4）：必须按当前租�?用户过滤，否则任一租户用户可全文搜索全库�?
+	// 多租户隔离修复（P0-S4）：必须按当前租户+用户过滤，否则任一租户用户可全文搜索全库。
 	claims := auth.GetClaims(r.Context())
 	if claims == nil || claims.TenantID == "" {
 		Unauthorized(w, "missing tenant context")
+		return
+	}
+
+	pool := db.ReadPool()
+	if pool == nil {
+		ServiceUnavailable(w, "database not available")
 		return
 	}
 

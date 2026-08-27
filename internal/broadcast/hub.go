@@ -12,8 +12,8 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// slowSubSem 限制慢订阅者重�?goroutine 数量（P1 修复：事件风暴下防止
-// goroutine 无界堆积导致 DoS）。超出上限时直接丢弃事件（SSE 可重连补发）�?
+// slowSubSem 限制慢订阅者重试 goroutine 数量（P1 修复：事件风暴下防止
+// goroutine 无界堆积导致 DoS）。超出上限时直接丢弃事件（SSE 可重连补发）。
 var slowSubSem = make(chan struct{}, 512)
 
 // Event is a generic event for SSE broadcasting.

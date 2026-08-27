@@ -123,7 +123,7 @@ func IncToolError() {
 var extraStatsMu sync.RWMutex
 var extraStatsFuncs []func() map[string]interface{}
 
-// RegisterExtraStats 允许外部包注册额外的统计信息提供者（�?DB 连接池、缓存等）�?
+// RegisterExtraStats 允许外部包注册额外的统计信息提供者（如 DB 连接池、缓存等）。
 func RegisterExtraStats(fn func() map[string]interface{}) {
 	extraStatsMu.Lock()
 	defer extraStatsMu.Unlock()

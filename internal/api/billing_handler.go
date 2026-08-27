@@ -1,4 +1,4 @@
-package api
+ï»¿package api
 
 import (
 	"context"
@@ -22,8 +22,8 @@ type BillingHandler struct {
 	authenticator *auth.Authenticator
 	cfg           *config.Config
 	payPalClient  *http.Client
-	alipay        *billing.AlipayClient // nil = Î´ÅäÖÃ£¬³äÖµÈë¿Ú·µ»Ø 501
-	wechat        *billing.WechatClient // nil = Î´ÅäÖÃ
+	alipay        *billing.AlipayClient // nil = æœªé…ç½®ï¼Œå……å€¼å…¥å£è¿”å› 501
+	wechat        *billing.WechatClient // nil = æœªé…ç½®
 }
 
 func NewBillingHandler(mgr *billing.Manager, authenticator *auth.Authenticator, cfg *config.Config) *BillingHandler {
@@ -32,7 +32,7 @@ func NewBillingHandler(mgr *billing.Manager, authenticator *auth.Authenticator, 
 		payPalClient: &http.Client{Timeout: 30 * time.Second},
 	}
 
-	// Ö§¸¶±¦£¨µ±Ãæ¸¶£©¡ª¡ªÅäÖÃÆëÈ«²ÅÆôÓÃ
+	// æ”¯ä»˜å®ï¼ˆå½“é¢ä»˜ï¼‰â€”â€”é…ç½®é½å…¨æ‰å¯ç”¨
 	if cfg.AlipayAppID != "" && cfg.AlipayPrivateKey != "" && cfg.AlipayPublicKey != "" {
 		client, err := billing.NewAlipayClient(cfg.AlipayAppID, cfg.AlipayPrivateKey, cfg.AlipayPublicKey, cfg.AlipayGateway, h.alipayNotifyURL())
 		if err != nil {
@@ -42,7 +42,7 @@ func NewBillingHandler(mgr *billing.Manager, authenticator *auth.Authenticator, 
 		}
 	}
 
-	// Î¢ĞÅÖ§¸¶£¨APIv3 Native£©
+	// å¾®ä¿¡æ”¯ä»˜ï¼ˆAPIv3 Nativeï¼‰
 	if cfg.WechatMchID != "" && cfg.WechatAppID != "" && cfg.WechatAPIv3Key != "" &&
 		cfg.WechatMchCertSerialNo != "" && cfg.WechatMchPrivateKey != "" {
 		client, err := billing.NewWechatClient(cfg.WechatMchID, cfg.WechatAppID, cfg.WechatAPIv3Key, cfg.WechatMchCertSerialNo, cfg.WechatMchPrivateKey)
@@ -55,7 +55,7 @@ func NewBillingHandler(mgr *billing.Manager, authenticator *auth.Authenticator, 
 	return h
 }
 
-// ©¤©¤ »Øµ÷ notify_url ¹¹Ôì ©¤©¤
+// â”€â”€ å›è°ƒ notify_url æ„é€  â”€â”€
 
 func (h *BillingHandler) alipayNotifyURL() string {
 	if h.cfg.PublicBaseURL == "" {
@@ -223,11 +223,11 @@ func (h *BillingHandler) resolveUserID(r *http.Request) string {
 	return ""
 }
 
-// ©¤©¤ Ö§¸¶ÏÂµ¥ / ²éÑ¯ / »Øµ÷ ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
+// â”€â”€ æ”¯ä»˜ä¸‹å• / æŸ¥è¯¢ / å›è°ƒ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-// CreatePayment ´´½¨³äÖµ¶©µ¥²¢µ÷ÓÃÖ§¸¶ÇşµÀÔ¤ÏÂµ¥¡£
+// CreatePayment åˆ›å»ºå……å€¼è®¢å•å¹¶è°ƒç”¨æ”¯ä»˜æ¸ é“é¢„ä¸‹å•ã€‚
 // body: {credits: int, channel: "alipay" | "wechat" | "paypal"}
-// ·µ»Ø¶©µ¥ĞÅÏ¢£¨alipay/wechat º¬ qr_code ¶şÎ¬ÂëÄÚÈİ£»paypal º¬ checkout_url£©¡£
+// è¿”å›è®¢å•ä¿¡æ¯ï¼ˆalipay/wechat å« qr_code äºŒç»´ç å†…å®¹ï¼›paypal å« checkout_urlï¼‰ã€‚
 func (h *BillingHandler) CreatePayment(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	userID := claims.UserID
@@ -251,7 +251,7 @@ func (h *BillingHandler) CreatePayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1 credit = 1 ·Ö£»Ö§¸¶±¦/Î¢ĞÅÎªÈËÃñ±Ò£¬PayPal ÎªÃÀÔª
+	// 1 credit = 1 åˆ†ï¼›æ”¯ä»˜å®/å¾®ä¿¡ä¸ºäººæ°‘å¸ï¼ŒPayPal ä¸ºç¾å…ƒ
 	amountCents := int64(body.Credits)
 	currency := "CNY"
 	if body.Channel == billing.ChannelPayPal {
@@ -266,11 +266,11 @@ func (h *BillingHandler) CreatePayment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	subject := fmt.Sprintf("chiron ³äÖµ %d credits", body.Credits)
+	subject := fmt.Sprintf("chiron å……å€¼ %d credits", body.Credits)
 	switch body.Channel {
 	case billing.ChannelAlipay:
 		if h.alipay == nil {
-			JSON(w, http.StatusNotImplemented, APIResponse{Success: false, Error: "Ö§¸¶±¦Ö§¸¶Î´ÅäÖÃ£¨ALIPAY_APP_ID µÈ£©"})
+			JSON(w, http.StatusNotImplemented, APIResponse{Success: false, Error: "æ”¯ä»˜å®æ”¯ä»˜æœªé…ç½®ï¼ˆALIPAY_APP_ID ç­‰ï¼‰"})
 			return
 		}
 		qr, err := h.alipay.Precreate(ctx, p.ID, amountCents, subject)
@@ -278,7 +278,7 @@ func (h *BillingHandler) CreatePayment(w http.ResponseWriter, r *http.Request) {
 			if mErr := h.mgr.MarkPaymentFailed(ctx, p.ID); mErr != nil {
 				slog.Error("payment status update failed", "error", mErr)
 			}
-			logAndRespond(w, err, http.StatusInternalServerError, "Ö§¸¶ÏÂµ¥Ê§°Ü")
+			logAndRespond(w, err, http.StatusInternalServerError, "æ”¯ä»˜ä¸‹å•å¤±è´¥")
 			return
 		}
 		if err := h.mgr.UpdatePaymentProvider(ctx, p.ID, qr, p.ID); err != nil {
@@ -288,12 +288,12 @@ func (h *BillingHandler) CreatePayment(w http.ResponseWriter, r *http.Request) {
 
 	case billing.ChannelWechat:
 		if h.wechat == nil {
-			JSON(w, http.StatusNotImplemented, APIResponse{Success: false, Error: "Î¢ĞÅÖ§¸¶Î´ÅäÖÃ£¨WXPAY_* µÈ£©"})
+			JSON(w, http.StatusNotImplemented, APIResponse{Success: false, Error: "å¾®ä¿¡æ”¯ä»˜æœªé…ç½®ï¼ˆWXPAY_* ç­‰ï¼‰"})
 			return
 		}
 		notifyURL := h.wechatNotifyURL()
 		if notifyURL == "" {
-			JSON(w, http.StatusNotImplemented, APIResponse{Success: false, Error: "PUBLIC_BASE_URL Î´ÅäÖÃ£¬ÎŞ·¨½ÓÊÕÎ¢ĞÅ»Øµ÷"})
+			JSON(w, http.StatusNotImplemented, APIResponse{Success: false, Error: "PUBLIC_BASE_URL æœªé…ç½®ï¼Œæ— æ³•æ¥æ”¶å¾®ä¿¡å›è°ƒ"})
 			return
 		}
 		codeURL, err := h.wechat.Precreate(ctx, p.ID, amountCents, subject, notifyURL)
@@ -301,7 +301,7 @@ func (h *BillingHandler) CreatePayment(w http.ResponseWriter, r *http.Request) {
 			if mErr := h.mgr.MarkPaymentFailed(ctx, p.ID); mErr != nil {
 				slog.Error("payment status update failed", "error", mErr)
 			}
-			logAndRespond(w, err, http.StatusInternalServerError, "Ö§¸¶ÏÂµ¥Ê§°Ü")
+			logAndRespond(w, err, http.StatusInternalServerError, "æ”¯ä»˜ä¸‹å•å¤±è´¥")
 			return
 		}
 		if err := h.mgr.UpdatePaymentProvider(ctx, p.ID, codeURL, p.ID); err != nil {
@@ -317,8 +317,8 @@ func (h *BillingHandler) CreatePayment(w http.ResponseWriter, r *http.Request) {
 	OK(w, h.paymentResponse(p))
 }
 
-// GetOrder ²éÑ¯¶©µ¥×´Ì¬£¨Ç°¶ËÂÖÑ¯£©¡£pending Ê±Ö÷¶¯ÏòÇşµÀ²éÑ¯Ò»´Î¶µµ×£¬
-// ÒÑÖ§¸¶ÔòÃİµÈÈëÕË²¢·µ»Ø×îĞÂ×´Ì¬¡£
+// GetOrder æŸ¥è¯¢è®¢å•çŠ¶æ€ï¼ˆå‰ç«¯è½®è¯¢ï¼‰ã€‚pending æ—¶ä¸»åŠ¨å‘æ¸ é“æŸ¥è¯¢ä¸€æ¬¡å…œåº•ï¼Œ
+// å·²æ”¯ä»˜åˆ™å¹‚ç­‰å…¥è´¦å¹¶è¿”å›æœ€æ–°çŠ¶æ€ã€‚
 func (h *BillingHandler) GetOrder(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	id := r.PathValue("id")
@@ -339,7 +339,7 @@ func (h *BillingHandler) GetOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if p.Status == billing.PayStatusPending {
-		// ÇşµÀ²éÑ¯¶µµ×£¨Ê§°Ü²»×èÈûÏìÓ¦£©
+		// æ¸ é“æŸ¥è¯¢å…œåº•ï¼ˆå¤±è´¥ä¸é˜»å¡å“åº”ï¼‰
 		switch p.Channel {
 		case billing.ChannelAlipay:
 			if h.alipay != nil {
@@ -366,8 +366,8 @@ func (h *BillingHandler) GetOrder(w http.ResponseWriter, r *http.Request) {
 	OK(w, h.paymentResponse(p))
 }
 
-// AlipayCallback Ö§¸¶±¦Òì²½Í¨Öª£¨ÎŞÈÏÖ¤£¬¿¿Ç©ÃûÑéÇ©£©¡£
-// ÑéÇ©Í¨¹ıÇÒ½ğ¶îÒ»ÖÂÔòÃİµÈÈëÕË£»·µ»Ø "success"£¨Ö§¸¶±¦Ğ­ÒéÒªÇó£©¡£
+// AlipayCallback æ”¯ä»˜å®å¼‚æ­¥é€šçŸ¥ï¼ˆæ— è®¤è¯ï¼Œé ç­¾åéªŒç­¾ï¼‰ã€‚
+// éªŒç­¾é€šè¿‡ä¸”é‡‘é¢ä¸€è‡´åˆ™å¹‚ç­‰å…¥è´¦ï¼›è¿”å› "success"ï¼ˆæ”¯ä»˜å®åè®®è¦æ±‚ï¼‰ã€‚
 func (h *BillingHandler) AlipayCallback(w http.ResponseWriter, r *http.Request) {
 	if h.alipay == nil {
 		JSON(w, http.StatusNotImplemented, APIResponse{Success: false, Error: "alipay not configured"})
@@ -399,7 +399,7 @@ func (h *BillingHandler) AlipayCallback(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// ½ğ¶îĞ£Ñé£º»Øµ÷ total_amount£¨Ôª£©±ØĞëÓë¶©µ¥Ò»ÖÂ
+	// é‡‘é¢æ ¡éªŒï¼šå›è°ƒ total_amountï¼ˆå…ƒï¼‰å¿…é¡»ä¸è®¢å•ä¸€è‡´
 	if amt, aErr := strconv.ParseFloat(params["total_amount"], 64); aErr == nil {
 		if int64(amt*100) != p.AmountCents {
 			slog.Warn("alipay callback amount mismatch", "order", p.ID, "got", params["total_amount"], "want", p.AmountCents)
@@ -419,8 +419,8 @@ func (h *BillingHandler) AlipayCallback(w http.ResponseWriter, r *http.Request) 
 	w.Write([]byte("success"))
 }
 
-// WechatCallback Î¢ĞÅÖ§¸¶»Øµ÷£¨ÎŞÈÏÖ¤£¬¿¿Æ½Ì¨Ö¤ÊéÑéÇ© + AES-GCM ½âÃÜ£©¡£
-// ÑéÇ©/½ğ¶îĞ£ÑéÍ¨¹ıÔòÃİµÈÈëÕË£»·µ»ØÎ¢ĞÅÒªÇóµÄ {"code":"SUCCESS"}¡£
+// WechatCallback å¾®ä¿¡æ”¯ä»˜å›è°ƒï¼ˆæ— è®¤è¯ï¼Œé å¹³å°è¯ä¹¦éªŒç­¾ + AES-GCM è§£å¯†ï¼‰ã€‚
+// éªŒç­¾/é‡‘é¢æ ¡éªŒé€šè¿‡åˆ™å¹‚ç­‰å…¥è´¦ï¼›è¿”å›å¾®ä¿¡è¦æ±‚çš„ {"code":"SUCCESS"}ã€‚
 func (h *BillingHandler) WechatCallback(w http.ResponseWriter, r *http.Request) {
 	if h.wechat == nil {
 		JSON(w, http.StatusNotImplemented, APIResponse{Success: false, Error: "wechat not configured"})
@@ -445,8 +445,8 @@ func (h *BillingHandler) WechatCallback(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if !paid {
-		// Î´Ö§¸¶³É¹¦£¨Èç USERPAYING£©£¬²»´¦Àíµ«Õı³£Ó¦´ğ
-		OK(w, map[string]string{"code": "SUCCESS", "message": "³É¹¦"})
+		// æœªæ”¯ä»˜æˆåŠŸï¼ˆå¦‚ USERPAYINGï¼‰ï¼Œä¸å¤„ç†ä½†æ­£å¸¸åº”ç­”
+		OK(w, map[string]string{"code": "SUCCESS", "message": "æˆåŠŸ"})
 		return
 	}
 	if _, _, err := h.mgr.ConfirmPayment(ctx, p.ID, tradeNo); err != nil {
@@ -455,10 +455,10 @@ func (h *BillingHandler) WechatCallback(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	slog.Info("wechat payment confirmed", "order", p.ID, "user", p.UserID, "credits", p.Credits)
-	OK(w, map[string]string{"code": "SUCCESS", "message": "³É¹¦"})
+	OK(w, map[string]string{"code": "SUCCESS", "message": "æˆåŠŸ"})
 }
 
-// paymentResponse ĞòÁĞ»¯¶©µ¥£¨²»±©Â¶ÄÚ²¿×Ö¶Î£©¡£
+// paymentResponse åºåˆ—åŒ–è®¢å•ï¼ˆä¸æš´éœ²å†…éƒ¨å­—æ®µï¼‰ã€‚
 func (h *BillingHandler) paymentResponse(p *billing.Payment) map[string]interface{} {
 	resp := map[string]interface{}{
 		"id":          p.ID,
@@ -475,9 +475,9 @@ func (h *BillingHandler) paymentResponse(p *billing.Payment) map[string]interfac
 	return resp
 }
 
-// ©¤©¤ PayPal ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
+// â”€â”€ PayPal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-// createPayPalPayment ´´½¨ PayPal ¶©µ¥²¢Âä¿â payments£¬·µ»Ø checkout_url¡£
+// createPayPalPayment åˆ›å»º PayPal è®¢å•å¹¶è½åº“ paymentsï¼Œè¿”å› checkout_urlã€‚
 func (h *BillingHandler) createPayPalPayment(w http.ResponseWriter, r *http.Request, userID string, credits int, p *billing.Payment) {
 	if h.cfg.PayPalClientID == "" || h.cfg.PayPalSecret == "" {
 		JSON(w, http.StatusNotImplemented, APIResponse{Success: false, Error: "PayPal not configured"})
@@ -532,7 +532,7 @@ func (h *BillingHandler) PayPalCapture(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ´Ó payments ±í°´ provider_order_id ¶¨Î»¶©µ¥²¢ÃİµÈÈëÕË
+	// ä» payments è¡¨æŒ‰ provider_order_id å®šä½è®¢å•å¹¶å¹‚ç­‰å…¥è´¦
 	var payID, credits string
 	err := db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT id, credits::text FROM payments
@@ -555,7 +555,7 @@ func (h *BillingHandler) PayPalCapture(w http.ResponseWriter, r *http.Request) {
 	OK(w, map[string]interface{}{"status": "completed", "balance": balance, "credits": credits})
 }
 
-// ©¤©¤ PayPal REST API helpers ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
+// â”€â”€ PayPal REST API helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 func (h *BillingHandler) payPalBaseURL() string {
 	if h.cfg.PayPalSandbox {

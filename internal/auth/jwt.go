@@ -25,7 +25,7 @@ type Authenticator struct {
 	expiration time.Duration
 }
 
-// SigningSecret 返回签名密钥（供媒体签名 URL 等复用同一密钥）�?
+// SigningSecret 返回签名密钥（供媒体签名 URL 等复用同一密钥）。
 func (a *Authenticator) SigningSecret() []byte {
 	return a.secret
 }
@@ -37,7 +37,7 @@ func NewAuthenticator(secret string, expiration time.Duration) *Authenticator {
 	}
 }
 
-// GenerateToken 签发 JWT。tenantID 必须由调用方从用户记录中传入（多租户隔离键）�?
+// GenerateToken 签发 JWT。tenantID 必须由调用方从用户记录中传入（多租户隔离键）。
 func (a *Authenticator) GenerateToken(userID, email, role, tenantID string, perms []string) (string, error) {
 	now := time.Now()
 	claims := &Claims{
@@ -145,7 +145,7 @@ var (
 	PermAdminWrite  = "admin:write"
 	PermToolsExec   = "tools:execute"
 	PermUsersManage = "users:manage"
-	// 企业功能权限点（owner/admin 默认拥有�?
+	// 企业功能权限点（owner/admin 默认拥有）
 	PermAuditRead   = "audit:read"
 	PermEntManage   = "ent:manage"
 	PermPolicyManage = "policy:manage"
@@ -164,7 +164,7 @@ func HasPermission(claims *Claims, perm string) bool {
 	if claims == nil {
 		return false
 	}
-	// 如果 claims.Perms 被显式设置（非空），以它为唯一权限白名�?
+	// 如果 claims.Perms 被显式设置（非空），以它为唯一权限白名单
 	if len(claims.Perms) > 0 {
 		for _, p := range claims.Perms {
 			if p == perm {
@@ -173,7 +173,7 @@ func HasPermission(claims *Claims, perm string) bool {
 		}
 		return false
 	}
-	// Fallback �?RolePermissions（仅�?Perms 为空时）
+	// Fallback 到 RolePermissions（仅当 Perms 为空时）
 	perms, ok := RolePermissions[claims.Role]
 	if !ok {
 		return false

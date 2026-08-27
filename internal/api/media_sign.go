@@ -16,16 +16,16 @@ import (
 	"github.com/athenavi/chiron/internal/db"
 )
 
-// 媒体签名 URL（P0 修复：媒体不再裸公开可猜测；本地后端 HMAC，S3 后端走原生预签名）�?
-// 签名 = HMAC-SHA256(JWTSecret, assetID|exp)，短时效（默�?15 分钟），与资产绑定�?
+// 媒体签名 URL（P0 修复：媒体不再裸公开可猜测；本地后端 HMAC，S3 后端走原生预签名）。
+// 签名 = HMAC-SHA256(JWTSecret, assetID|exp)，短时效（默认 15 分钟），与资产绑定。
 
 const mediaSignTTL = 15 * time.Minute
 
-// signMediaURL 为资产生成签名下�?URL（校验归属后签发）�?
+// signMediaURL 为资产生成签名下载 URL（校验归属后签发）。
 func signMediaURL(ctx context.Context, assetID, secret, tenantID, userID string) (string, error) {
 	// 归属校验
 	var filePath string
-	if err := db.GlobalDBManager.QueryRow(ctx,
+	if err := db.ReadPool().QueryRow(ctx,
 		`SELECT COALESCE(file_path, '') FROM media_assets WHERE id = $1 AND tenant_id = $2 AND user_id = $3`,
 		assetID, tenantID, userID).Scan(&filePath); err != nil {
 		return "", err
@@ -41,7 +41,7 @@ func mediaHMAC(secret, assetID string, exp int64) string {
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
-// SignMedia POST /v1/media/{id}/sign —�?鉴权后签发签�?URL�?
+// SignMedia POST /v1/media/{id}/sign —— 鉴权后签发签名 URL。
 func (h *MediaHandler) SignMedia(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	if claims == nil || claims.TenantID == "" {
@@ -61,7 +61,7 @@ func (h *MediaHandler) SignMedia(w http.ResponseWriter, r *http.Request) {
 	OK(w, map[string]interface{}{"url": url})
 }
 
-// ServeSignedMedia GET /media/s/{assetID}?exp=&sig= —�?校验签名后流式返回文件�?
+// ServeSignedMedia GET /media/s/{assetID}?exp=&sig= —— 校验签名后流式返回文件。
 func (h *MediaHandler) ServeSignedMedia(w http.ResponseWriter, r *http.Request) {
 	assetID := r.PathValue("assetID")
 	expStr := r.URL.Query().Get("exp")
@@ -80,9 +80,9 @@ func (h *MediaHandler) ServeSignedMedia(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "invalid signature", http.StatusForbidden)
 		return
 	}
-	// 取文件路�?
+	// 取文件路径
 	var filePath string
-	if err := db.GlobalDBManager.QueryRow(r.Context(),
+	if err := db.ReadPool().QueryRow(r.Context(),
 		`SELECT COALESCE(file_path, '') FROM media_assets WHERE id = $1`, assetID).Scan(&filePath); err != nil || filePath == "" {
 		http.Error(w, "media not found", http.StatusNotFound)
 		return
@@ -98,7 +98,7 @@ func (h *MediaHandler) ServeSignedMedia(w http.ResponseWriter, r *http.Request) 
 	http.ServeFile(w, r, clean)
 }
 
-// mediaRoot 返回媒体存储根（与路由注册时 FileServer 同源）�?
+// mediaRoot 返回媒体存储根（与路由注册时 FileServer 同源）。
 func (h *MediaHandler) mediaRoot() string {
 	return h.root
 }
