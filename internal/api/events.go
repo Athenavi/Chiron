@@ -1,4 +1,4 @@
-ï»¿package api
+package api
 
 import (
 	"crypto/rand"
@@ -29,8 +29,8 @@ func handleSSE(w http.ResponseWriter, r *http.Request, hub *broadcast.Hub, subID
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 
-	// P1 ä¿®å¤ï¼šSSE é•¿è¿æ¥è±å…æœåŠ¡å™¨ WriteTimeoutï¼ˆé»˜è®¤ 60s ä¼šåˆ‡æ–­æµï¼‰ã€‚
-	// å®¢æˆ·ç«¯æ–­å¼€ä»ç”± r.Context().Done() æ£€æµ‹ã€‚
+	// P1 ĞŞ¸´£ºSSE ³¤Á¬½Ó»íÃâ·şÎñÆ÷ WriteTimeout£¨Ä¬ÈÏ 60s »áÇĞ¶ÏÁ÷£©¡£
+	// ¿Í»§¶Ë¶Ï¿ªÈÔÓÉ r.Context().Done() ¼ì²â¡£
 	if rc := http.NewResponseController(w); rc != nil {
 		_ = rc.SetWriteDeadline(time.Time{})
 	}
@@ -77,7 +77,7 @@ func handleSSE(w http.ResponseWriter, r *http.Request, hub *broadcast.Hub, subID
 }
 
 // SSEHandler returns an http.HandlerFunc for SSE connections.
-// Requires authentication (authMW) â€” session_id is checked for ownership
+// Requires authentication (authMW) ¡ª session_id is checked for ownership
 // against the authenticated user (S1: prevent subscribing to other users' streams).
 func SSEHandler(hub *broadcast.Hub, sessionMgr *session.Manager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -85,14 +85,14 @@ func SSEHandler(hub *broadcast.Hub, sessionMgr *session.Manager) http.HandlerFun
 		if subID == "" {
 			var buf [8]byte
 			if _, err := rand.Read(buf[:]); err != nil {
-				// æç«¯å›é€€ï¼šcrypto/rand å‡ ä¹ä¸ä¼šå¤±è´¥ï¼Œæ­¤å¤„ä»…ä½œé˜²å¾¡æ€§å…œåº•
+				// ¼«¶Ë»ØÍË£ºcrypto/rand ¼¸ºõ²»»áÊ§°Ü£¬´Ë´¦½ö×÷·ÀÓùĞÔ¶µµ×
 				subID = fmt.Sprintf("anon-%d-%d", os.Getpid(), time.Now().UnixNano())
 			} else {
 				subID = "anon-" + hex.EncodeToString(buf[:])
 			}
 		}
 		sessionID := r.URL.Query().Get("session_id")
-		// P0-S5: å¿…é¡»æ˜¾å¼æŒ‡å®š session_idï¼Œå¦åˆ™è®¢é˜…åˆ°å…¨ç«™äº‹ä»¶æµï¼ˆå«å…¶ä»–ç”¨æˆ·å¯¹è¯å†…å®¹ï¼‰
+		// P0-S5: ±ØĞëÏÔÊ½Ö¸¶¨ session_id£¬·ñÔò¶©ÔÄµ½È«Õ¾ÊÂ¼şÁ÷£¨º¬ÆäËûÓÃ»§¶Ô»°ÄÚÈİ£©
 		if sessionID == "" {
 			BadRequest(w, "session_id is required")
 			return
@@ -105,9 +105,9 @@ func SSEHandler(hub *broadcast.Hub, sessionMgr *session.Manager) http.HandlerFun
 		if sessionMgr != nil {
 			s, err := sessionMgr.GetSession(r.Context(), sessionID)
 			if err != nil {
-				// æ–°ä¼šè¯ï¼šå‰ç«¯å…ˆå»ºç«‹ SSE è¿æ¥ï¼Œ/submit æ‰ä¼šåˆ›å»º sessionã€‚
-				// æ­¤æ—¶ä¼šè¯å°šä¸å­˜åœ¨ã€æ— å†å²äº‹ä»¶å¯æ³„éœ²ï¼Œæ”¾è¡Œè¿æ¥ç­‰å¾…åˆ›å»ºï¼›
-				// å…¶ä»–é”™è¯¯ï¼ˆDB æ•…éšœç­‰ï¼‰æ‹’ç»ã€‚
+				// ĞÂ»á»°£ºÇ°¶ËÏÈ½¨Á¢ SSE Á¬½Ó£¬/submit ²Å»á´´½¨ session¡£
+				// ´ËÊ±»á»°ÉĞ²»´æÔÚ¡¢ÎŞÀúÊ·ÊÂ¼ş¿ÉĞ¹Â¶£¬·ÅĞĞÁ¬½ÓµÈ´ı´´½¨£»
+				// ÆäËû´íÎó£¨DB ¹ÊÕÏµÈ£©¾Ü¾ø¡£
 				if !errors.Is(err, session.ErrSessionNotFound) {
 					InternalError(w, "session check failed")
 					return

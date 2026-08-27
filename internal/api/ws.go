@@ -19,13 +19,13 @@ import (
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
-	// CheckOrigin 严格校验：CORS_ORIGINS 未配置则拒绝所有带 Origin 的浏览器请求，
-	// 仅放行无 Origin 的非浏览器（curl/python websockets）客户端。
-	// 生产部署必须显式配置 CORS_ORIGINS 为前端域名白名单。
+	// CheckOrigin 严格校验：CORS_ORIGINS 未配置则拒绝所有带 Origin 的浏览器请求�?
+	// 仅放行无 Origin 的非浏览器（curl/python websockets）客户端�?
+	// 生产部署必须显式配置 CORS_ORIGINS 为前端域名白名单�?
 	CheckOrigin: func(r *http.Request) bool {
 		origin := r.Header.Get("Origin")
 		if origin == "" {
-			return true // curl / 服务端 ws 客户端无 Origin
+			return true // curl / 服务�?ws 客户端无 Origin
 		}
 		allowed := os.Getenv("CORS_ORIGINS")
 		if allowed == "" || allowed == "*" {
@@ -120,8 +120,8 @@ func (h *WebSocketHub) connCount(sessionID string) int {
 
 // WebSocketHandler handles WebSocket upgrade and message loop.
 // If eventHub is non-nil, messages are bridged through Redis Pub/Sub for cross-instance delivery.
-// 连接前校验 JWT（?token= / cookie / Authorization）并验证 session 归属（S 安全修复：
-// 原实现无认证，任意客户端可订阅任意 session 的事件流）。
+// 连接前校�?JWT�?token= / cookie / Authorization）并验证 session 归属（S 安全修复�?
+// 原实现无认证，任意客户端可订阅任�?session 的事件流）�?
 func WebSocketHandler(hub *WebSocketHub, eventHub *broadcast.Hub, authenticator *auth.Authenticator, sessionMgr *session.Manager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sessionID := r.PathValue("sessionId")
@@ -133,7 +133,7 @@ func WebSocketHandler(hub *WebSocketHub, eventHub *broadcast.Hub, authenticator 
 			return
 		}
 
-		// 认证：与 SSE/AuthMiddleware 同源（?token= 供 ws 客户端使用）
+		// 认证：与 SSE/AuthMiddleware 同源�?token= �?ws 客户端使用）
 		tokenStr := r.URL.Query().Get("token")
 		if tokenStr == "" {
 			if c, err := r.Cookie("chiron_token"); err == nil && c.Value != "" {
@@ -151,7 +151,7 @@ func WebSocketHandler(hub *WebSocketHub, eventHub *broadcast.Hub, authenticator 
 			return
 		}
 
-		// 会话归属校验：仅允许访问自己的会话
+		// 会话归属校验：仅允许访问自己的会�?
 		if sessionMgr != nil {
 			sess, err := sessionMgr.GetSession(r.Context(), sessionID)
 			if err != nil || sess.UserID != claims.UserID {

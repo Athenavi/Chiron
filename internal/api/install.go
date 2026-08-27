@@ -1,4 +1,4 @@
-ï»¿package api
+package api
 
 import (
 	"context"
@@ -25,9 +25,9 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// installLockPathï¼šå®‰è£…çŠ¶æ€æ–‡ä»¶ã€‚ä½äºè¿è¡Œæ—¶æ•°æ®ç›®å½•ï¼ˆä¸ data/mediaã€data/skills åŒçº§ï¼‰ï¼Œ
-// ç”±å®‰è£…æµç¨‹å†™å…¥ï¼›æ­£å¸¸æ¨¡å¼å¯åŠ¨æ—¶è¯»å–å…¶ä¸­çš„ DSN/Redis é…ç½®è¦†ç›–å¼•å¯¼è¿æ¥ï¼ˆé‡å¯ç”Ÿæ•ˆï¼‰ã€‚
-// è·¯å¾„ç”± CHIRON_DATA_DIR ç¯å¢ƒå˜é‡æ§åˆ¶ï¼Œé»˜è®¤ ~/.chironã€‚
+// installLockPath£º°²×°×´Ì¬ÎÄ¼ş¡£Î»ÓÚÔËĞĞÊ±Êı¾İÄ¿Â¼£¨Óë data/media¡¢data/skills Í¬¼¶£©£¬
+// ÓÉ°²×°Á÷³ÌĞ´Èë£»Õı³£Ä£Ê½Æô¶¯Ê±¶ÁÈ¡ÆäÖĞµÄ DSN/Redis ÅäÖÃ¸²¸ÇÒıµ¼Á¬½Ó£¨ÖØÆôÉúĞ§£©¡£
+// Â·¾¶ÓÉ CHIRON_DATA_DIR »·¾³±äÁ¿¿ØÖÆ£¬Ä¬ÈÏ ~/.chiron¡£
 var installLockPath string
 
 // SetInstallLockPath must be called early (before any install operations)
@@ -38,21 +38,21 @@ func SetInstallLockPath(cfg *config.Config) {
 	} else if installLockPath == "" {
 		installLockPath = filepath.Join(config.GetDefaultDataDir(), "install.lock")
 	}
-	// è½¬æ¢ä¸ºç»å¯¹è·¯å¾„ï¼Œé¿å… Windows ä¸Š rename å¤±è´¥
+	// ×ª»»Îª¾ø¶ÔÂ·¾¶£¬±ÜÃâ Windows ÉÏ rename Ê§°Ü
 	if abs, err := filepath.Abs(installLockPath); err == nil {
 		installLockPath = abs
 	}
 }
-// â”€â”€ å®‰è£…ä»¤ç‰Œï¼ˆJenkins æ¨¡å¼ï¼‰â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ©¤©¤ °²×°ÁîÅÆ£¨Jenkins Ä£Ê½£©©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
 //
-// æ‰€æœ‰ /v1/install/* ç«¯ç‚¹å¿…é¡»æºå¸¦å®‰è£…ä»¤ç‰Œï¼ˆX-Install-Token header æˆ– ?token= æŸ¥è¯¢å‚æ•°ï¼‰ï¼š
-//   - APP_SECRET å·²é…ç½®ï¼šHMAC-SHA256 ç¡®å®šæ€§æ´¾ç”Ÿï¼ˆé‡å¯åä¸å˜ï¼‰ï¼›
-//   - APP_SECRET æœªé…ç½®ï¼šè¿›ç¨‹å†…éšæœºç”Ÿæˆï¼Œç”± main æ‰“å°åˆ°å¯åŠ¨æ—¥å¿—ï¼Œéƒ¨ç½²è€…å‡­æ—¥å¿—ä»¤ç‰Œè¿›å…¥å®‰è£…é¡µã€‚
+// ËùÓĞ /v1/install/* ¶Ëµã±ØĞëĞ¯´ø°²×°ÁîÅÆ£¨X-Install-Token header »ò ?token= ²éÑ¯²ÎÊı£©£º
+//   - APP_SECRET ÒÑÅäÖÃ£ºHMAC-SHA256 È·¶¨ĞÔÅÉÉú£¨ÖØÆôºó²»±ä£©£»
+//   - APP_SECRET Î´ÅäÖÃ£º½ø³ÌÄÚËæ»úÉú³É£¬ÓÉ main ´òÓ¡µ½Æô¶¯ÈÕÖ¾£¬²¿ÊğÕßÆ¾ÈÕÖ¾ÁîÅÆ½øÈë°²×°Ò³¡£
 //
-// å®‰è£…å®Œæˆåï¼ˆinstall.lock æ ‡è®° completedï¼‰å®‰è£…ç«¯ç‚¹æ‹’ç»ç»§ç»­è®¿é—®ï¼Œä»¤ç‰Œéšä¹‹å¤±æ•ˆã€‚
+// °²×°Íê³Éºó£¨install.lock ±ê¼Ç completed£©°²×°¶Ëµã¾Ü¾ø¼ÌĞø·ÃÎÊ£¬ÁîÅÆËæÖ®Ê§Ğ§¡£
 var installToken string
 
-// InitInstallToken åˆå§‹åŒ–å½“å‰è¿›ç¨‹çš„å®‰è£…ä»¤ç‰Œå¹¶è¿”å›ï¼ˆå¹‚ç­‰ï¼šé‡å¤è°ƒç”¨è¿”å›åŒä¸€ä»¤ç‰Œï¼‰ã€‚
+// InitInstallToken ³õÊ¼»¯µ±Ç°½ø³ÌµÄ°²×°ÁîÅÆ²¢·µ»Ø£¨ÃİµÈ£ºÖØ¸´µ÷ÓÃ·µ»ØÍ¬Ò»ÁîÅÆ£©¡£
 func InitInstallToken(cfg *config.Config) string {
 	if installToken != "" {
 		return installToken
@@ -62,7 +62,7 @@ func InitInstallToken(cfg *config.Config) string {
 	} else {
 		buf := make([]byte, 32)
 		if _, err := rand.Read(buf); err != nil {
-			// å¯é¢„æµ‹ä»¤ç‰Œç­‰äºæ²¡æœ‰ä»¤ç‰Œï¼šç³»ç»Ÿç†µæºä¸å¯ç”¨æ—¶å¿…é¡»æ˜¾å¼å¤±è´¥ï¼ˆå®‰å…¨ fail-fastï¼‰
+			// ¿ÉÔ¤²âÁîÅÆµÈÓÚÃ»ÓĞÁîÅÆ£ºÏµÍ³ìØÔ´²»¿ÉÓÃÊ±±ØĞëÏÔÊ½Ê§°Ü£¨°²È« fail-fast£©
 			panic("crypto/rand unavailable: cannot generate install token")
 		}
 		installToken = base64.RawURLEncoding.EncodeToString(buf)
@@ -70,10 +70,10 @@ func InitInstallToken(cfg *config.Config) string {
 	return installToken
 }
 
-// InstallToken è¿”å›å½“å‰è¿›ç¨‹çš„å®‰è£…ä»¤ç‰Œï¼ˆæœªåˆå§‹åŒ–æ—¶ä¸ºç©ºä¸²ï¼‰ã€‚
+// InstallToken ·µ»Øµ±Ç°½ø³ÌµÄ°²×°ÁîÅÆ£¨Î´³õÊ¼»¯Ê±Îª¿Õ´®£©¡£
 func InstallToken() string { return installToken }
 
-// InstallTokenIsSet æŒ‡ç¤ºå®‰è£…ä»¤ç‰Œæ˜¯å¦å·²åˆå§‹åŒ–ï¼ˆsetup æ¨¡å¼ï¼‰ã€‚
+// InstallTokenIsSet Ö¸Ê¾°²×°ÁîÅÆÊÇ·ñÒÑ³õÊ¼»¯£¨setup Ä£Ê½£©¡£
 func InstallTokenIsSet() bool { return installToken != "" }
 
 func deriveInstallToken(appSecret string) string {
@@ -82,7 +82,7 @@ func deriveInstallToken(appSecret string) string {
 	return base64.RawURLEncoding.EncodeToString(h.Sum(nil))
 }
 
-// installMW æ ¡éªŒå®‰è£…ä»¤ç‰Œï¼šX-Install-Token header ä¼˜å…ˆï¼Œå…¶æ¬¡ ?token= æŸ¥è¯¢å‚æ•°ï¼›å¸¸é‡æ—¶é—´æ¯”è¾ƒã€‚
+// installMW Ğ£Ñé°²×°ÁîÅÆ£ºX-Install-Token header ÓÅÏÈ£¬Æä´Î ?token= ²éÑ¯²ÎÊı£»³£Á¿Ê±¼ä±È½Ï¡£
 func installMW(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := r.Header.Get("X-Install-Token")
@@ -97,26 +97,26 @@ func installMW(next http.Handler) http.Handler {
 	})
 }
 
-// â”€â”€ install.lock çŠ¶æ€æ–‡ä»¶ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ©¤©¤ install.lock ×´Ì¬ÎÄ¼ş ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
 
-// InstallLock è®°å½•å®‰è£…æµç¨‹çŠ¶æ€ã€‚DSN / Redis å¯†ç ç­‰æ•æ„Ÿå­—æ®µä»¥ AES-256-GCM åŠ å¯†åè½ç›˜ï¼Œ
-// å¯†é’¥ç”± APP_SECRET æ´¾ç”Ÿï¼ˆåŸŸåˆ†ç¦»ï¼‰ï¼›ä»…å½“ APP_SECRET æœ‰æ•ˆæ—¶æ‰å…è®¸å†™å…¥ï¼ˆStep 2 å‰ç”± Step 1 æŠŠå…³ï¼‰ã€‚
+// InstallLock ¼ÇÂ¼°²×°Á÷³Ì×´Ì¬¡£DSN / Redis ÃÜÂëµÈÃô¸Ğ×Ö¶ÎÒÔ AES-256-GCM ¼ÓÃÜºóÂäÅÌ£¬
+// ÃÜÔ¿ÓÉ APP_SECRET ÅÉÉú£¨Óò·ÖÀë£©£»½öµ± APP_SECRET ÓĞĞ§Ê±²ÅÔÊĞíĞ´Èë£¨Step 2 Ç°ÓÉ Step 1 °Ñ¹Ø£©¡£
 type InstallLock struct {
 	Completed     bool      `json:"completed"`
 	Step1Done     bool      `json:"step1_done"`
 	Step2Done     bool      `json:"step2_done"`
 	Step3Done     bool      `json:"step3_done"`
 	AppSecretSet  bool      `json:"app_secret_set"`
-	AppSecretPlain string   `json:"app_secret_plain,omitempty"` // å®‰è£…å‘å¯¼ä¸­ç”¨æˆ·æäº¤çš„ APP_SECRETï¼ˆä»…å†…å­˜ä½¿ç”¨ï¼Œä¸è½ç›˜ï¼‰
-	DSN           string    `json:"dsn,omitempty"`            // AES-256-GCM åŠ å¯†
-	RedisAddr     string    `json:"redis_addr,omitempty"`     // AES-256-GCM åŠ å¯†
-	RedisPassword string    `json:"redis_password,omitempty"` // AES-256-GCM åŠ å¯†
+	AppSecretPlain string   `json:"app_secret_plain,omitempty"` // °²×°Ïòµ¼ÖĞÓÃ»§Ìá½»µÄ APP_SECRET£¨½öÄÚ´æÊ¹ÓÃ£¬²»ÂäÅÌ£©
+	DSN           string    `json:"dsn,omitempty"`            // AES-256-GCM ¼ÓÃÜ
+	RedisAddr     string    `json:"redis_addr,omitempty"`     // AES-256-GCM ¼ÓÃÜ
+	RedisPassword string    `json:"redis_password,omitempty"` // AES-256-GCM ¼ÓÃÜ
 	RedisDB       int       `json:"redis_db,omitempty"`
 	CreatedAt     time.Time `json:"created_at"`
 	CompletedAt   time.Time `json:"completed_at,omitempty"`
 }
 
-// LoadInstallLock è¯»å–å®‰è£…çŠ¶æ€ï¼›æ–‡ä»¶ä¸å­˜åœ¨æ—¶è¿”å›ç©ºçŠ¶æ€ï¼ˆæœªå®‰è£…ï¼‰ã€‚
+// LoadInstallLock ¶ÁÈ¡°²×°×´Ì¬£»ÎÄ¼ş²»´æÔÚÊ±·µ»Ø¿Õ×´Ì¬£¨Î´°²×°£©¡£
 func LoadInstallLock() (*InstallLock, error) {
 	data, err := os.ReadFile(installLockPath)
 	if err != nil {
@@ -150,7 +150,7 @@ func SaveInstallLock(lk *InstallLock) error {
 		return err
 	}
 	tmpName := tmp.Name()
-	defer os.Remove(tmpName) // å¤±è´¥è·¯å¾„æ¸…ç†ï¼›æˆåŠŸ rename åæ— æ®‹ç•™
+	defer os.Remove(tmpName) // Ê§°ÜÂ·¾¶ÇåÀí£»³É¹¦ rename ºóÎŞ²ĞÁô
 	if err := tmp.Chmod(0o600); err != nil {
 		tmp.Close()
 		return err
@@ -162,12 +162,12 @@ func SaveInstallLock(lk *InstallLock) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	// ç›´æ¥ rename è¦†ç›–ï¼Œä¸å…ˆåˆ é™¤æ—§æ–‡ä»¶ï¼ˆWindows å…¼å®¹æ€§æ›´å¥½ï¼‰
+	// Ö±½Ó rename ¸²¸Ç£¬²»ÏÈÉ¾³ı¾ÉÎÄ¼ş£¨Windows ¼æÈİĞÔ¸üºÃ£©
 	return os.Rename(tmpName, absPath)
 }
 
 
-// lockEncryptKey ç”± APP_SECRET æ´¾ç”Ÿ install.lock çš„ AES-256-GCM å¯†é’¥ï¼ˆåŸŸåˆ†ç¦»ï¼‰ã€‚
+// lockEncryptKey ÓÉ APP_SECRET ÅÉÉú install.lock µÄ AES-256-GCM ÃÜÔ¿£¨Óò·ÖÀë£©¡£
 func lockEncryptKey(appSecret string) []byte {
 	h := hmac.New(sha256.New, []byte(appSecret))
 	h.Write([]byte("chiron-install-lock-key"))
@@ -221,7 +221,7 @@ func decryptSecret(appSecret, enc string) (string, error) {
 	return string(plain), nil
 }
 
-// dataDirWritable æ¢æµ‹å®‰è£…çŠ¶æ€æ–‡ä»¶æ‰€åœ¨ç›®å½•æ˜¯å¦å¯å†™ï¼ˆStep 1 ç¯å¢ƒæ£€æµ‹é¡¹ï¼‰ã€‚
+// dataDirWritable Ì½²â°²×°×´Ì¬ÎÄ¼şËùÔÚÄ¿Â¼ÊÇ·ñ¿ÉĞ´£¨Step 1 »·¾³¼ì²âÏî£©¡£
 func dataDirWritable() bool {
 	dir := filepath.Dir(installLockPath)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -237,11 +237,11 @@ func dataDirWritable() bool {
 	return true
 }
 
-// ApplyInstallLockConfig ç”± main åœ¨å¯åŠ¨æ—¶è°ƒç”¨ï¼ˆä»… APP_SECRET æœ‰æ•ˆæ—¶ï¼‰ï¼š
-// è¯»å–å·²å®Œæˆçš„ install.lockï¼Œç”¨å…¶ä¸­åŠ å¯†ä¿å­˜çš„ DSN/Redis é…ç½®è¦†ç›–å¼•å¯¼è¿æ¥å€¼ï¼ˆé‡å¯ç”Ÿæ•ˆï¼‰ã€‚
-// lock ä¸å­˜åœ¨ã€æœªå®Œæˆæˆ–è§£å¯†å¤±è´¥ï¼ˆAPP_SECRET å˜æ›´ï¼‰æ—¶ä¸ºç©ºæ“ä½œã€‚
-// ä¼˜å…ˆçº§ï¼šPOSTGRES_DSN ä»¥ env æ˜¾å¼è®¾ç½®ä¸ºå‡†ï¼ˆlock ä»…åœ¨ env æœªè®¾ç½®æ—¶å…œåº•ï¼‰ï¼›
-// Redis é…ç½®ä»¥ lock ä¸ºå‡†ï¼ˆå®‰è£…å‘å¯¼æœ€è¿‘ä¸€æ¬¡ç¡®è®¤çš„å€¼ï¼‰ï¼Œåå° system_settings å¯å†è¦†ç›–ã€‚
+// ApplyInstallLockConfig ÓÉ main ÔÚÆô¶¯Ê±µ÷ÓÃ£¨½ö APP_SECRET ÓĞĞ§Ê±£©£º
+// ¶ÁÈ¡ÒÑÍê³ÉµÄ install.lock£¬ÓÃÆäÖĞ¼ÓÃÜ±£´æµÄ DSN/Redis ÅäÖÃ¸²¸ÇÒıµ¼Á¬½ÓÖµ£¨ÖØÆôÉúĞ§£©¡£
+// lock ²»´æÔÚ¡¢Î´Íê³É»ò½âÃÜÊ§°Ü£¨APP_SECRET ±ä¸ü£©Ê±Îª¿Õ²Ù×÷¡£
+// ÓÅÏÈ¼¶£ºPOSTGRES_DSN ÒÔ env ÏÔÊ½ÉèÖÃÎª×¼£¨lock ½öÔÚ env Î´ÉèÖÃÊ±¶µµ×£©£»
+// Redis ÅäÖÃÒÔ lock Îª×¼£¨°²×°Ïòµ¼×î½üÒ»´ÎÈ·ÈÏµÄÖµ£©£¬ºóÌ¨ system_settings ¿ÉÔÙ¸²¸Ç¡£
 func ApplyInstallLockConfig(cfg *config.Config) {
 	if cfg == nil || !cfg.ValidateAppSecret() {
 		return
@@ -270,7 +270,7 @@ func ApplyInstallLockConfig(cfg *config.Config) {
 	if pwd, err := decryptSecret(cfg.AppSecret, lk.RedisPassword); err == nil {
 		cfg.RedisPassword = pwd
 	}
-	// RedisDB ä»…åœ¨ Redis é…ç½®æ•´ä½“å¯è§£å¯†æ—¶åº”ç”¨ï¼Œé¿å…åŠå¥—é…ç½®ç”Ÿæ•ˆï¼ˆä¸€è‡´æ€§ï¼‰
+	// RedisDB ½öÔÚ Redis ÅäÖÃÕûÌå¿É½âÃÜÊ±Ó¦ÓÃ£¬±ÜÃâ°ëÌ×ÅäÖÃÉúĞ§£¨Ò»ÖÂĞÔ£©
 	if redisOK && lk.RedisDB != 0 {
 		cfg.RedisDB = lk.RedisDB
 	}
@@ -295,7 +295,7 @@ type InstallStatus struct {
 	DB     bool   `json:"db"`
 	Redis  bool   `json:"redis"`
 
-	// ä¾èµ–æ¢æµ‹æ˜ç»†ï¼ˆåˆå§‹åŒ–é¡µé¢å±•ç¤ºå„å°±ç»ªé¡¹ï¼‰
+	// ÒÀÀµÌ½²âÃ÷Ï¸£¨³õÊ¼»¯Ò³ÃæÕ¹Ê¾¸÷¾ÍĞ÷Ïî£©
 	Deps []InstallDep `json:"deps,omitempty"`
 }
 
@@ -314,28 +314,28 @@ func (h *InstallHandler) Status(w http.ResponseWriter, r *http.Request) {
 	var status InstallStatus
 	status.Deps = make([]InstallDep, 0, 2)
 
-	// ä¾èµ– 1ï¼šPostgreSQL è¿é€šæ€§ï¼ˆçœŸå® pingï¼‰
-	dbOK := db.Pool != nil && db.Pool.Ping(ctx) == nil
+	// ÒÀÀµ 1£ºPostgreSQL Á¬Í¨ĞÔ£¨ÕæÊµ ping£©
+	dbOK := db.GlobalDBManager.IsAvailable() && db.GlobalDBManager.Ping(ctx) == nil
 	status.DB = dbOK
 	status.Deps = append(status.Deps, InstallDep{
 		Name:    "postgres",
 		OK:      dbOK,
-		Message: map[bool]string{true: "PostgreSQL è¿æ¥æ­£å¸¸", false: "PostgreSQL ä¸å¯ç”¨ï¼šè¯·æ£€æŸ¥ POSTGRES_DSN"}[dbOK],
+		Message: map[bool]string{true: "PostgreSQL Á¬½ÓÕı³£", false: "PostgreSQL ²»¿ÉÓÃ£ºÇë¼ì²é POSTGRES_DSN"}[dbOK],
 	})
 
-	// ä¾èµ– 2ï¼šRedis è¿é€šæ€§ï¼ˆçœŸå® pingï¼‰
+	// ÒÀÀµ 2£ºRedis Á¬Í¨ĞÔ£¨ÕæÊµ ping£©
 	redisOK := db.Redis != nil && db.Redis.Ping(ctx).Err() == nil
 	status.Redis = redisOK
 	status.Deps = append(status.Deps, InstallDep{
 		Name:    "redis",
 		OK:      redisOK,
-		Message: map[bool]string{true: "Redis è¿æ¥æ­£å¸¸", false: "Redis ä¸å¯ç”¨ï¼šè¯·æ£€æŸ¥ REDIS_ADDR / å¯†ç "}[redisOK],
+		Message: map[bool]string{true: "Redis Á¬½ÓÕı³£", false: "Redis ²»¿ÉÓÃ£ºÇë¼ì²é REDIS_ADDR / ÃÜÂë"}[redisOK],
 	})
 
 	// If at least one user with role 'owner' exists, system is initialized
 	if dbOK {
 		var count int
-		err := db.Pool.QueryRow(r.Context(), `SELECT COUNT(*) FROM users WHERE role = 'owner'`).Scan(&count)
+		err := db.GlobalDBManager.QueryRow(r.Context(), `SELECT COUNT(*) FROM users WHERE role = 'owner'`).Scan(&count)
 		if err != nil || count == 0 {
 			status.Needed = true
 			status.Reason = "no admin user configured"
@@ -345,7 +345,7 @@ func (h *InstallHandler) Status(w http.ResponseWriter, r *http.Request) {
 		status.Reason = "postgres unavailable"
 	}
 
-	// æ„å»ºå“åº”
+	// ¹¹½¨ÏìÓ¦
 	resp := map[string]interface{}{
 		"needed": status.Needed,
 		"db":     status.DB,
@@ -356,7 +356,7 @@ func (h *InstallHandler) Status(w http.ResponseWriter, r *http.Request) {
 		resp["reason"] = status.Reason
 	}
 
-	// å¦‚æœå®‰è£…æœªå®Œæˆï¼Œè¿”å›å®‰è£…ä»¤ç‰Œä¾›å‰ç«¯ä½¿ç”¨
+	// Èç¹û°²×°Î´Íê³É£¬·µ»Ø°²×°ÁîÅÆ¹©Ç°¶ËÊ¹ÓÃ
 	if status.Needed {
 		resp["install_token"] = InstallToken()
 	}
@@ -364,10 +364,10 @@ func (h *InstallHandler) Status(w http.ResponseWriter, r *http.Request) {
 	OK(w, resp)
 }
 
-// â”€â”€ å®‰è£…æµç¨‹ï¼ˆsetup æ¨¡å¼ï¼‰â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ©¤©¤ °²×°Á÷³Ì£¨setup Ä£Ê½£©©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
 
-// Step1Request æ— è¯·æ±‚ä½“ã€‚
-// Step1 ç¯å¢ƒæ£€æµ‹ï¼šAPP_SECRET æ˜¯å¦å·²é…ç½®ï¼ˆéå¼±å€¼/å ä½ç¬¦ï¼‰ã€å®‰è£…çŠ¶æ€ç›®å½•æ˜¯å¦å¯å†™ã€å½“å‰å®‰è£…è¿›åº¦ã€‚
+// Step1Request ÎŞÇëÇóÌå¡£
+// Step1 »·¾³¼ì²â£ºAPP_SECRET ÊÇ·ñÒÑÅäÖÃ£¨·ÇÈõÖµ/Õ¼Î»·û£©¡¢°²×°×´Ì¬Ä¿Â¼ÊÇ·ñ¿ÉĞ´¡¢µ±Ç°°²×°½ø¶È¡£
 // GET /v1/install/step1
 func (h *InstallHandler) Step1(w http.ResponseWriter, r *http.Request) {
 	lk, err := LoadInstallLock()
@@ -379,7 +379,7 @@ func (h *InstallHandler) Step1(w http.ResponseWriter, r *http.Request) {
 	if lk.Completed {
 		OK(w, map[string]interface{}{
 			"completed":      true,
-			"message":        "ç³»ç»Ÿå·²å®Œæˆå®‰è£…ï¼Œå®‰è£…å…¥å£å·²å…³é—­",
+			"message":        "ÏµÍ³ÒÑÍê³É°²×°£¬°²×°Èë¿ÚÒÑ¹Ø±Õ",
 			"app_secret_set": h.cfg.ValidateAppSecret(),
 		})
 		return
@@ -401,19 +401,19 @@ type Step2Request struct {
 	RedisDB       int    `json:"redis_db,omitempty"`
 }
 
-// Step2 ä¿å­˜æ•°æ®åº“é…ç½®ï¼šéªŒè¯ PG è¿æ¥ï¼ˆæˆåŠŸå³å»ºç«‹å…¨å±€è¿æ¥æ± ä¾› Step 3 ä½¿ç”¨ï¼‰â†’
-// Redis å¯é€‰ï¼ˆå¡«å†™åˆ™éªŒè¯è¿é€šæ€§ï¼‰â†’ æ•æ„Ÿå­—æ®µ AES-256-GCM åŠ å¯†åå†™å…¥ install.lockã€‚
-// é…ç½®åœ¨é‡å¯æœåŠ¡åå…¨é¢ç”Ÿæ•ˆï¼ˆä¸ç°æœ‰ã€Œé‡å¯ç”Ÿæ•ˆã€çš„æ¶æ„ä¸€è‡´ï¼‰ã€‚
-// å½“ APP_SECRET æœªåœ¨ç¯å¢ƒå˜é‡ä¸­é…ç½®æ—¶ï¼Œå…è®¸é€šè¿‡è¯·æ±‚ä½“æäº¤ app_secretï¼Œ
-// ç”¨äºåŠ å¯†è½ç›˜å¹¶ä¾› Step 3 åˆ›å»ºç®¡ç†å‘˜ä½¿ç”¨ï¼ˆé‡å¯åä»éœ€è¦åœ¨ .env ä¸­é…ç½®ï¼‰ã€‚
+// Step2 ±£´æÊı¾İ¿âÅäÖÃ£ºÑéÖ¤ PG Á¬½Ó£¨³É¹¦¼´½¨Á¢È«¾ÖÁ¬½Ó³Ø¹© Step 3 Ê¹ÓÃ£©¡ú
+// Redis ¿ÉÑ¡£¨ÌîĞ´ÔòÑéÖ¤Á¬Í¨ĞÔ£©¡ú Ãô¸Ğ×Ö¶Î AES-256-GCM ¼ÓÃÜºóĞ´Èë install.lock¡£
+// ÅäÖÃÔÚÖØÆô·şÎñºóÈ«ÃæÉúĞ§£¨ÓëÏÖÓĞ¡¸ÖØÆôÉúĞ§¡¹µÄ¼Ü¹¹Ò»ÖÂ£©¡£
+// µ± APP_SECRET Î´ÔÚ»·¾³±äÁ¿ÖĞÅäÖÃÊ±£¬ÔÊĞíÍ¨¹ıÇëÇóÌåÌá½» app_secret£¬
+// ÓÃÓÚ¼ÓÃÜÂäÅÌ²¢¹© Step 3 ´´½¨¹ÜÀíÔ±Ê¹ÓÃ£¨ÖØÆôºóÈÔĞèÒªÔÚ .env ÖĞÅäÖÃ£©¡£
 // POST /v1/install/step2
 func (h *InstallHandler) Step2(w http.ResponseWriter, r *http.Request) {
-	// ç¡®å®šç”¨äºåŠ å¯†çš„ APP_SECRETï¼šç¯å¢ƒå˜é‡ä¼˜å…ˆï¼Œå…¶æ¬¡è¯·æ±‚ä½“æäº¤
+	// È·¶¨ÓÃÓÚ¼ÓÃÜµÄ APP_SECRET£º»·¾³±äÁ¿ÓÅÏÈ£¬Æä´ÎÇëÇóÌåÌá½»
 	appSecret := h.cfg.AppSecret
 	if !h.cfg.ValidateAppSecret() {
-		// APP_SECRET æœªé…ç½®ï¼Œå…è®¸ä»è¯·æ±‚ä½“ä¸­æäº¤
-		// ä½†æ­¤æ—¶æ— æ³•è§£å¯†ä¹‹å‰çš„ lockï¼Œå› æ­¤æš‚ä¸å¤„ç†å·²æœ‰ lock çš„æƒ…å†µ
-		// å…ˆè§£æè¯·æ±‚ä½“è·å– app_secret
+		// APP_SECRET Î´ÅäÖÃ£¬ÔÊĞí´ÓÇëÇóÌåÖĞÌá½»
+		// µ«´ËÊ±ÎŞ·¨½âÃÜÖ®Ç°µÄ lock£¬Òò´ËÔİ²»´¦ÀíÒÑÓĞ lock µÄÇé¿ö
+		// ÏÈ½âÎöÇëÇóÌå»ñÈ¡ app_secret
 		lk, lkErr := LoadInstallLock()
 		if lkErr != nil {
 			slog.Error("install step2: read install lock", "error", lkErr)
@@ -421,11 +421,11 @@ func (h *InstallHandler) Step2(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if lk.Completed {
-			BadRequest(w, "ç³»ç»Ÿå·²å®Œæˆå®‰è£…")
+			BadRequest(w, "ÏµÍ³ÒÑÍê³É°²×°")
 			return
 		}
 
-		// å…ˆè§£ç è¯·æ±‚ä½“ï¼ˆä¸æå‰æ ¡éªŒ app_secretï¼Œè®©åç»­é€»è¾‘å¤„ç†ï¼‰
+		// ÏÈ½âÂëÇëÇóÌå£¨²»ÌáÇ°Ğ£Ñé app_secret£¬ÈÃºóĞøÂß¼­´¦Àí£©
 		var req Step2Request
 		if err := DecodeJSON(w, r, &req); err != nil {
 			BadRequest(w, ErrInvalidReq)
@@ -433,49 +433,49 @@ func (h *InstallHandler) Step2(w http.ResponseWriter, r *http.Request) {
 		}
 		req.PostgresDSN = strings.TrimSpace(req.PostgresDSN)
 		if req.PostgresDSN == "" {
-			BadRequest(w, "postgres_dsn å¿…å¡«")
+			BadRequest(w, "postgres_dsn ±ØÌî")
 			return
 		}
 		appSecret = strings.TrimSpace(req.AppSecret)
 		if appSecret == "" {
-			BadRequest(w, "APP_SECRET æœªé…ç½®ï¼šè¯·åœ¨è¡¨å•ä¸­å¡«å†™éƒ¨ç½²ä¸»å¯†é’¥ï¼ˆAPP_SECRETï¼‰ï¼Œæˆ–å…ˆåœ¨ .env é…ç½®åé‡å¯æœåŠ¡")
+			BadRequest(w, "APP_SECRET Î´ÅäÖÃ£ºÇëÔÚ±íµ¥ÖĞÌîĞ´²¿ÊğÖ÷ÃÜÔ¿£¨APP_SECRET£©£¬»òÏÈÔÚ .env ÅäÖÃºóÖØÆô·şÎñ")
 			return
 		}
-		// ä¸´æ—¶æ ¡éªŒï¼šç”¨æäº¤çš„ app_secret éªŒè¯å¼ºåº¦
+		// ÁÙÊ±Ğ£Ñé£ºÓÃÌá½»µÄ app_secret ÑéÖ¤Ç¿¶È
 		if !config.ValidateJWTSecret(appSecret) {
-			BadRequest(w, "APP_SECRET å¼ºåº¦ä¸è¶³ï¼šè¯·ä½¿ç”¨ 32 ä½ä»¥ä¸Šçš„éšæœºå­—ç¬¦ä¸²")
+			BadRequest(w, "APP_SECRET Ç¿¶È²»×ã£ºÇëÊ¹ÓÃ 32 Î»ÒÔÉÏµÄËæ»ú×Ö·û´®")
 			return
 		}
-		// ä¿å­˜åˆ° lock ä¸­ä¾›åç»­æ­¥éª¤ä½¿ç”¨
+		// ±£´æµ½ lock ÖĞ¹©ºóĞø²½ÖèÊ¹ÓÃ
 		lk.AppSecretPlain = appSecret
 		lk.AppSecretSet = true
 		if lk.CreatedAt.IsZero() {
 			lk.CreatedAt = time.Now()
 		}
 		lk.Step1Done = true
-		// æš‚ä¸ä¿å­˜ lockï¼ˆStep 3 å®Œæˆæ—¶ä¸€èµ·ä¿å­˜ï¼‰
+		// Ôİ²»±£´æ lock£¨Step 3 Íê³ÉÊ±Ò»Æğ±£´æ£©
 
-		// 1) éªŒè¯ PostgreSQL è¿æ¥
+		// 1) ÑéÖ¤ PostgreSQL Á¬½Ó
 		ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
 		defer cancel()
 		if err := db.ConnectPostgres(ctx, req.PostgresDSN, h.cfg.PostgresMaxConn, h.cfg.PostgresMinConn); err != nil {
 			slog.Warn("install step2: postgres connect failed", "error", err)
-			BadRequest(w, "PostgreSQL è¿æ¥å¤±è´¥ï¼šè¯·æ£€æŸ¥ DSN åœ°å€ã€ç«¯å£ã€è´¦å·å¯†ç ä¸ç½‘ç»œè¿é€šæ€§")
+			BadRequest(w, "PostgreSQL Á¬½ÓÊ§°Ü£ºÇë¼ì²é DSN µØÖ·¡¢¶Ë¿Ú¡¢ÕËºÅÃÜÂëÓëÍøÂçÁ¬Í¨ĞÔ")
 			return
 		}
 
-		// 1.5) æ‰§è¡Œæ•°æ®åº“è¿ç§»ï¼ˆåˆ›å»ºè¡¨ç»“æ„ï¼‰
+		// 1.5) Ö´ĞĞÊı¾İ¿âÇ¨ÒÆ£¨´´½¨±í½á¹¹£©
 		if err := db.RunMigrations(req.PostgresDSN); err != nil {
 			slog.Warn("install step2: database migrations failed", "error", err)
-			InternalError(w, "æ•°æ®åº“è¿ç§»å¤±è´¥ï¼šè¯·æ£€æŸ¥ DSN æƒé™ï¼Œç¡®ä¿å¯æ‰§è¡Œ DDL")
+			InternalError(w, "Êı¾İ¿âÇ¨ÒÆÊ§°Ü£ºÇë¼ì²é DSN È¨ÏŞ£¬È·±£¿ÉÖ´ĞĞ DDL")
 			return
 		}
-		// å¹‚ç­‰ seed é»˜è®¤ç§Ÿæˆ·ï¼ˆç¼ºå¤±æ—¶æ³¨å†Œä¼šè¿åå¤–é”® 23503ï¼‰
-		if err := db.EnsureDefaultTenant(ctx, db.Pool); err != nil {
+		// ÃİµÈ seed Ä¬ÈÏ×â»§£¨È±Ê§Ê±×¢²á»áÎ¥·´Íâ¼ü 23503£©
+		if err := func() error { pool, err := db.GlobalDBManager.GetPool(); if err != nil { return err }; return db.EnsureDefaultTenant(ctx, pool) }(); err != nil {
 			slog.Warn("install step2: ensure default tenant failed", "error", err)
 		}
 
-		// 2) Redis å¯é€‰
+		// 2) Redis ¿ÉÑ¡
 		redisAddr := strings.TrimSpace(req.RedisAddr)
 		redisSet := redisAddr != ""
 		if redisSet {
@@ -489,7 +489,7 @@ func (h *InstallHandler) Step2(w http.ResponseWriter, r *http.Request) {
 			rc, rerr := db.NewRedisClient(rcfg)
 			if rerr != nil {
 				slog.Warn("install step2: redis init failed", "error", rerr)
-				BadRequest(w, "Redis è¿æ¥å¤±è´¥ï¼šè¯·æ£€æŸ¥åœ°å€ã€ç«¯å£ä¸å¯†ç ")
+				BadRequest(w, "Redis Á¬½ÓÊ§°Ü£ºÇë¼ì²éµØÖ·¡¢¶Ë¿ÚÓëÃÜÂë")
 				return
 			}
 			pingCtx, cancelPing := context.WithTimeout(r.Context(), 5*time.Second)
@@ -498,12 +498,12 @@ func (h *InstallHandler) Step2(w http.ResponseWriter, r *http.Request) {
 			_ = rc.Close()
 			if perr != nil {
 				slog.Warn("install step2: redis ping failed", "error", perr)
-				BadRequest(w, "Redis è¿æ¥å¤±è´¥ï¼šè¯·æ£€æŸ¥åœ°å€ã€ç«¯å£ä¸å¯†ç ")
+				BadRequest(w, "Redis Á¬½ÓÊ§°Ü£ºÇë¼ì²éµØÖ·¡¢¶Ë¿ÚÓëÃÜÂë")
 				return
 			}
 		}
 
-		// 3) åŠ å¯†è½ç›˜ï¼ˆå¯†é’¥ä½¿ç”¨æäº¤çš„ app_secretï¼‰
+		// 3) ¼ÓÃÜÂäÅÌ£¨ÃÜÔ¿Ê¹ÓÃÌá½»µÄ app_secret£©
 		dsnEnc, err := encryptSecret(appSecret, req.PostgresDSN)
 		if err != nil {
 			slog.Error("install step2: encrypt dsn", "error", err)
@@ -518,7 +518,7 @@ func (h *InstallHandler) Step2(w http.ResponseWriter, r *http.Request) {
 		lk.RedisAddr = redisAddrEnc
 		lk.RedisPassword = redisPwdEnc
 		lk.RedisDB = req.RedisDB
-		// ä¸ä¿å­˜ app_secret_plain åˆ°ç£ç›˜
+		// ²»±£´æ app_secret_plain µ½´ÅÅÌ
 		clearAppSecret := lk.AppSecretPlain
 		lk.AppSecretPlain = ""
 		if err := SaveInstallLock(lk); err != nil {
@@ -526,16 +526,16 @@ func (h *InstallHandler) Step2(w http.ResponseWriter, r *http.Request) {
 			InternalError(w, "failed to save install.lock")
 			return
 		}
-		lk.AppSecretPlain = clearAppSecret // æ¢å¤å†…å­˜ä¸­ä¾›åç»­ä½¿ç”¨
+		lk.AppSecretPlain = clearAppSecret // »Ö¸´ÄÚ´æÖĞ¹©ºóĞøÊ¹ÓÃ
 
-		// æŒä¹…åŒ– APP_SECRET åˆ° config/.envï¼Œä¾› Alembic è§£å¯†ä½¿ç”¨
+		// ³Ö¾Ã»¯ APP_SECRET µ½ config/.env£¬¹© Alembic ½âÃÜÊ¹ÓÃ
 		if err := saveAppSecretToEnv(appSecret); err != nil {
 			slog.Warn("install step2: save app_secret to .env failed", "error", err)
 		}
 
 		OK(w, map[string]interface{}{
 			"step2_done": true,
-			"message":    "æ•°æ®åº“é…ç½®å·²ä¿å­˜å¹¶éªŒè¯é€šè¿‡ï¼›è¯·ç»§ç»­åˆ›å»ºç®¡ç†å‘˜è´¦æˆ·",
+			"message":    "Êı¾İ¿âÅäÖÃÒÑ±£´æ²¢ÑéÖ¤Í¨¹ı£»Çë¼ÌĞø´´½¨¹ÜÀíÔ±ÕË»§",
 		})
 		return
 	}
@@ -546,7 +546,7 @@ func (h *InstallHandler) Step2(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if lk.Completed {
-		BadRequest(w, "ç³»ç»Ÿå·²å®Œæˆå®‰è£…")
+		BadRequest(w, "ÏµÍ³ÒÑÍê³É°²×°")
 		return
 	}
 
@@ -557,32 +557,32 @@ func (h *InstallHandler) Step2(w http.ResponseWriter, r *http.Request) {
 	}
 	req.PostgresDSN = strings.TrimSpace(req.PostgresDSN)
 	if req.PostgresDSN == "" {
-		BadRequest(w, "postgres_dsn å¿…å¡«")
+		BadRequest(w, "postgres_dsn ±ØÌî")
 		return
 	}
 
-	// 1) éªŒè¯ PostgreSQL è¿æ¥ï¼›æˆåŠŸå db.Pool å·²å°±ç»ªï¼ˆStep 3 åˆ›å»ºç®¡ç†å‘˜ä¾èµ–ï¼‰
+	// 1) ÑéÖ¤ PostgreSQL Á¬½Ó£»³É¹¦ºó db.Pool ÒÑ¾ÍĞ÷£¨Step 3 ´´½¨¹ÜÀíÔ±ÒÀÀµ£©
 	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
 	defer cancel()
 	if err := db.ConnectPostgres(ctx, req.PostgresDSN, h.cfg.PostgresMaxConn, h.cfg.PostgresMinConn); err != nil {
-		// è¿æ¥é”™è¯¯ç»†èŠ‚ï¼ˆhost/port/user/DSNï¼‰ä»…è®°å½•æœåŠ¡ç«¯æ—¥å¿—ï¼Œå®¢æˆ·ç«¯åªç»™é€šç”¨æç¤º
+		// Á¬½Ó´íÎóÏ¸½Ú£¨host/port/user/DSN£©½ö¼ÇÂ¼·şÎñ¶ËÈÕÖ¾£¬¿Í»§¶ËÖ»¸øÍ¨ÓÃÌáÊ¾
 		slog.Warn("install step2: postgres connect failed", "error", err)
-		BadRequest(w, "PostgreSQL è¿æ¥å¤±è´¥ï¼šè¯·æ£€æŸ¥ DSN åœ°å€ã€ç«¯å£ã€è´¦å·å¯†ç ä¸ç½‘ç»œè¿é€šæ€§")
+		BadRequest(w, "PostgreSQL Á¬½ÓÊ§°Ü£ºÇë¼ì²é DSN µØÖ·¡¢¶Ë¿Ú¡¢ÕËºÅÃÜÂëÓëÍøÂçÁ¬Í¨ĞÔ")
 		return
 	}
 
-	// 1.5) æ‰§è¡Œæ•°æ®åº“è¿ç§»ï¼ˆåˆ›å»ºè¡¨ç»“æ„ï¼‰
+	// 1.5) Ö´ĞĞÊı¾İ¿âÇ¨ÒÆ£¨´´½¨±í½á¹¹£©
 	if err := db.RunMigrations(req.PostgresDSN); err != nil {
 		slog.Warn("install step2: database migrations failed", "error", err)
-		InternalError(w, "æ•°æ®åº“è¿ç§»å¤±è´¥ï¼šè¯·æ£€æŸ¥ DSN æƒé™ï¼Œç¡®ä¿å¯æ‰§è¡Œ DDL")
+		InternalError(w, "Êı¾İ¿âÇ¨ÒÆÊ§°Ü£ºÇë¼ì²é DSN È¨ÏŞ£¬È·±£¿ÉÖ´ĞĞ DDL")
 		return
 	}
-	// å¹‚ç­‰ seed é»˜è®¤ç§Ÿæˆ·ï¼ˆç¼ºå¤±æ—¶æ³¨å†Œä¼šè¿åå¤–é”® 23503ï¼‰
-	if err := db.EnsureDefaultTenant(ctx, db.Pool); err != nil {
+	// ÃİµÈ seed Ä¬ÈÏ×â»§£¨È±Ê§Ê±×¢²á»áÎ¥·´Íâ¼ü 23503£©
+	if err := func() error { pool, err := db.GlobalDBManager.GetPool(); if err != nil { return err }; return db.EnsureDefaultTenant(ctx, pool) }(); err != nil {
 		slog.Warn("install step2: ensure default tenant failed", "error", err)
 	}
 
-	// 2) Redis å¯é€‰ï¼šå¡«å†™åˆ™éªŒè¯è¿é€šæ€§ï¼ˆç•™ç©º = ä¸ä¿å­˜ Redis é…ç½®ï¼Œé‡å¯åæŒ‰ env é»˜è®¤å¹¶é™çº§è¿è¡Œï¼‰
+	// 2) Redis ¿ÉÑ¡£ºÌîĞ´ÔòÑéÖ¤Á¬Í¨ĞÔ£¨Áô¿Õ = ²»±£´æ Redis ÅäÖÃ£¬ÖØÆôºó°´ env Ä¬ÈÏ²¢½µ¼¶ÔËĞĞ£©
 	redisAddr := strings.TrimSpace(req.RedisAddr)
 	redisSet := redisAddr != ""
 	if redisSet {
@@ -596,7 +596,7 @@ func (h *InstallHandler) Step2(w http.ResponseWriter, r *http.Request) {
 		rc, rerr := db.NewRedisClient(rcfg)
 		if rerr != nil {
 			slog.Warn("install step2: redis init failed", "error", rerr)
-			BadRequest(w, "Redis è¿æ¥å¤±è´¥ï¼šè¯·æ£€æŸ¥åœ°å€ã€ç«¯å£ä¸å¯†ç ")
+			BadRequest(w, "Redis Á¬½ÓÊ§°Ü£ºÇë¼ì²éµØÖ·¡¢¶Ë¿ÚÓëÃÜÂë")
 			return
 		}
 		pingCtx, cancelPing := context.WithTimeout(r.Context(), 5*time.Second)
@@ -605,12 +605,12 @@ func (h *InstallHandler) Step2(w http.ResponseWriter, r *http.Request) {
 		_ = rc.Close()
 		if perr != nil {
 			slog.Warn("install step2: redis ping failed", "error", perr)
-			BadRequest(w, "Redis è¿æ¥å¤±è´¥ï¼šè¯·æ£€æŸ¥åœ°å€ã€ç«¯å£ä¸å¯†ç ")
+			BadRequest(w, "Redis Á¬½ÓÊ§°Ü£ºÇë¼ì²éµØÖ·¡¢¶Ë¿ÚÓëÃÜÂë")
 			return
 		}
 	}
 
-	// 3) åŠ å¯†è½ç›˜ï¼ˆå¯†é’¥æ´¾ç”Ÿè‡ª APP_SECRETï¼Œæœ¬æ­¥ä¹‹å‰å·²æ ¡éªŒå…¶æœ‰æ•ˆæ€§ï¼‰
+	// 3) ¼ÓÃÜÂäÅÌ£¨ÃÜÔ¿ÅÉÉú×Ô APP_SECRET£¬±¾²½Ö®Ç°ÒÑĞ£ÑéÆäÓĞĞ§ĞÔ£©
 	dsnEnc, err := encryptSecret(h.cfg.AppSecret, req.PostgresDSN)
 	if err != nil {
 		slog.Error("install step2: encrypt dsn", "error", err)
@@ -636,7 +636,7 @@ func (h *InstallHandler) Step2(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// æŒä¹…åŒ– APP_SECRET åˆ° config/.envï¼Œä¾› Alembic è§£å¯†ä½¿ç”¨
+	// ³Ö¾Ã»¯ APP_SECRET µ½ config/.env£¬¹© Alembic ½âÃÜÊ¹ÓÃ
 	if err := saveAppSecretToEnv(h.cfg.AppSecret); err != nil {
 		slog.Warn("install step2: save app_secret to .env failed", "error", err)
 	}
@@ -645,7 +645,7 @@ func (h *InstallHandler) Step2(w http.ResponseWriter, r *http.Request) {
 
 	OK(w, map[string]interface{}{
 		"step2_done": true,
-		"message":    "æ•°æ®åº“é…ç½®å·²ä¿å­˜å¹¶éªŒè¯é€šè¿‡ï¼›è¯·ç»§ç»­åˆ›å»ºç®¡ç†å‘˜è´¦æˆ·",
+		"message":    "Êı¾İ¿âÅäÖÃÒÑ±£´æ²¢ÑéÖ¤Í¨¹ı£»Çë¼ÌĞø´´½¨¹ÜÀíÔ±ÕË»§",
 	})
 }
 
@@ -655,12 +655,12 @@ type Step3Request struct {
 	Name     string `json:"name"`
 }
 
-// Step3 åˆ›å»ºé¦–ä¸ª owner ç®¡ç†å‘˜å¹¶æ ‡è®°å®‰è£…å®Œæˆã€‚å®Œæˆåå®‰è£…å…¥å£å…³é—­ï¼›
-// ç”±äº Step 2 ä¿å­˜çš„ DSN/Redis é…ç½®éœ€é‡å¯åå…¨é¢ç”Ÿæ•ˆï¼Œå‰ç«¯æç¤ºé‡å¯æœåŠ¡ã€‚
+// Step3 ´´½¨Ê×¸ö owner ¹ÜÀíÔ±²¢±ê¼Ç°²×°Íê³É¡£Íê³Éºó°²×°Èë¿Ú¹Ø±Õ£»
+// ÓÉÓÚ Step 2 ±£´æµÄ DSN/Redis ÅäÖÃĞèÖØÆôºóÈ«ÃæÉúĞ§£¬Ç°¶ËÌáÊ¾ÖØÆô·şÎñ¡£
 // POST /v1/install/step3
 func (h *InstallHandler) Step3(w http.ResponseWriter, r *http.Request) {
-	if db.Pool == nil {
-		BadRequest(w, "æ•°æ®åº“å°šæœªé…ç½®ï¼šè¯·å…ˆå®Œæˆæ•°æ®åº“é…ç½®æ­¥éª¤")
+	if !db.GlobalDBManager.IsAvailable() {
+		BadRequest(w, "Êı¾İ¿âÉĞÎ´ÅäÖÃ£ºÇëÏÈÍê³ÉÊı¾İ¿âÅäÖÃ²½Öè")
 		return
 	}
 	lk, err := LoadInstallLock()
@@ -670,11 +670,11 @@ func (h *InstallHandler) Step3(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if lk.Completed {
-		BadRequest(w, "ç³»ç»Ÿå·²å®Œæˆå®‰è£…")
+		BadRequest(w, "ÏµÍ³ÒÑÍê³É°²×°")
 		return
 	}
 	if !lk.Step2Done {
-		BadRequest(w, "è¯·å…ˆå®Œæˆæ•°æ®åº“é…ç½®æ­¥éª¤")
+		BadRequest(w, "ÇëÏÈÍê³ÉÊı¾İ¿âÅäÖÃ²½Öè")
 		return
 	}
 
@@ -703,7 +703,7 @@ func (h *InstallHandler) Step3(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// æ ‡è®°å®‰è£…å®Œæˆï¼ˆå¹‚ç­‰ï¼šé‡å¤è¯·æ±‚åœ¨ç¬¬ä¸€æ­¥å³è¢« lock.Completed æ‹¦æˆªï¼‰
+	// ±ê¼Ç°²×°Íê³É£¨ÃİµÈ£ºÖØ¸´ÇëÇóÔÚµÚÒ»²½¼´±» lock.Completed À¹½Ø£©
 	lk.Step3Done = true
 	lk.Completed = true
 	lk.CompletedAt = time.Now()
@@ -722,7 +722,7 @@ func (h *InstallHandler) Step3(w http.ResponseWriter, r *http.Request) {
 
 	SetTokenCookie(w, token, int(h.cfg.JWTExpiration.Seconds()), h.cfg.CookieSecure)
 	Created(w, map[string]interface{}{
-		"message":   "å®‰è£…å®Œæˆï¼Œè¯·é‡å¯æœåŠ¡ä½¿å…¨éƒ¨åŠŸèƒ½ç”Ÿæ•ˆ",
+		"message":   "°²×°Íê³É£¬ÇëÖØÆô·şÎñÊ¹È«²¿¹¦ÄÜÉúĞ§",
 		"completed": true,
 		"restart":   true,
 		"user": map[string]string{
@@ -734,13 +734,13 @@ func (h *InstallHandler) Step3(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ErrAlreadyInitialized è¡¨ç¤ºç³»ç»Ÿå·²å­˜åœ¨ owner è´¦æˆ·ï¼Œç¦æ­¢é‡å¤åˆå§‹åŒ–ã€‚
+// ErrAlreadyInitialized ±íÊ¾ÏµÍ³ÒÑ´æÔÚ owner ÕË»§£¬½ûÖ¹ÖØ¸´³õÊ¼»¯¡£
 var ErrAlreadyInitialized = errors.New("system already initialized")
 
-// createOwnerAccount åŸå­åŒ–åˆ›å»ºé¦–ä¸ª owner è´¦æˆ·ï¼ˆäº‹åŠ¡ + å’¨è¯¢é”ä¿è¯å¹¶å‘/è¯»å‰¯æœ¬æ»åä¸‹åªåˆå§‹åŒ–ä¸€æ¬¡ï¼‰ã€‚
-// å·²å­˜åœ¨ owner æ—¶è¿”å› ErrAlreadyInitializedã€‚
+// createOwnerAccount Ô­×Ó»¯´´½¨Ê×¸ö owner ÕË»§£¨ÊÂÎñ + ×ÉÑ¯Ëø±£Ö¤²¢·¢/¶Á¸±±¾ÖÍºóÏÂÖ»³õÊ¼»¯Ò»´Î£©¡£
+// ÒÑ´æÔÚ owner Ê±·µ»Ø ErrAlreadyInitialized¡£
 func createOwnerAccount(ctx context.Context, email, name, password string) (string, error) {
-	tx, err := db.Pool.Begin(ctx)
+	tx, err := db.GlobalDBManager.Begin(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -788,9 +788,9 @@ type SetupRequest struct {
 // Setup initializes the system with the first admin user.
 // POST /v1/install/setup
 func (h *InstallHandler) Setup(w http.ResponseWriter, r *http.Request) {
-	// æ£€æŸ¥æ•°æ®åº“æ˜¯å¦å¯ç”¨
-	if db.Pool == nil {
-		BadRequest(w, "æ•°æ®åº“å°šæœªé…ç½®ï¼šè¯·å…ˆå®Œæˆæ•°æ®åº“é…ç½®æ­¥éª¤")
+	// ¼ì²éÊı¾İ¿âÊÇ·ñ¿ÉÓÃ
+	if !db.GlobalDBManager.IsAvailable() {
+		BadRequest(w, "Êı¾İ¿âÉĞÎ´ÅäÖÃ£ºÇëÏÈÍê³ÉÊı¾İ¿âÅäÖÃ²½Öè")
 		return
 	}
 
@@ -820,7 +820,7 @@ func (h *InstallHandler) Setup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// æ ‡è®°å®‰è£…å®Œæˆï¼ˆå³ä½¿ install.lock ä¸å­˜åœ¨ä¹Ÿåˆ›å»ºï¼‰
+	// ±ê¼Ç°²×°Íê³É£¨¼´Ê¹ install.lock ²»´æÔÚÒ²´´½¨£©
 	lk, _ := LoadInstallLock()
 	if lk == nil {
 		lk = &InstallLock{}
@@ -849,7 +849,7 @@ func (h *InstallHandler) Setup(w http.ResponseWriter, r *http.Request) {
 
 	SetTokenCookie(w, token, int(h.cfg.JWTExpiration.Seconds()), h.cfg.CookieSecure)
 	Created(w, map[string]interface{}{
-		"message":   "å®‰è£…å®Œæˆï¼Œè¯·é‡å¯æœåŠ¡ä½¿å…¨éƒ¨åŠŸèƒ½ç”Ÿæ•ˆ",
+		"message":   "°²×°Íê³É£¬ÇëÖØÆô·şÎñÊ¹È«²¿¹¦ÄÜÉúĞ§",
 		"completed": true,
 		"restart":   true,
 		"user": map[string]string{
@@ -861,16 +861,16 @@ func (h *InstallHandler) Setup(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// saveAppSecretToEnv å°† APP_SECRET å†™å…¥ .env æ–‡ä»¶ï¼Œ
-// ä¾› Python ç«¯ï¼ˆAlembic è¿ç§»è„šæœ¬ï¼‰è¯»å–å¹¶è§£å¯† install.lock ä¸­çš„ DSNã€‚
-// ä¿ç•™æ–‡ä»¶ä¸­å·²æœ‰çš„å…¶ä»–é…ç½®é¡¹ï¼ˆå¦‚ DATABASE_DSNï¼‰ã€‚
+// saveAppSecretToEnv ½« APP_SECRET Ğ´Èë .env ÎÄ¼ş£¬
+// ¹© Python ¶Ë£¨Alembic Ç¨ÒÆ½Å±¾£©¶ÁÈ¡²¢½âÃÜ install.lock ÖĞµÄ DSN¡£
+// ±£ÁôÎÄ¼şÖĞÒÑÓĞµÄÆäËûÅäÖÃÏî£¨Èç DATABASE_DSN£©¡£
 func saveAppSecretToEnv(appSecret string) error {
-	// è¯»å–ç°æœ‰çš„ .env æ–‡ä»¶å†…å®¹ï¼ˆå¦‚æœå­˜åœ¨ï¼‰
+	// ¶ÁÈ¡ÏÖÓĞµÄ .env ÎÄ¼şÄÚÈİ£¨Èç¹û´æÔÚ£©
 	var existingLines []string
 	if data, err := os.ReadFile(".env"); err == nil {
 		lines := strings.Split(string(data), "\n")
 		for _, line := range lines {
-			// è·³è¿‡æ—§çš„ APP_SECRET è¡Œå’Œæ³¨é‡Šå¤´
+			// Ìø¹ı¾ÉµÄ APP_SECRET ĞĞºÍ×¢ÊÍÍ·
 			if strings.HasPrefix(line, "APP_SECRET=") || line == "# Generated by install wizard" {
 				continue
 			}
@@ -880,12 +880,12 @@ func saveAppSecretToEnv(appSecret string) error {
 		}
 	}
 
-	// æ„å»ºæ–°çš„ .env å†…å®¹
+	// ¹¹½¨ĞÂµÄ .env ÄÚÈİ
 	var content strings.Builder
 	content.WriteString("# Generated by install wizard\n")
 	content.WriteString(fmt.Sprintf("APP_SECRET=%s\n", appSecret))
 	
-	// è¿½åŠ å…¶ä»–å·²å­˜åœ¨çš„é…ç½®
+	// ×·¼ÓÆäËûÒÑ´æÔÚµÄÅäÖÃ
 	for _, line := range existingLines {
 		content.WriteString(line + "\n")
 	}

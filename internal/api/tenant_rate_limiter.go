@@ -1,4 +1,4 @@
-ï»¿package api
+package api
 
 import (
 	"context"
@@ -90,7 +90,7 @@ func (rl *TenantRateLimiter) Allow(ctx context.Context, resource, tenantID strin
 	return false, 1
 }
 
-// Middleware è¿”å› HTTP å¤„ç†ç¨‹åºï¼Œç”¨äº tenant_id + ç­–ç•¥å‚æ•°
+// Middleware ·µ»Ø HTTP ´¦Àí³ÌĞò£¬ÓÃÓÚ tenant_id + ²ßÂÔ²ÎÊı
 func (rl *TenantRateLimiter) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		claims := auth.GetClaims(r.Context())

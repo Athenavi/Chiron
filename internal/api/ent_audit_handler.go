@@ -12,22 +12,22 @@ import (
 
 // ── 企业审计日志查询 ─────────────────────────────────────────────────────
 
-// EntAuditHandler 提供企业审计日志查询 API。
-// 路由注册由集成任务统一接入（本任务不注册）：
+// EntAuditHandler 提供企业审计日志查询 API�?
+// 路由注册由集成任务统一接入（本任务不注册）�?
 //
 //	auditHandler := api.NewEntAuditHandler()
 //	auditHandler.RegisterRoutes(mux, authMW)
 type EntAuditHandler struct{}
 
-// NewEntAuditHandler 创建审计查询 handler。
+// NewEntAuditHandler 创建审计查询 handler�?
 func NewEntAuditHandler() *EntAuditHandler { return &EntAuditHandler{} }
 
-// RegisterRoutes 挂载审计路由（authMW + RequireEntPerm("audit:read")）。
+// RegisterRoutes 挂载审计路由（authMW + RequireEntPerm("audit:read")）�?
 func (h *EntAuditHandler) RegisterRoutes(mux *http.ServeMux, authMW func(http.Handler) http.Handler) {
 	mux.Handle("GET /v1/ent/audit", authMW(RequireEntPerm("audit:read")(http.HandlerFunc(h.Query))))
 }
 
-// auditQueryFilter 审计查询的归一化过滤条件（时间范围与分页已强制收敛）。
+// auditQueryFilter 审计查询的归一化过滤条件（时间范围与分页已强制收敛）�?
 type auditQueryFilter struct {
 	TenantID     string
 	UserID       string
@@ -42,9 +42,9 @@ type auditQueryFilter struct {
 const auditMaxRange = 7 * 24 * time.Hour
 
 // parseAuditQuery 解析并强制收敛查询参数（纯函数，独立可测）：
-//   - 时间范围必填语义：from/to 缺省时强制最近 7 天；
-//     显式范围超过 7 天时收敛为 to-7d ~ to；from >= to 报错；
-//   - 强制分页：page>=1，page_size 缺省 50、上限 100。
+//   - 时间范围必填语义：from/to 缺省时强制最�?7 天；
+//     显式范围超过 7 天时收敛�?to-7d ~ to；from >= to 报错�?
+//   - 强制分页：page>=1，page_size 缺省 50、上�?100�?
 func parseAuditQuery(q url.Values, now time.Time) (auditQueryFilter, error) {
 	f := auditQueryFilter{
 		UserID:       q.Get("user_id"),
@@ -80,7 +80,7 @@ func parseAuditQuery(q url.Values, now time.Time) (auditQueryFilter, error) {
 	if !f.From.Before(f.To) {
 		return f, fmt.Errorf("from must be before to")
 	}
-	// 时间范围上限 7 天（防止全表扫描，保证命中 idx_audit_logs_tenant_time）
+	// 时间范围上限 7 天（防止全表扫描，保证命�?idx_audit_logs_tenant_time�?
 	if f.To.Sub(f.From) > auditMaxRange {
 		f.From = f.To.Add(-auditMaxRange)
 	}
@@ -105,7 +105,7 @@ func parseAuditQuery(q url.Values, now time.Time) (auditQueryFilter, error) {
 	return f, nil
 }
 
-// auditLogRow 审计查询响应行。
+// auditLogRow 审计查询响应行�?
 type auditLogRow struct {
 	ID           string    `json:"id"`
 	TenantID     string    `json:"tenant_id"`
@@ -119,8 +119,8 @@ type auditLogRow struct {
 }
 
 // Query GET /v1/ent/audit?user_id=&action=&resource_type=&from=&to=&page=&page_size=
-// 租户隔离：claims.TenantID 优先，缺省回退默认租户；纯 SQL 走
-// idx_audit_logs_tenant_time(tenant_id, created_at DESC) 索引。
+// 租户隔离：claims.TenantID 优先，缺省回退默认租户；纯 SQL �?
+// idx_audit_logs_tenant_time(tenant_id, created_at DESC) 索引�?
 func (h *EntAuditHandler) Query(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	if claims == nil {
@@ -133,12 +133,6 @@ func (h *EntAuditHandler) Query(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f.TenantID = entPolicyTenantID(claims)
-
-	pool := db.ReadPool()
-	if pool == nil {
-		ServiceUnavailable(w, ErrDBUnavailable)
-		return
-	}
 
 	where := ` WHERE tenant_id = $1 AND created_at >= $2 AND created_at < $3`
 	args := []any{f.TenantID, f.From, f.To}
@@ -156,14 +150,14 @@ func (h *EntAuditHandler) Query(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var total int
-	if err := pool.QueryRow(r.Context(),
+	if err := db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT COUNT(*) FROM audit_logs`+where, args...).Scan(&total); err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "audit query failed")
 		return
 	}
 
 	offset := (f.Page - 1) * f.PageSize
-	rows, err := pool.Query(r.Context(),
+	rows, err := db.GlobalDBManager.Query(r.Context(),
 		`SELECT id, tenant_id, user_id, action, resource_type, resource_id,
 		        details, ip_address, created_at
 		 FROM audit_logs`+where+`

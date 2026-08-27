@@ -61,15 +61,15 @@ func (g *Generator) nextInt64() int64 {
 
 	now := time.Now().UnixMilli() - epochMillis
 	if now < 0 {
-		// 时钟早于 epoch：只使用 sequence 保证唯一性，避免忙等死循环
+		// 时钟早于 epoch：只使用 sequence 保证唯一性，避免忙等死循�?
 		g.seq = (g.seq + 1) & seqMax
 		return (0 << timeShift) | (g.workerID << workerShift) | g.seq
 	}
 	if now <= g.lastTime {
-		// Same millisecond or clock regression — reuse lastTime to guarantee uniqueness.
+		// Same millisecond or clock regression �?reuse lastTime to guarantee uniqueness.
 		g.seq = (g.seq + 1) & seqMax
 		if g.seq == 0 {
-			// Sequence exhausted — wait for real clock to advance past lastTime.
+			// Sequence exhausted �?wait for real clock to advance past lastTime.
 			for now <= g.lastTime {
 				now = time.Now().UnixMilli() - epochMillis
 			}
@@ -78,7 +78,7 @@ func (g *Generator) nextInt64() int64 {
 		return (g.lastTime << timeShift) | (g.workerID << workerShift) | g.seq
 	}
 
-	// New millisecond — reset sequence.
+	// New millisecond �?reset sequence.
 	g.seq = 0
 	g.lastTime = now
 	return (now << timeShift) | (g.workerID << workerShift) | g.seq

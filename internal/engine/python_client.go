@@ -22,9 +22,9 @@ type PythonClient struct {
 	addresses     []string
 	counter       uint64
 	client        *http.Client
-	internalToken string // Go↔Python 共享内部 token，用于网关代理身份校验
+	internalToken string // Go↔Python 共享内部 token，用于网关代理身份校�?
 
-	// 熔断：每个地址的冷却截止时间（Unix 秒），0 = 正常
+	// 熔断：每个地址的冷却截止时间（Unix 秒）�? = 正常
 	cooldownUntil []int64}
 
 // NewPythonClient creates a client for the Python engine HTTP API.
@@ -59,26 +59,26 @@ func NewPythonClient(addresses ...string) *PythonClient {
 	}
 }
 
-// SetInternalToken 配置 Go↔Python 共享内部 token。
-// 转发到 Python 的请求会自动注入 X-Internal-Token header，
-// Python 侧据此校验 ?tenant_id= 透传身份的合法性（P0-3 防伪造）。
+// SetInternalToken 配置 Go↔Python 共享内部 token�?
+// 转发�?Python 的请求会自动注入 X-Internal-Token header�?
+// Python 侧据此校�??tenant_id= 透传身份的合法性（P0-3 防伪造）�?
 func (c *PythonClient) SetInternalToken(token string) {
 	c.internalToken = token
 }
 
-// injectInternalToken 把 X-Internal-Token header 注入到出站请求。
-// 未配置 token 时为 no-op（部署侧未启用内部互信时降级，但 Python 侧会
-// fail-close 拒绝 query 透传身份，强制走 JWT/API Key 鉴权）。
+// injectInternalToken �?X-Internal-Token header 注入到出站请求�?
+// 未配�?token 时为 no-op（部署侧未启用内部互信时降级，但 Python 侧会
+// fail-close 拒绝 query 透传身份，强制走 JWT/API Key 鉴权）�?
 func (c *PythonClient) injectInternalToken(req *http.Request) {
 	if c.internalToken != "" {
 		req.Header.Set("X-Internal-Token", c.internalToken)
 	}
 }
 
-// pythonCooldown 单个地址失败后的冷却时长：暂时跳过，避免每 N 个请求必败一个
+// pythonCooldown 单个地址失败后的冷却时长：暂时跳过，避免�?N 个请求必败一�?
 const pythonCooldown = 5 * time.Second
 
-// markFailure 记录地址失败，进入冷却
+// markFailure 记录地址失败，进入冷�?
 func (c *PythonClient) markFailure(addr string) {
 	until := time.Now().Add(pythonCooldown).Unix()
 	for i, a := range c.addresses {
@@ -99,7 +99,7 @@ func (c *PythonClient) markSuccess(addr string) {
 	}
 }
 
-// do 统一请求出口：记录成功/失败并更新熔断状态
+// do 统一请求出口：记录成�?失败并更新熔断状�?
 func (c *PythonClient) do(req *http.Request) (*http.Response, error) {
 	addr := req.URL.Scheme + "://" + req.URL.Host
 	resp, err := c.client.Do(req)
@@ -218,7 +218,7 @@ func (c *PythonClient) Run(ctx context.Context, req PythonRunRequest) (<-chan Py
 		lineCh := make(chan string, 1)
 
 		// Background goroutine to read lines
-		// S 修复：sender 在发送前检查 ctx.Done，避免外层退出后阻塞发送而泄漏 goroutine。
+		// S 修复：sender 在发送前检�?ctx.Done，避免外层退出后阻塞发送而泄�?goroutine�?
 		go func() {
 			defer close(lineCh)
 			for scanner.Scan() {
@@ -361,9 +361,9 @@ func (c *PythonClient) ForwardRequest(w http.ResponseWriter, r *http.Request, pa
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	// 安全：仅转发必要的客户端头，排除认证/会话/身份相关头
-	// 防止客户端通过伪造 Authorization/Cookie/X-API-Key 绕过网关认证链路，
-	// 也防止伪造 X-User-ID/X-Tenant-ID/X-Internal-Token 冒用他人/他租户身份（P0）。
+	// 安全：仅转发必要的客户端头，排除认证/会话/身份相关�?
+	// 防止客户端通过伪�?Authorization/Cookie/X-API-Key 绕过网关认证链路�?
+	// 也防止伪�?X-User-ID/X-Tenant-ID/X-Internal-Token 冒用他人/他租户身份（P0）�?
 	skipHeaders := map[string]bool{
 		"Authorization":       true,
 		"Proxy-Authorization": true,
@@ -384,8 +384,8 @@ func (c *PythonClient) ForwardRequest(w http.ResponseWriter, r *http.Request, pa
 			req.Header.Add(k, v)
 		}
 	}
-	// 注入 Go↔Python 内部 token + 从已验证的 JWT claims 可信注入身份头
-	// （Python 引擎信任这些头，故必须由网关覆盖，禁止客户端直传）。
+	// 注入 Go↔Python 内部 token + 从已验证�?JWT claims 可信注入身份�?
+	// （Python 引擎信任这些头，故必须由网关覆盖，禁止客户端直传）�?
 	c.injectInternalToken(req)
 	if claims := auth.GetClaims(r.Context()); claims != nil {
 		if claims.UserID != "" {
@@ -402,7 +402,7 @@ func (c *PythonClient) ForwardRequest(w http.ResponseWriter, r *http.Request, pa
 		return
 	}
 	defer resp.Body.Close()
-	// 安全：过滤响应中的 Set-Cookie，防止客户端 Cookie 被意外设置
+	// 安全：过滤响应中�?Set-Cookie，防止客户端 Cookie 被意外设�?
 	resp.Header.Del("Set-Cookie")
 	for k, vv := range resp.Header {
 		for _, v := range vv {
@@ -449,7 +449,7 @@ func (c *PythonClient) RunSSE(ctx context.Context, path string, body any, extraH
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "text/event-stream")
 	c.injectInternalToken(httpReq)
-	// 可选附加 header（如网关注入的用户身份 X-User-ID，供 Python 引擎信任）
+	// 可选附�?header（如网关注入的用户身�?X-User-ID，供 Python 引擎信任�?
 	for _, h := range extraHeaders {
 		for k, v := range h {
 			httpReq.Header.Set(k, v)
@@ -485,7 +485,7 @@ func (c *PythonClient) RunSSE(ctx context.Context, path string, body any, extraH
 		lineCh := make(chan string, 1)
 
 		// Background goroutine to read lines
-		// S 修复：sender 在发送前检查 ctx.Done，避免外层退出后阻塞发送而泄漏 goroutine。
+		// S 修复：sender 在发送前检�?ctx.Done，避免外层退出后阻塞发送而泄�?goroutine�?
 		go func() {
 			defer close(lineCh)
 			for scanner.Scan() {

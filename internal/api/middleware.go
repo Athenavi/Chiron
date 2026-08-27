@@ -1,4 +1,4 @@
-ï»¿package api
+package api
 
 import (
 	"bufio"
@@ -25,9 +25,9 @@ type responseWriter struct {
 	bytes   int
 	flusher http.Flusher
 }
-// â”€â”€ JWT é»‘åå•æœ¬åœ° TTL ç¼“å­˜ï¼ˆP1 ä¼˜åŒ–ï¼šå‡å°‘çƒ­è·¯å¾„æ¯æ¬¡è¯·æ±‚çš„ Redis å¾€è¿”ï¼‰â”€â”€
-// æ­£ç¼“å­˜ï¼ˆå·²æ‹‰é»‘ï¼‰15 åˆ†é’Ÿæœ‰æ•ˆï¼›è´Ÿç¼“å­˜ï¼ˆæœªæ‹‰é»‘ï¼‰ä»… 30 ç§’ï¼Œç¡®ä¿ç™»å‡ºæ’¤é”€
-// åœ¨ â‰¤30s å†…å…¨å±€ç”Ÿæ•ˆï¼ˆå¤šå‰¯æœ¬ä»ä»¥ Redis ä¸ºæœ€ç»ˆäº‹å®æºï¼‰ã€‚
+// ©¤©¤ JWT ºÚÃûµ¥±¾µØ TTL »º´æ£¨P1 ÓÅ»¯£º¼õÉÙÈÈÂ·¾¶Ã¿´ÎÇëÇóµÄ Redis Íù·µ£©©¤©¤
+// Õı»º´æ£¨ÒÑÀ­ºÚ£©15 ·ÖÖÓÓĞĞ§£»¸º»º´æ£¨Î´À­ºÚ£©½ö 30 Ãë£¬È·±£µÇ³ö³·Ïú
+// ÔÚ ¡Ü30s ÄÚÈ«¾ÖÉúĞ§£¨¶à¸±±¾ÈÔÒÔ Redis Îª×îÖÕÊÂÊµÔ´£©¡£
 type jwtBlacklistEntry struct {
 	blacklisted bool
 	checkedAt   time.Time
@@ -40,7 +40,7 @@ const (
 	jwtBlacklistMissTTL = 30 * time.Second
 )
 
-// checkJWTBlacklisted ä¼˜å…ˆæŸ¥æœ¬åœ°ç¼“å­˜ï¼Œmiss æ—¶å›æº Redis å¹¶å›å¡«ã€‚
+// checkJWTBlacklisted ÓÅÏÈ²é±¾µØ»º´æ£¬miss Ê±»ØÔ´ Redis ²¢»ØÌî¡£
 func checkJWTBlacklisted(ctx context.Context, jti string) (bool, error) {
 	if v, ok := jwtBlacklistCache.Load(jti); ok {
 		e := v.(jwtBlacklistEntry)
@@ -63,7 +63,7 @@ func checkJWTBlacklisted(ctx context.Context, jti string) (bool, error) {
 	return n > 0, nil
 }
 
-// markJWTBlacklisted ç™»å‡ºæ—¶åŒæ­¥æœ¬åœ°æ­£ç¼“å­˜ï¼ˆé…åˆ Redis å†™å…¥ï¼‰ã€‚
+// markJWTBlacklisted µÇ³öÊ±Í¬²½±¾µØÕı»º´æ£¨ÅäºÏ Redis Ğ´Èë£©¡£
 func markJWTBlacklisted(jti string) {
 	if jti == "" {
 		return
@@ -71,8 +71,8 @@ func markJWTBlacklisted(jti string) {
 	jwtBlacklistCache.Store(jti, jwtBlacklistEntry{blacklisted: true, checkedAt: time.Now()})
 }
 
-// StartBlacklistCleaner å®šæœŸæ¸…ç†è¿‡æœŸçš„ JWT é»‘åå•æœ¬åœ°ç¼“å­˜æ¡ç›®ï¼Œé˜²æ­¢å†…å­˜æ³„æ¼ã€‚
-// æ¯ 10 åˆ†é’Ÿæ‰«æä¸€æ¬¡ï¼Œåˆ é™¤è¶…è¿‡ 1 å°æ—¶æœªæ›´æ–°çš„æ¡ç›®ã€‚
+// StartBlacklistCleaner ¶¨ÆÚÇåÀí¹ıÆÚµÄ JWT ºÚÃûµ¥±¾µØ»º´æÌõÄ¿£¬·ÀÖ¹ÄÚ´æĞ¹Â©¡£
+// Ã¿ 10 ·ÖÖÓÉ¨ÃèÒ»´Î£¬É¾³ı³¬¹ı 1 Ğ¡Ê±Î´¸üĞÂµÄÌõÄ¿¡£
 func StartBlacklistCleaner(ctx context.Context) {
 	go func() {
 		ticker := time.NewTicker(10 * time.Minute)
@@ -187,8 +187,8 @@ func RecoverMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// CORSMiddleware å¤„ç† CORSã€‚allowOrigin æ˜¯é€—å·åˆ†éš”ç™½åå•ï¼›"*" åœ¨ AllowCredentials=true
-// ä¸‹è¿å CORS è§„èŒƒä¸”é«˜å±ï¼Œæ˜¾å¼æ‹’ç»ã€‚
+// CORSMiddleware ´¦Àí CORS¡£allowOrigin ÊÇ¶ººÅ·Ö¸ô°×Ãûµ¥£»"*" ÔÚ AllowCredentials=true
+// ÏÂÎ¥·´ CORS ¹æ·¶ÇÒ¸ßÎ££¬ÏÔÊ½¾Ü¾ø¡£
 func CORSMiddleware(allowOrigin string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -220,9 +220,9 @@ func CORSMiddleware(allowOrigin string) func(http.Handler) http.Handler {
 	}
 }
 
-// SecurityHeadersMiddleware æ³¨å…¥é€šç”¨å®‰å…¨å“åº”å¤´ã€‚
-// CSP_CONNECT_SRC é€šè¿‡ env æ³¨å…¥ï¼ˆé»˜è®¤ç•™ç©ºåˆ™ä¸å¼ºåˆ¶ connect-src ç™½åå•ï¼Œ
-// ç”±éƒ¨ç½²æ–¹æŒ‰ç”Ÿäº§åŸŸåé…ç½®ï¼Œé¿å… localhost å†™æ­»å¯¼è‡´ç”Ÿäº§ç¯å¢ƒè¢«é˜»æ–­ï¼‰ã€‚
+// SecurityHeadersMiddleware ×¢ÈëÍ¨ÓÃ°²È«ÏìÓ¦Í·¡£
+// CSP_CONNECT_SRC Í¨¹ı env ×¢Èë£¨Ä¬ÈÏÁô¿ÕÔò²»Ç¿ÖÆ connect-src °×Ãûµ¥£¬
+// ÓÉ²¿Êğ·½°´Éú²úÓòÃûÅäÖÃ£¬±ÜÃâ localhost Ğ´ËÀµ¼ÖÂÉú²ú»·¾³±»×è¶Ï£©¡£
 func SecurityHeadersMiddleware(next http.Handler) http.Handler {
 	cspConnectSrc := strings.TrimSpace(os.Getenv("CSP_CONNECT_SRC"))
 	if cspConnectSrc == "" {
@@ -249,7 +249,7 @@ func AuthMiddleware(a *auth.Authenticator) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tokenStr := ""
 
-			// 1. Cookie (primary for browser clients; SSE ç» withCredentials æºå¸¦)
+			// 1. Cookie (primary for browser clients; SSE ¾­ withCredentials Ğ¯´ø)
 			if c, err := r.Cookie("chiron_token"); err == nil && c.Value != "" {
 				tokenStr = c.Value
 			}
@@ -266,10 +266,10 @@ func AuthMiddleware(a *auth.Authenticator) func(http.Handler) http.Handler {
 			// 2. Try X-API-Key header
 		if tokenStr == "" {
 			if key := r.Header.Get("X-API-Key"); key != "" {
-				// Validate API key against PostgreSQLï¼ˆå« tenant_id ä¸ revoked çŠ¶æ€æ ¡éªŒï¼Œå¤šç§Ÿæˆ·éš”ç¦»ï¼‰
+				// Validate API key against PostgreSQL£¨º¬ tenant_id Óë revoked ×´Ì¬Ğ£Ñé£¬¶à×â»§¸ôÀë£©
 				var userID, role, tenantID string
 				keyHash := sha256.Sum256([]byte(key))
-				err := db.ReadPool().QueryRow(r.Context(),
+				err := db.GlobalDBManager.QueryRow(r.Context(),
 					`SELECT u.id, u.role, COALESCE(u.tenant_id, '') AS tenant_id
 					 FROM users u
 					 JOIN api_keys ak ON ak.user_id = u.id
@@ -278,9 +278,9 @@ func AuthMiddleware(a *auth.Authenticator) func(http.Handler) http.Handler {
 					   AND (ak.expires_at IS NULL OR ak.expires_at > NOW())`,
 					hex.EncodeToString(keyHash[:])).Scan(&userID, &role, &tenantID)
 				if err == nil {
-				// P1-5: tenant_id ä¸ºç©ºç›´æ¥æ‹’ç»ï¼Œä¸å†å›é€€ DefaultTenantIDã€‚
-				// å†å²æ•°æ®ä¸­ tenant_id=NULL çš„ user èµ° DefaultTenantID ä¼šè½åˆ°é»˜è®¤ç§Ÿæˆ·ï¼Œ
-				// é€ æˆè·¨ç§Ÿæˆ·æ•°æ®è®¿é—®ï¼›å¤šç§Ÿæˆ·éƒ¨ç½²å¿…é¡»å¼ºåˆ¶æ¯ä¸ªç”¨æˆ·ç»‘å®šç§Ÿæˆ·ã€‚
+				// P1-5: tenant_id Îª¿ÕÖ±½Ó¾Ü¾ø£¬²»ÔÙ»ØÍË DefaultTenantID¡£
+				// ÀúÊ·Êı¾İÖĞ tenant_id=NULL µÄ user ×ß DefaultTenantID »áÂäµ½Ä¬ÈÏ×â»§£¬
+				// Ôì³É¿ç×â»§Êı¾İ·ÃÎÊ£»¶à×â»§²¿Êğ±ØĞëÇ¿ÖÆÃ¿¸öÓÃ»§°ó¶¨×â»§¡£
 				if tenantID == "" {
 					slog.Warn("API key bound to user with null tenant_id, rejecting",
 						"user_id", userID)
@@ -313,7 +313,7 @@ func AuthMiddleware(a *auth.Authenticator) func(http.Handler) http.Handler {
 				return
 			}
 
-			// â”€â”€ JWT é»‘åå•æ£€æŸ¥ï¼ˆç™»å‡ºåçš„ token ç«‹å³å¤±æ•ˆï¼‰â”€â”€
+			// ©¤©¤ JWT ºÚÃûµ¥¼ì²é£¨µÇ³öºóµÄ token Á¢¼´Ê§Ğ§£©©¤©¤
 			if claims.ID != "" {
 				blacklisted, err := checkJWTBlacklisted(r.Context(), claims.ID)
 				if err != nil {

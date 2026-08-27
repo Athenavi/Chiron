@@ -17,7 +17,7 @@ import (
 
 // ── 能力市场：类型与常量 ─────────────────────────────────────────────────
 
-// MarketItem 对应 ent_catalog_items 表（市场目录条目：plugin/skill）。
+// MarketItem 对应 ent_catalog_items 表（市场目录条目：plugin/skill）�?
 type MarketItem struct {
 	ID         string          `json:"id"`
 	Type       string          `json:"type"` // plugin / skill
@@ -30,7 +30,7 @@ type MarketItem struct {
 	UpdatedAt  time.Time       `json:"updated_at"`
 }
 
-// MarketGrant 对应 ent_catalog_installs 表（租户安装/启用记录）。
+// MarketGrant 对应 ent_catalog_installs 表（租户安装/启用记录）�?
 type MarketGrant struct {
 	ItemID      string    `json:"item_id"`
 	TenantID    string    `json:"tenant_id"`
@@ -45,8 +45,8 @@ var (
 
 var validMarketItemName = regexp.MustCompile(`^[a-zA-Z0-9_.-]{1,128}$`)
 
-// canCatalogTransition 状态机校验：仅允许 draft→published→retired，
-// retired 为终态不可回 published。
+// canCatalogTransition 状态机校验：仅允许 draft→published→retired�?
+// retired 为终态不可回 published�?
 func canCatalogTransition(from, to string) bool {
 	switch {
 	case from == "draft" && to == "published":
@@ -60,17 +60,17 @@ func canCatalogTransition(from, to string) bool {
 
 // ── Handler ──────────────────────────────────────────────────────────────
 
-// MarketHandler 提供企业能力市场 API（目录条目 CRUD / 发布状态机 / 租户授权）。
-// 路由注册由集成任务统一接入（本任务不注册）：
+// MarketHandler 提供企业能力市场 API（目录条�?CRUD / 发布状态机 / 租户授权）�?
+// 路由注册由集成任务统一接入（本任务不注册）�?
 //
 //	marketHandler := api.NewMarketHandler()
 //	marketHandler.RegisterRoutes(mux, authMW)
 type MarketHandler struct{}
 
-// NewMarketHandler 创建市场 handler。
+// NewMarketHandler 创建市场 handler�?
 func NewMarketHandler() *MarketHandler { return &MarketHandler{} }
 
-// RegisterRoutes 挂载市场路由（authMW + RequireEntPerm("market:manage")）。
+// RegisterRoutes 挂载市场路由（authMW + RequireEntPerm("market:manage")）�?
 func (h *MarketHandler) RegisterRoutes(mux *http.ServeMux, authMW func(http.Handler) http.Handler) {
 	permMW := RequireEntPerm("market:manage")
 	handle := func(pattern string, hf http.HandlerFunc) {
@@ -89,15 +89,11 @@ func (h *MarketHandler) RegisterRoutes(mux *http.ServeMux, authMW func(http.Hand
 	handle("DELETE /v1/ent/market/grants/{itemID}/{tenantID}", h.DeleteGrant)
 }
 
-// ── 门控函数（导出给 plugin/skill 集成点，独立可测） ─────────────────────
+// ── 门控函数（导出给 plugin/skill 集成点，独立可测�?─────────────────────
 
-// marketItemLookup 查询市场条目状态；测试可整体替换。
-// 返回 (是否存在同名 published 条目, 该租户是否已安装且启用, error)。
+// marketItemLookup 查询市场条目状态；测试可整体替换�?
+// 返回 (是否存在同名 published 条目, 该租户是否已安装且启�? error)�?
 var marketItemLookup = func(ctx context.Context, itemType, itemName, tenantID string) (bool, bool, error) {
-	pool := db.ReadPool()
-	if pool == nil {
-		return false, false, errors.New("market: postgres pool unavailable")
-	}
 	var published bool
 	if err := pool.QueryRow(ctx,
 		`SELECT EXISTS(SELECT 1 FROM ent_catalog_items
@@ -122,9 +118,9 @@ var marketItemLookup = func(ctx context.Context, itemType, itemName, tenantID st
 }
 
 // IsItemEnabledForTenant 判断租户是否可使用指定市场能力（plugin/skill 门控）：
-//   - 市场无任何同名 published 条目 → true（未上架能力不受市场管控影响）；
-//   - 有同名 published 条目 → 该租户已安装且 enabled 才 true；
-//   - 查询失败 → fail-open（true + slog.Warn），保证市场基础设施故障不阻断能力使用。
+//   - 市场无任何同�?published 条目 �?true（未上架能力不受市场管控影响）；
+//   - 有同�?published 条目 �?该租户已安装�?enabled �?true�?
+//   - 查询失败 �?fail-open（true + slog.Warn），保证市场基础设施故障不阻断能力使用�?
 func IsItemEnabledForTenant(ctx context.Context, itemType, itemName, tenantID string) (bool, error) {
 	published, enabled, err := marketItemLookup(ctx, itemType, itemName, tenantID)
 	if err != nil {
@@ -138,13 +134,9 @@ func IsItemEnabledForTenant(ctx context.Context, itemType, itemName, tenantID st
 	return enabled, nil
 }
 
-// ListEnabledMarketItems 返回租户已安装且启用的 published 市场条目
-// （供插件/技能列表叠加市场已授权项）。
+// ListEnabledMarketItems 返回租户已安装且启用�?published 市场条目
+// （供插件/技能列表叠加市场已授权项）�?
 func ListEnabledMarketItems(ctx context.Context, itemType, tenantID string) ([]MarketItem, error) {
-	pool := db.ReadPool()
-	if pool == nil {
-		return nil, errors.New("market: postgres pool unavailable")
-	}
 	rows, err := pool.Query(ctx,
 		`SELECT c.id, c.type, c.name, c.version, c.manifest, c.status, c.created_by, c.created_at, c.updated_at
 		 FROM ent_catalog_items c
@@ -179,7 +171,7 @@ func scanMarketItem(row interface{ Scan(...any) error }) (*MarketItem, error) {
 	return &it, nil
 }
 
-// marketTenantID 与策略 handler 一致的租户解析（claims 优先，回退默认租户）。
+// marketTenantID 与策�?handler 一致的租户解析（claims 优先，回退默认租户）�?
 func marketTenantID(claims *auth.Claims) string {
 	if claims != nil && claims.TenantID != "" {
 		return claims.TenantID
@@ -213,11 +205,6 @@ func (h *MarketHandler) ListItems(w http.ResponseWriter, r *http.Request) {
 	}
 	query += ` ORDER BY created_at DESC LIMIT 500`
 
-	pool := db.ReadPool()
-	if pool == nil {
-		ServiceUnavailable(w, ErrDBUnavailable)
-		return
-	}
 	rows, err := pool.Query(r.Context(), query, args...)
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "list market items failed")
@@ -240,7 +227,7 @@ func (h *MarketHandler) ListItems(w http.ResponseWriter, r *http.Request) {
 	OK(w, items)
 }
 
-// CreateItem POST /v1/ent/market/items（初始状态 draft）。
+// CreateItem POST /v1/ent/market/items（初始状�?draft）�?
 func (h *MarketHandler) CreateItem(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	if claims == nil {
@@ -275,11 +262,11 @@ func (h *MarketHandler) CreateItem(w http.ResponseWriter, r *http.Request) {
 		BadRequest(w, "manifest must be valid JSON")
 		return
 	}
-	if db.Pool == nil {
+	if !db.GlobalDBManager.IsAvailable() {
 		ServiceUnavailable(w, ErrDBUnavailable)
 		return
 	}
-	created, err := scanMarketItem(db.Pool.QueryRow(r.Context(),
+	created, err := scanMarketItem(db.GlobalDBManager.QueryRow(r.Context(),
 		`INSERT INTO ent_catalog_items (type, name, version, manifest, status, created_by)
 		 VALUES ($1, $2, $3, $4, 'draft', $5) RETURNING `+catalogItemColumns,
 		body.Type, body.Name, body.Version, string(body.Manifest), claims.UserID))
@@ -301,11 +288,6 @@ func (h *MarketHandler) GetItem(w http.ResponseWriter, r *http.Request) {
 		BadRequest(w, "invalid item id")
 		return
 	}
-	pool := db.ReadPool()
-	if pool == nil {
-		ServiceUnavailable(w, ErrDBUnavailable)
-		return
-	}
 	it, err := scanMarketItem(pool.QueryRow(r.Context(),
 		`SELECT `+catalogItemColumns+` FROM ent_catalog_items WHERE id = $1`, id))
 	if err != nil {
@@ -319,8 +301,8 @@ func (h *MarketHandler) GetItem(w http.ResponseWriter, r *http.Request) {
 	OK(w, it)
 }
 
-// UpdateItem PUT /v1/ent/market/items/{id}（仅 name/version/manifest；
-// 状态流转只经 publish/retire 端点）。
+// UpdateItem PUT /v1/ent/market/items/{id}（仅 name/version/manifest�?
+// 状态流转只�?publish/retire 端点）�?
 func (h *MarketHandler) UpdateItem(w http.ResponseWriter, r *http.Request) {
 	if claims := auth.GetClaims(r.Context()); claims == nil {
 		Unauthorized(w, ErrAuthRequired)
@@ -352,16 +334,16 @@ func (h *MarketHandler) UpdateItem(w http.ResponseWriter, r *http.Request) {
 		BadRequest(w, "manifest must be valid JSON")
 		return
 	}
-	// jsonb 列参数以 string 传递（[]byte 会被 pgx 编码为 bytea）；nil → NULL
+	// jsonb 列参数以 string 传递（[]byte 会被 pgx 编码�?bytea）；nil �?NULL
 	var manifest any
 	if body.Manifest != nil {
 		manifest = string(*body.Manifest)
 	}
-	if db.Pool == nil {
+	if !db.GlobalDBManager.IsAvailable() {
 		ServiceUnavailable(w, ErrDBUnavailable)
 		return
 	}
-	updated, err := scanMarketItem(db.Pool.QueryRow(r.Context(),
+	updated, err := scanMarketItem(db.GlobalDBManager.QueryRow(r.Context(),
 		`UPDATE ent_catalog_items SET
 		     name = COALESCE($2, name),
 		     version = COALESCE($3, version),
@@ -380,7 +362,7 @@ func (h *MarketHandler) UpdateItem(w http.ResponseWriter, r *http.Request) {
 	OK(w, updated)
 }
 
-// DeleteItem DELETE /v1/ent/market/items/{id}（级联删除安装记录）。
+// DeleteItem DELETE /v1/ent/market/items/{id}（级联删除安装记录）�?
 func (h *MarketHandler) DeleteItem(w http.ResponseWriter, r *http.Request) {
 	if claims := auth.GetClaims(r.Context()); claims == nil {
 		Unauthorized(w, ErrAuthRequired)
@@ -391,11 +373,11 @@ func (h *MarketHandler) DeleteItem(w http.ResponseWriter, r *http.Request) {
 		BadRequest(w, "invalid item id")
 		return
 	}
-	if db.Pool == nil {
+	if !db.GlobalDBManager.IsAvailable() {
 		ServiceUnavailable(w, ErrDBUnavailable)
 		return
 	}
-	tag, err := db.Pool.Exec(r.Context(), `DELETE FROM ent_catalog_items WHERE id = $1`, id)
+	tag, err := db.GlobalDBManager.Exec(r.Context(), `DELETE FROM ent_catalog_items WHERE id = $1`, id)
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "delete market item failed")
 		return
@@ -407,7 +389,7 @@ func (h *MarketHandler) DeleteItem(w http.ResponseWriter, r *http.Request) {
 	NoContent(w)
 }
 
-// transitionItem 读取当前状态并校验状态机迁移，通过后原子 UPDATE。
+// transitionItem 读取当前状态并校验状态机迁移，通过后原�?UPDATE�?
 func (h *MarketHandler) transitionItem(w http.ResponseWriter, r *http.Request, to string) {
 	if claims := auth.GetClaims(r.Context()); claims == nil {
 		Unauthorized(w, ErrAuthRequired)
@@ -418,12 +400,12 @@ func (h *MarketHandler) transitionItem(w http.ResponseWriter, r *http.Request, t
 		BadRequest(w, "invalid item id")
 		return
 	}
-	if db.Pool == nil {
+	if !db.GlobalDBManager.IsAvailable() {
 		ServiceUnavailable(w, ErrDBUnavailable)
 		return
 	}
 	var from string
-	if err := db.Pool.QueryRow(r.Context(),
+	if err := db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT status FROM ent_catalog_items WHERE id = $1`, id).Scan(&from); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			NotFound(w, ErrNotFound)
@@ -439,12 +421,12 @@ func (h *MarketHandler) transitionItem(w http.ResponseWriter, r *http.Request, t
 		})
 		return
 	}
-	updated, err := scanMarketItem(db.Pool.QueryRow(r.Context(),
+	updated, err := scanMarketItem(db.GlobalDBManager.QueryRow(r.Context(),
 		`UPDATE ent_catalog_items SET status = $2, updated_at = NOW()
 		 WHERE id = $1 AND status = $3 RETURNING `+catalogItemColumns, id, to, from))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			// 并发下状态已被其他请求变更
+			// 并发下状态已被其他请求变�?
 			JSON(w, http.StatusConflict, APIResponse{
 				Success: false,
 				Error:   "invalid status transition (concurrent update)",
@@ -457,12 +439,12 @@ func (h *MarketHandler) transitionItem(w http.ResponseWriter, r *http.Request, t
 	OK(w, updated)
 }
 
-// PublishItem POST /v1/ent/market/items/{id}/publish（draft → published）。
+// PublishItem POST /v1/ent/market/items/{id}/publish（draft �?published）�?
 func (h *MarketHandler) PublishItem(w http.ResponseWriter, r *http.Request) {
 	h.transitionItem(w, r, "published")
 }
 
-// RetireItem POST /v1/ent/market/items/{id}/retire（published → retired）。
+// RetireItem POST /v1/ent/market/items/{id}/retire（published �?retired）�?
 func (h *MarketHandler) RetireItem(w http.ResponseWriter, r *http.Request) {
 	h.transitionItem(w, r, "retired")
 }
@@ -495,11 +477,6 @@ func (h *MarketHandler) ListGrants(w http.ResponseWriter, r *http.Request) {
 	}
 	query += ` ORDER BY installed_at DESC LIMIT 500`
 
-	pool := db.ReadPool()
-	if pool == nil {
-		ServiceUnavailable(w, ErrDBUnavailable)
-		return
-	}
 	rows, err := pool.Query(r.Context(), query, args...)
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "list market grants failed")
@@ -522,7 +499,7 @@ func (h *MarketHandler) ListGrants(w http.ResponseWriter, r *http.Request) {
 	OK(w, grants)
 }
 
-// GrantItem POST /v1/ent/market/grants（UPSERT：item_id + tenant_id 主键）。
+// GrantItem POST /v1/ent/market/grants（UPSERT：item_id + tenant_id 主键）�?
 func (h *MarketHandler) GrantItem(w http.ResponseWriter, r *http.Request) {
 	if claims := auth.GetClaims(r.Context()); claims == nil {
 		Unauthorized(w, ErrAuthRequired)
@@ -549,13 +526,13 @@ func (h *MarketHandler) GrantItem(w http.ResponseWriter, r *http.Request) {
 	if body.Enabled != nil {
 		enabled = *body.Enabled
 	}
-	if db.Pool == nil {
+	if !db.GlobalDBManager.IsAvailable() {
 		ServiceUnavailable(w, ErrDBUnavailable)
 		return
 	}
-	// 条目必须存在（外键兜底，提前给出友好 404）
+	// 条目必须存在（外键兜底，提前给出友好 404�?
 	var exists bool
-	if err := db.Pool.QueryRow(r.Context(),
+	if err := db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT EXISTS(SELECT 1 FROM ent_catalog_items WHERE id = $1)`, body.ItemID).Scan(&exists); err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "grant market item failed")
 		return
@@ -564,7 +541,7 @@ func (h *MarketHandler) GrantItem(w http.ResponseWriter, r *http.Request) {
 		NotFound(w, ErrNotFound)
 		return
 	}
-	g, err := scanMarketGrant(db.Pool.QueryRow(r.Context(),
+	g, err := scanMarketGrant(db.GlobalDBManager.QueryRow(r.Context(),
 		`INSERT INTO ent_catalog_installs (item_id, tenant_id, enabled)
 		 VALUES ($1, $2, $3)
 		 ON CONFLICT (item_id, tenant_id) DO UPDATE SET enabled = EXCLUDED.enabled
@@ -577,7 +554,7 @@ func (h *MarketHandler) GrantItem(w http.ResponseWriter, r *http.Request) {
 	Created(w, g)
 }
 
-// UpdateGrant PUT /v1/ent/market/grants/{itemID}/{tenantID}（仅切换 enabled）。
+// UpdateGrant PUT /v1/ent/market/grants/{itemID}/{tenantID}（仅切换 enabled）�?
 func (h *MarketHandler) UpdateGrant(w http.ResponseWriter, r *http.Request) {
 	if claims := auth.GetClaims(r.Context()); claims == nil {
 		Unauthorized(w, ErrAuthRequired)
@@ -596,11 +573,11 @@ func (h *MarketHandler) UpdateGrant(w http.ResponseWriter, r *http.Request) {
 		BadRequest(w, ErrInvalidReq)
 		return
 	}
-	if db.Pool == nil {
+	if !db.GlobalDBManager.IsAvailable() {
 		ServiceUnavailable(w, ErrDBUnavailable)
 		return
 	}
-	g, err := scanMarketGrant(db.Pool.QueryRow(r.Context(),
+	g, err := scanMarketGrant(db.GlobalDBManager.QueryRow(r.Context(),
 		`UPDATE ent_catalog_installs SET enabled = $3
 		 WHERE item_id = $1 AND tenant_id = $2
 		 RETURNING item_id, tenant_id, enabled, installed_at`, itemID, tenantID, body.Enabled))
@@ -627,11 +604,11 @@ func (h *MarketHandler) DeleteGrant(w http.ResponseWriter, r *http.Request) {
 		BadRequest(w, "invalid item or tenant id")
 		return
 	}
-	if db.Pool == nil {
+	if !db.GlobalDBManager.IsAvailable() {
 		ServiceUnavailable(w, ErrDBUnavailable)
 		return
 	}
-	tag, err := db.Pool.Exec(r.Context(),
+	tag, err := db.GlobalDBManager.Exec(r.Context(),
 		`DELETE FROM ent_catalog_installs WHERE item_id = $1 AND tenant_id = $2`, itemID, tenantID)
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "delete market grant failed")

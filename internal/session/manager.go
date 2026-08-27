@@ -25,7 +25,7 @@ const (
 	redisTTL       = 2 * time.Hour
 )
 
-// ErrSessionNotFound 表示会话不存在（SSE 端点据此放行尚未创建的新会话连接）。
+// ErrSessionNotFound 表示会话不存在（SSE 端点据此放行尚未创建的新会话连接）�?
 var ErrSessionNotFound = errors.New("session not found")
 
 // Manager provides session CRUD with Redis hot cache + PostgreSQL persistence.
@@ -55,7 +55,7 @@ func (m *Manager) GetSession(ctx context.Context, id string) (*model.Session, er
 			if json.Unmarshal(data, &s) == nil {
 				return &s, nil
 			}
-			// Corrupt cache entry — delete so next read falls through to PG
+			// Corrupt cache entry �?delete so next read falls through to PG
 			m.rdb.Del(ctx, redisKeyPrefix+id)
 		}
 	}
@@ -74,7 +74,7 @@ func (m *Manager) GetSession(ctx context.Context, id string) (*model.Session, er
 		return nil, fmt.Errorf("%w: %s", ErrSessionNotFound, id)
 	} else if err != nil {
 		// 非法 uuid 格式（如前端旧版 fallback id "session_xxx"）：会话必然不存在，
-		// 按 not found 处理（否则 SSE 端点会 500、前端触发"连接已断开"）
+		// �?not found 处理（否�?SSE 端点�?500、前端触�?连接已断开"�?
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "22P02" {
 			return nil, fmt.Errorf("%w: %s", ErrSessionNotFound, id)
@@ -88,7 +88,7 @@ func (m *Manager) GetSession(ctx context.Context, id string) (*model.Session, er
 }
 
 // DefaultTenantID is the default tenant for single-tenant deployments.
-// 单一来源见 internal/db/seed.go。
+// 单一来源�?internal/db/seed.go�?
 const DefaultTenantID = db.DefaultTenantID
 
 // CreateSession inserts a new session into PG and caches in Redis.
@@ -258,7 +258,7 @@ func (m *Manager) SaveMessage(ctx context.Context, sessionID, role, content stri
 }
 
 // SaveUserMessage persists the user message immediately at submit time
-// (S 修复：上下文丢失 — SSE 中断/停止时不再丢失用户消息，历史可续).
+// (S 修复：上下文丢失 �?SSE 中断/停止时不再丢失用户消息，历史可续).
 func (m *Manager) SaveUserMessage(ctx context.Context, sessionID, userID, userContent string) {
 	if m.pool == nil || userContent == "" {
 		return
@@ -302,7 +302,7 @@ func (m *Manager) SaveAssistantMessage(ctx context.Context, sessionID, assistant
 	if toolCallsJSON == "" {
 		toolCallsJSON = "[]"
 	}
-	// 允许"纯工具调用轮"（content 空 + tool_calls 非空）落库（S 修复）
+	// 允许"纯工具调用轮"（content �?+ tool_calls 非空）落库（S 修复�?
 	if assistantContent == "" && toolCallsJSON == "[]" {
 		return
 	}
@@ -321,7 +321,7 @@ func (m *Manager) SaveAssistantMessage(ctx context.Context, sessionID, assistant
 	m.evictCache(ctx, sessionID)
 }
 
-// SaveToolCall persists a tool call record (S 修复：工具调用过程落库，刷新后显示一致).
+// SaveToolCall persists a tool call record (S 修复：工具调用过程落库，刷新后显示一�?.
 func (m *Manager) SaveToolCall(ctx context.Context, sessionID, toolCallID, toolName, inputJSON string) {
 	if m.pool == nil || toolCallID == "" {
 		return
@@ -490,7 +490,7 @@ func (m *Manager) SaveMessages(ctx context.Context, sessionID, userID, userConte
 type MessagePage struct {
 	Messages []model.Message
 	HasMore  bool
-	// Cursor 指向本页最早一条（created_at|id），前端用它请求更早一页
+	// Cursor 指向本页最早一条（created_at|id），前端用它请求更早一�?
 	Cursor string
 }
 
@@ -510,7 +510,7 @@ func (m *Manager) GetMessagesPage(ctx context.Context, sessionID string, limit i
 	args := []interface{}{sessionID}
 
 	if before != "" {
-		// 游标格式 created_at|id（复合游标，同 created_at 也稳定分页）
+		// 游标格式 created_at|id（复合游标，�?created_at 也稳定分页）
 		parts := strings.SplitN(before, "|", 2)
 		if len(parts) == 2 {
 			t, err := time.Parse(time.RFC3339Nano, parts[0])
@@ -573,7 +573,7 @@ func (m *Manager) GetMessages(ctx context.Context, sessionID string, limit ...in
 	args := []interface{}{sessionID}
 
 	if len(limit) > 0 && limit[0] > 0 {
-		// 子查询：先取最新的 N 条，再按正序排列，保持"最早优先"的返回契约
+		// 子查询：先取最新的 N 条，再按正序排列，保�?最早优�?的返回契�?
 		query = `SELECT id, session_id, role, content, COALESCE(tool_calls::text, ''), created_at FROM (
 			   SELECT id, session_id, role, content, tool_calls, created_at
 			   FROM messages

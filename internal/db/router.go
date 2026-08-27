@@ -52,7 +52,7 @@ func newPool(ctx context.Context, dsn string, cfg PoolConfig) (*pgxpool.Pool, er
 	poolCfg.MaxConnLifetime = cfg.MaxConnLifetime
 	poolCfg.MaxConnIdleTime = cfg.MaxConnIdleTime
 	poolCfg.HealthCheckPeriod = cfg.HealthCheckPeriod
-	// P 性能/稳定：statement_timeout 防慢查询长期占用连接耗尽池
+	// P 性能/稳定：statement_timeout 防慢查询长期占用连接耗尽�?
 	// 长查询（迁移/批量）应走独立连接，不复用业务池
 	poolCfg.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
 		_, err := conn.Exec(ctx, "SET statement_timeout = 30000")

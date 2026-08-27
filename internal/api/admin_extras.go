@@ -1,4 +1,4 @@
-ï»¿package api
+package api
 
 import (
 	"fmt"
@@ -14,7 +14,7 @@ import (
 	"github.com/athenavi/chiron/internal/settings"
 )
 
-// â”€â”€ Queue Stats â”€â”€
+// ©¤©¤ Queue Stats ©¤©¤
 
 type QueueStats struct {
 	TaskQueueLength int         `json:"task_queue_length"`
@@ -40,7 +40,7 @@ func (h *AdminHandler) GetQueueStats(w http.ResponseWriter, r *http.Request) {
 		WaitingTasks: []QueueTask{},
 	}
 
-	// ä» Redis è·å–é˜Ÿåˆ—é•¿åº¦
+	// ´Ó Redis »ñÈ¡¶ÓÁĞ³¤¶È
 	if db.Redis != nil {
 		ctx := r.Context()
 		taskLen, _ := db.Redis.Get(ctx, "queue:tasks:length").Int64()
@@ -61,7 +61,7 @@ func (h *AdminHandler) FlushQueue(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	// é€šè¿‡è®¾ç½®æ ‡å¿—é€šçŸ¥ worker æ¸…ç©ºé˜Ÿåˆ—
+	// Í¨¹ıÉèÖÃ±êÖ¾Í¨Öª worker Çå¿Õ¶ÓÁĞ
 	db.Redis.Set(ctx, "queue:flush", "1", 10*time.Second)
 
 	OK(w, map[string]string{"status": "flush_requested"})
@@ -78,7 +78,7 @@ func (h *AdminHandler) PauseQueue(w http.ResponseWriter, r *http.Request) {
 
 	queuePaused.Store(body.Pause)
 
-	// é€šè¿‡ Redis é€šçŸ¥æ‰€æœ‰ worker
+	// Í¨¹ı Redis Í¨ÖªËùÓĞ worker
 	if db.Redis != nil {
 		ctx := r.Context()
 		if body.Pause {
@@ -91,7 +91,7 @@ func (h *AdminHandler) PauseQueue(w http.ResponseWriter, r *http.Request) {
 	OK(w, map[string]interface{}{"paused": body.Pause})
 }
 
-// â”€â”€ Cache Stats â”€â”€
+// ©¤©¤ Cache Stats ©¤©¤
 
 type CacheStats struct {
 	L1HitRate     float64    `json:"l1_hit_rate"`
@@ -119,7 +119,7 @@ func (h *AdminHandler) GetCacheStats(w http.ResponseWriter, r *http.Request) {
 		HotQueries: []HotQuery{},
 	}
 
-	// ä» Redis è·å–ç¼“å­˜ç»Ÿè®¡
+	// ´Ó Redis »ñÈ¡»º´æÍ³¼Æ
 	if db.Redis != nil {
 		ctx := r.Context()
 		hits, _ := db.Redis.Get(ctx, "cache:stats:hits").Int64()
@@ -136,7 +136,7 @@ func (h *AdminHandler) GetCacheStats(w http.ResponseWriter, r *http.Request) {
 	OK(w, stats)
 }
 
-// â”€â”€ Performance Stats â”€â”€
+// ©¤©¤ Performance Stats ©¤©¤
 
 type PerformanceStats struct {
 	Gateway GatewayStats `json:"gateway"`
@@ -178,14 +178,14 @@ func (h *AdminHandler) GetPerformance(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	// ä» monitor snapshot æå–æ•°æ®
+	// ´Ó monitor snapshot ÌáÈ¡Êı¾İ
 	if v, ok := snapshot["goroutines"]; ok {
 		if n, ok := v.(int); ok {
 			stats.Gateway.Goroutines = n
 		}
 	}
 
-	// æµ‹é‡ Redis å»¶è¿Ÿ
+	// ²âÁ¿ Redis ÑÓ³Ù
 	if db.Redis != nil {
 		ctx := r.Context()
 		start := time.Now()
@@ -193,7 +193,7 @@ func (h *AdminHandler) GetPerformance(w http.ResponseWriter, r *http.Request) {
 		stats.Gateway.RedisLatencyMs = float64(time.Since(start).Microseconds()) / 1000
 	}
 
-	// æµ‹é‡ DB å»¶è¿Ÿ
+	// ²âÁ¿ DB ÑÓ³Ù
 	ctx := r.Context()
 	start := time.Now()
 	db.GlobalDBManager.Ping(ctx)
@@ -202,7 +202,7 @@ func (h *AdminHandler) GetPerformance(w http.ResponseWriter, r *http.Request) {
 	OK(w, stats)
 }
 
-// â”€â”€ API Keys â”€â”€
+// ©¤©¤ API Keys ©¤©¤
 
 type ApiKey struct {
 	ID         string `json:"id"`
@@ -279,11 +279,11 @@ func (h *AdminHandler) DeleteApiKey(w http.ResponseWriter, r *http.Request) {
 	h.pythonClient.ForwardRequest(w, r, "/v1/admin/api-keys/"+id)
 }
 
-// â”€â”€ Settings â”€â”€
+// ©¤©¤ Settings ©¤©¤
 
-// settingsCategories åå°ã€Œç³»ç»Ÿè®¾ç½®ã€å…è®¸çš„é…ç½®åˆ†ç»„ã€‚
-// æ•æ„Ÿé”®ï¼ˆpassword/secret/api_key/dsn/token ç­‰ï¼‰ç”± settings.Store ç”¨ APP_SECRET
-// æ´¾ç”Ÿå¯†é’¥åŠ å¯†è½åº“ï¼›éæ•æ„Ÿé…ç½®æ˜æ–‡å­˜å‚¨ã€‚ä¸Šçº§é…ç½®ç» DB æŒä¹…åŒ–ï¼Œenv ä½œä¸ºé»˜è®¤å€¼ã€‚
+// settingsCategories ºóÌ¨¡¸ÏµÍ³ÉèÖÃ¡¹ÔÊĞíµÄÅäÖÃ·Ö×é¡£
+// Ãô¸Ğ¼ü£¨password/secret/api_key/dsn/token µÈ£©ÓÉ settings.Store ÓÃ APP_SECRET
+// ÅÉÉúÃÜÔ¿¼ÓÃÜÂä¿â£»·ÇÃô¸ĞÅäÖÃÃ÷ÎÄ´æ´¢¡£ÉÏ¼¶ÅäÖÃ¾­ DB ³Ö¾Ã»¯£¬env ×÷ÎªÄ¬ÈÏÖµ¡£
 var settingsCategories = []string{
 	"rate_limit", "degradation", "cache", "api_key",
 	"agent", "llm", "storage", "payment", "redis", "postgres", "cors", "s3",
@@ -301,7 +301,7 @@ func validSettingsCategory(c string) bool {
 
 var settingsCategoryList = strings.Join(settingsCategories, ", ")
 
-// intFromValue ä» JSON è§£ç å‡ºçš„å€¼å®‰å…¨å–æ•´æ•°ï¼Œéæ•°å€¼/è¶Šç•Œæ—¶è¿”å› fallbackã€‚
+// intFromValue ´Ó JSON ½âÂë³öµÄÖµ°²È«È¡ÕûÊı£¬·ÇÊıÖµ/Ô½½çÊ±·µ»Ø fallback¡£
 func intFromValue(v interface{}, fallback int) int {
 	switch n := v.(type) {
 	case float64:
@@ -323,8 +323,8 @@ func intFromValue(v interface{}, fallback int) int {
 }
 
 // SaveSettings PUT /v1/admin/settings
-// å°†æŸåˆ†ç»„é…ç½®æŒ‰ key é€æ¡ upsert åˆ° system_settings è¡¨ã€‚
-// config ä¸­ value ä¸º null çš„ key ä¼šè¢«åˆ é™¤ï¼Œä½¿è¯¥é…ç½®å›è½åˆ° env é»˜è®¤å€¼ã€‚
+// ½«Ä³·Ö×éÅäÖÃ°´ key ÖğÌõ upsert µ½ system_settings ±í¡£
+// config ÖĞ value Îª null µÄ key »á±»É¾³ı£¬Ê¹¸ÃÅäÖÃ»ØÂäµ½ env Ä¬ÈÏÖµ¡£
 func (h *AdminHandler) SaveSettings(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Category string                 `json:"category"`
@@ -354,7 +354,7 @@ func (h *AdminHandler) SaveSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// å½“å‰æ“ä½œç”¨æˆ·ï¼ˆå¯ç©ºï¼Œç”¨äºå®¡è®¡ updated_byï¼‰
+	// µ±Ç°²Ù×÷ÓÃ»§£¨¿É¿Õ£¬ÓÃÓÚÉó¼Æ updated_by£©
 	userID := ""
 	if claims := auth.GetClaims(r.Context()); claims != nil {
 		userID = claims.ID
@@ -370,7 +370,7 @@ func (h *AdminHandler) SaveSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// rate_limit åˆ†ç»„ï¼šçƒ­æ›´æ–°åˆ†å¸ƒå¼é™æµé˜ˆå€¼ï¼ˆä¿å­˜æˆåŠŸåç”Ÿæ•ˆï¼‰
+	// rate_limit ·Ö×é£ºÈÈ¸üĞÂ·Ö²¼Ê½ÏŞÁ÷ãĞÖµ£¨±£´æ³É¹¦ºóÉúĞ§£©
 	if body.Category == "rate_limit" && h.rateLimiter != nil {
 		global := intFromValue(body.Config["global"], 0)
 		tenant := intFromValue(body.Config["tenant"], 0)
@@ -381,7 +381,7 @@ func (h *AdminHandler) SaveSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// redirectï¼šä¿å­˜ redis é…ç½®åçƒ­æ¢ Redis è¿æ¥
+	// redirect£º±£´æ redis ÅäÖÃºóÈÈ»» Redis Á¬½Ó
 	if body.Category == "redis" {
 		h.hotReloadRedis(body.Config)
 	}
@@ -390,16 +390,14 @@ func (h *AdminHandler) SaveSettings(w http.ResponseWriter, r *http.Request) {
 	OK(w, map[string]interface{}{"status": "saved", "category": body.Category})
 }
 
-// ensureSettingsStore æƒ°æ€§åˆå§‹åŒ– DB åŠ å¯†è®¾ç½®å­˜å‚¨ã€‚
+// ensureSettingsStore ¶èĞÔ³õÊ¼»¯ DB ¼ÓÃÜÉèÖÃ´æ´¢¡£
 func (h *AdminHandler) ensureSettingsStore() *settings.Store {
-	if h.settingsStore == nil && db.Pool != nil {
-		h.settingsStore = settings.New(db.Pool, h.appSecret)
-	}
+	if h.settingsStore == nil && db.GlobalDBManager.IsAvailable() { pool, _ := db.GlobalDBManager.GetPool(); h.settingsStore = settings.New(pool, h.appSecret) }
 	return h.settingsStore
 }
 
-// hotReloadRedis åœ¨ä¿å­˜ redis åˆ†ç»„è®¾ç½®åçƒ­æ¢ Redis è¿æ¥ï¼ˆAtomicRedis.Swapï¼‰ã€‚
-// ä»…å½“é…ç½®äº†æ–°åœ°å€æ‰æ‰§è¡Œï¼›å¤±è´¥ä»…è®°æ—¥å¿—ä¸å½±å“ä¿å­˜ç»“æœã€‚
+// hotReloadRedis ÔÚ±£´æ redis ·Ö×éÉèÖÃºóÈÈ»» Redis Á¬½Ó£¨AtomicRedis.Swap£©¡£
+// ½öµ±ÅäÖÃÁËĞÂµØÖ·²ÅÖ´ĞĞ£»Ê§°Ü½ö¼ÇÈÕÖ¾²»Ó°Ïì±£´æ½á¹û¡£
 func (h *AdminHandler) hotReloadRedis(cfg map[string]interface{}) {
 	if h.redis == nil {
 		return
@@ -424,7 +422,7 @@ func (h *AdminHandler) hotReloadRedis(cfg map[string]interface{}) {
 	slog.Info("redis hot-swapped", "addr", addr)
 }
 
-// strFromValue ä» JSON è§£ç å‡ºçš„å€¼å®‰å…¨å–å­—ç¬¦ä¸²ï¼›éå­—ç¬¦ä¸²è¿”å› ""ã€‚
+// strFromValue ´Ó JSON ½âÂë³öµÄÖµ°²È«È¡×Ö·û´®£»·Ç×Ö·û´®·µ»Ø ""¡£
 func strFromValue(v interface{}) string {
 	if s, ok := v.(string); ok {
 		return s
@@ -432,8 +430,8 @@ func strFromValue(v interface{}) string {
 	return ""
 }
 
-// GetSettings GET /v1/admin/settings?category=... è¯»å–æŸåˆ†ç»„å·²æŒä¹…åŒ–é…ç½®ã€‚
-// æ— è®°å½•æ—¶è¿”å›ç©º configï¼ˆå‰ç«¯ä¿ç•™é»˜è®¤å€¼ï¼‰ã€‚
+// GetSettings GET /v1/admin/settings?category=... ¶ÁÈ¡Ä³·Ö×éÒÑ³Ö¾Ã»¯ÅäÖÃ¡£
+// ÎŞ¼ÇÂ¼Ê±·µ»Ø¿Õ config£¨Ç°¶Ë±£ÁôÄ¬ÈÏÖµ£©¡£
 func (h *AdminHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
 	category := r.URL.Query().Get("category")
 	if category == "" {

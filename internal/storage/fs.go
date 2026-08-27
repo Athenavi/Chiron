@@ -104,7 +104,7 @@ func (s *LocalStore) safePath(path string) (string, error) {
 	// Resolve symlinks and verify the real path is still under root.
 	resolved, err := filepath.EvalSymlinks(cleaned)
 	if err != nil {
-		// File may not exist yet (for writes) â€” check the parent directory.
+		// File may not exist yet (for writes) â€?check the parent directory.
 		resolved, err = filepath.EvalSymlinks(filepath.Dir(cleaned))
 		if err != nil {
 			return cleaned, nil // best effort; let the OS handle it

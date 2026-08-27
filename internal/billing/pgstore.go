@@ -23,19 +23,19 @@ func NewPGStore() *PGStore {
 
 // EnsureTables creates the billing tables if they don't exist.
 func (s *PGStore) EnsureTables(ctx context.Context) error {
-	if db.Pool == nil {
+	if !db.GlobalDBManager.IsAvailable() {
 		return nil // no database available, skip table initialization
 	}
 
 	// Add balance column to users table if not exists
-	_, err := db.Pool.Exec(ctx,
+	_, err := db.GlobalDBManager.Exec(ctx,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS credits INTEGER NOT NULL DEFAULT 1000`)
 	if err != nil {
 		return fmt.Errorf("add credits column: %w", err)
 	}
 
 	// Create credit_transactions table
-	_, err = db.Pool.Exec(ctx,
+	_, err = db.GlobalDBManager.Exec(ctx,
 		`CREATE TABLE IF NOT EXISTS credit_transactions (
 			id VARCHAR(32) PRIMARY KEY,
 			user_id VARCHAR(32) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -49,7 +49,7 @@ func (s *PGStore) EnsureTables(ctx context.Context) error {
 	}
 
 	// Create payments table（支付宝/微信/PayPal 通用充值订单）
-	_, err = db.Pool.Exec(ctx,
+	_, err = db.GlobalDBManager.Exec(ctx,
 		`CREATE TABLE IF NOT EXISTS payments (
 			id VARCHAR(64) PRIMARY KEY,
 			user_id VARCHAR(32) NOT NULL,
@@ -68,19 +68,19 @@ func (s *PGStore) EnsureTables(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("create payments: %w", err)
 	}
-	_, err = db.Pool.Exec(ctx,
+	_, err = db.GlobalDBManager.Exec(ctx,
 		`CREATE INDEX IF NOT EXISTS idx_payments_user ON payments(user_id, created_at DESC)`)
 	if err != nil {
 		return fmt.Errorf("create payments user index: %w", err)
 	}
-	_, err = db.Pool.Exec(ctx,
+	_, err = db.GlobalDBManager.Exec(ctx,
 		`CREATE INDEX IF NOT EXISTS idx_payments_provider ON payments(provider_order_id) WHERE provider_order_id <> ''`)
 	if err != nil {
 		return fmt.Errorf("create payments provider index: %w", err)
 	}
 
 	// Index for fast history lookups
-	_, err = db.Pool.Exec(ctx,
+	_, err = db.GlobalDBManager.Exec(ctx,
 		`CREATE INDEX IF NOT EXISTS idx_credit_tx_user ON credit_transactions(user_id, created_at DESC)`)
 	if err != nil {
 		return fmt.Errorf("create index: %w", err)
@@ -91,7 +91,7 @@ func (s *PGStore) EnsureTables(ctx context.Context) error {
 
 func (s *PGStore) GetBalance(ctx context.Context, userID string) (int, error) {
 	var balance int
-	err := db.ReadPool().QueryRow(ctx,
+	err := db.GlobalDBManager.QueryRow(ctx,
 		`SELECT COALESCE(credits, 0) FROM users WHERE id = $1`, userID).Scan(&balance)
 	if err != nil {
 		return 0, fmt.Errorf("get user credits: %w", err)
@@ -100,13 +100,13 @@ func (s *PGStore) GetBalance(ctx context.Context, userID string) (int, error) {
 }
 
 func (s *PGStore) SetBalance(ctx context.Context, userID string, balance int) error {
-	_, err := db.Pool.Exec(ctx,
+	_, err := db.GlobalDBManager.Exec(ctx,
 		`UPDATE users SET credits = $1 WHERE id = $2`, balance, userID)
 	return err
 }
 
 func (s *PGStore) AddTransaction(ctx context.Context, tx *CreditChange) error {
-	_, err := db.Pool.Exec(ctx,
+	_, err := db.GlobalDBManager.Exec(ctx,
 		`INSERT INTO credit_transactions (id, user_id, amount, balance, reason, created_at)
 		 VALUES ($1, $2, $3, $4, $5, $6)`,
 		tx.ID, tx.UserID, tx.Amount, tx.Balance, tx.Reason, tx.CreatedAt)
@@ -118,7 +118,7 @@ func (s *PGStore) GetHistory(ctx context.Context, userID string, limit int) ([]C
 		limit = 50
 	}
 
-	rows, err := db.ReadPool().Query(ctx,
+	rows, err := db.GlobalDBManager.Query(ctx,
 		`SELECT id, user_id, amount, balance, reason, created_at
 		 FROM credit_transactions WHERE user_id = $1 AND reason <> 'free_chat'
 		 ORDER BY created_at DESC LIMIT $2`, userID, limit)
@@ -146,7 +146,7 @@ func (s *PGStore) GetHistory(ctx context.Context, userID string, limit int) ([]C
 func (s *PGStore) DailyFreeCount(ctx context.Context, userID string) (int, error) {
 	var count int
 	todayUTC := time.Now().UTC().Truncate(24 * time.Hour)
-	err := db.ReadPool().QueryRow(ctx,
+	err := db.GlobalDBManager.QueryRow(ctx,
 		`SELECT COUNT(*) FROM credit_transactions
 		 WHERE user_id = $1 AND reason = 'free_chat' AND created_at >= $2`, userID, todayUTC).Scan(&count)
 	if err != nil {
@@ -165,7 +165,7 @@ func (s *PGStore) MarkFreeUsage(ctx context.Context, userID string) error {
 		Reason:    "free_chat",
 		CreatedAt: time.Now(),
 	}
-	_, err := db.Pool.Exec(ctx,
+	_, err := db.GlobalDBManager.Exec(ctx,
 		`INSERT INTO credit_transactions (id, user_id, amount, balance, reason, created_at)
 		 VALUES ($1, $2, $3, $4, $5, $6)`,
 		tx.ID, tx.UserID, tx.Amount, tx.Balance, tx.Reason, tx.CreatedAt)
@@ -176,7 +176,7 @@ func (s *PGStore) MarkFreeUsage(ctx context.Context, userID string) error {
 // Returns the new balance, or an error if insufficient credits or user not found.
 func (s *PGStore) AtomicDeductBalance(ctx context.Context, userID string, amount int) (int, error) {
 	var newBalance int
-	err := db.Pool.QueryRow(ctx,
+	err := db.GlobalDBManager.QueryRow(ctx,
 		`UPDATE users SET credits = credits - $1
 		 WHERE id = $2 AND credits >= $1
 		 RETURNING credits`,
@@ -191,7 +191,7 @@ func (s *PGStore) AtomicDeductBalance(ctx context.Context, userID string, amount
 // Returns the new balance, or an error if user not found.
 func (s *PGStore) AtomicAddBalance(ctx context.Context, userID string, amount int) (int, error) {
 	var newBalance int
-	err := db.Pool.QueryRow(ctx,
+	err := db.GlobalDBManager.QueryRow(ctx,
 		`UPDATE users SET credits = credits + $1
 		 WHERE id = $2
 		 RETURNING credits`,
@@ -234,7 +234,7 @@ func scanPayment(row interface{ Scan(...any) error }) (*Payment, error) {
 }
 
 func (s *PGStore) CreatePayment(ctx context.Context, p *Payment) error {
-	_, err := db.Pool.Exec(ctx,
+	_, err := db.GlobalDBManager.Exec(ctx,
 		`INSERT INTO payments (id, user_id, channel, credits, amount_cents, currency, status,
 			qr_code, provider_order_id, trade_no, created_at, paid_at, expired_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
@@ -244,20 +244,20 @@ func (s *PGStore) CreatePayment(ctx context.Context, p *Payment) error {
 }
 
 func (s *PGStore) GetPayment(ctx context.Context, id string) (*Payment, error) {
-	row := db.ReadPool().QueryRow(ctx,
+	row := db.GlobalDBManager.QueryRow(ctx,
 		`SELECT `+_paymentColumns+` FROM payments WHERE id = $1`, id)
 	return scanPayment(row)
 }
 
 func (s *PGStore) GetPaymentByProviderOrderID(ctx context.Context, providerOrderID string) (*Payment, error) {
-	row := db.ReadPool().QueryRow(ctx,
+	row := db.GlobalDBManager.QueryRow(ctx,
 		`SELECT `+_paymentColumns+` FROM payments WHERE provider_order_id = $1`, providerOrderID)
 	return scanPayment(row)
 }
 
-// MarkPaymentPaid 幂等推进 pending→paid。返回 nil 表示订单非 pending（已处理/不存在）。
+// MarkPaymentPaid 幂等推进 pending→paid。返�?nil 表示订单�?pending（已处理/不存在）�?
 func (s *PGStore) MarkPaymentPaid(ctx context.Context, id, tradeNo string) (*Payment, error) {
-	row := db.Pool.QueryRow(ctx,
+	row := db.GlobalDBManager.QueryRow(ctx,
 		`UPDATE payments SET status = 'paid', trade_no = $2, paid_at = NOW()
 		 WHERE id = $1 AND status = 'pending'
 		 RETURNING `+_paymentColumns,
@@ -265,7 +265,7 @@ func (s *PGStore) MarkPaymentPaid(ctx context.Context, id, tradeNo string) (*Pay
 	p, err := scanPayment(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil // 已处理或不存在
+			return nil, nil // 已处理或不存�?
 		}
 		return nil, err
 	}
@@ -273,13 +273,13 @@ func (s *PGStore) MarkPaymentPaid(ctx context.Context, id, tradeNo string) (*Pay
 }
 
 func (s *PGStore) MarkPaymentFailed(ctx context.Context, id string) error {
-	_, err := db.Pool.Exec(ctx,
+	_, err := db.GlobalDBManager.Exec(ctx,
 		`UPDATE payments SET status = 'failed' WHERE id = $1 AND status = 'pending'`, id)
 	return err
 }
 
 func (s *PGStore) UpdatePaymentProvider(ctx context.Context, id, qrCode, providerOrderID string) error {
-	_, err := db.Pool.Exec(ctx,
+	_, err := db.GlobalDBManager.Exec(ctx,
 		`UPDATE payments SET qr_code = $2, provider_order_id = $3 WHERE id = $1 AND status = 'pending'`,
 		id, qrCode, providerOrderID)
 	return err

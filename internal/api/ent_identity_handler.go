@@ -17,8 +17,8 @@ import (
 
 // ── DB 访问抽象 ──────────────────────────────────────────
 //
-// 生产实现 pgEntStore 委托 db.ReadPool()/db.Pool（沿用 rbac.go 的读写分离模式）；
-// 抽象成接口是为了单元测试可以注入 fake（覆盖内置角色 409 保护等分支）。
+// 生产实现 pgEntStore 委托 db.ReadPool()/db.Pool（沿�?rbac.go 的读写分离模式）�?
+// 抽象成接口是为了单元测试可以注入 fake（覆盖内置角�?409 保护等分支）�?
 
 type entQuerier interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
@@ -28,41 +28,34 @@ type entQuerier interface {
 
 var errEntDBUnavailable = errors.New("ent: database unavailable")
 
-// pgEntStore 是 entQuerier 的生产实现：读走 ReadPool，写走主 Pool。
+// pgEntStore �?entQuerier 的生产实现：读走 ReadPool，写走主 Pool�?
 type pgEntStore struct{}
 
 func (pgEntStore) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
-	pool := db.ReadPool()
-	if pool == nil {
-		return nil, errEntDBUnavailable
-	}
 	return pool.Query(ctx, sql, args...)
 }
 
 func (pgEntStore) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
-	pool := db.ReadPool()
-	if pool == nil {
-		return deadRow{err: errEntDBUnavailable}
 	}
 	return pool.QueryRow(ctx, sql, args...)
 }
 
 func (pgEntStore) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
-	if db.Pool == nil {
+	if !db.GlobalDBManager.IsAvailable() {
 		return pgconn.CommandTag{}, errEntDBUnavailable
 	}
-	return db.Pool.Exec(ctx, sql, args...)
+	return db.GlobalDBManager.Exec(ctx, sql, args...)
 }
 
-// deadRow 在连接池缺失时返回确定性错误（避免 nil pgx.Row panic）。
+// deadRow 在连接池缺失时返回确定性错误（避免 nil pgx.Row panic）�?
 type deadRow struct{ err error }
 
 func (d deadRow) Scan(dest ...any) error { return d.err }
 
 // ── Handler ─────────────────────────────────────────────
 
-// EntIdentityHandler 企业版账号身份管理（用户角色/群组/租户查询）。
-// 所有端点由 authMW + RequireEntPerm("ent:manage") 保护（见 RegisterRoutes）。
+// EntIdentityHandler 企业版账号身份管理（用户角色/群组/租户查询）�?
+// 所有端点由 authMW + RequireEntPerm("ent:manage") 保护（见 RegisterRoutes）�?
 type EntIdentityHandler struct {
 	db entQuerier
 }
@@ -71,9 +64,9 @@ func NewEntIdentityHandler() *EntIdentityHandler {
 	return &EntIdentityHandler{db: pgEntStore{}}
 }
 
-// RegisterRoutes 挂载身份管理路由。authMW 为网关 JWT 认证中间件，
-// 每个端点再叠加 RequireEntPerm("ent:manage") 企业权限校验。
-// 注意：本方法供 Phase 7 集成任务调用，当前不在 gateway_router.go 注册。
+// RegisterRoutes 挂载身份管理路由。authMW 为网�?JWT 认证中间件，
+// 每个端点再叠�?RequireEntPerm("ent:manage") 企业权限校验�?
+// 注意：本方法�?Phase 7 集成任务调用，当前不�?gateway_router.go 注册�?
 func (h *EntIdentityHandler) RegisterRoutes(mux *http.ServeMux, authMW func(http.Handler) http.Handler) {
 	ent := func(hf http.HandlerFunc) http.Handler {
 		return authMW(RequireEntPerm("ent:manage")(hf))
@@ -112,7 +105,7 @@ type entUserItem struct {
 }
 
 // ListUsers GET /v1/ent/users?search=&page=&page_size=
-// users LEFT JOIN ent_user_roles/ent_roles + 群组信息，email/姓名模糊搜索 + 分页。
+// users LEFT JOIN ent_user_roles/ent_roles + 群组信息，email/姓名模糊搜索 + 分页�?
 func (h *EntIdentityHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	search := r.URL.Query().Get("search")
 	page, pageSize := parsePageQuery(r)
@@ -173,7 +166,7 @@ type setUserRolesRequest struct {
 	RoleIDs []string `json:"role_ids"`
 }
 
-// SetUserRoles PUT /v1/ent/users/{id}/roles 全量替换用户角色。
+// SetUserRoles PUT /v1/ent/users/{id}/roles 全量替换用户角色�?
 func (h *EntIdentityHandler) SetUserRoles(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("id")
 	if !isValidUUID(userID) {
@@ -200,7 +193,7 @@ func (h *EntIdentityHandler) SetUserRoles(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// 全量替换 = 删除不在新集合的绑定 + 幂等插入新绑定
+	// 全量替换 = 删除不在新集合的绑定 + 幂等插入新绑�?
 	if _, err := h.db.Exec(ctx,
 		`DELETE FROM ent_user_roles WHERE user_id = $1 AND NOT (role_id = ANY($2::uuid[]))`,
 		userID, req.RoleIDs); err != nil {
@@ -223,7 +216,7 @@ type setUserGroupsRequest struct {
 	GroupIDs []string `json:"group_ids"`
 }
 
-// SetUserGroups PUT /v1/ent/users/{id}/groups 全量替换用户群组。
+// SetUserGroups PUT /v1/ent/users/{id}/groups 全量替换用户群组�?
 func (h *EntIdentityHandler) SetUserGroups(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("id")
 	if !isValidUUID(userID) {
@@ -266,7 +259,7 @@ func (h *EntIdentityHandler) SetUserGroups(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// 受影响群组 = 旧 ∪ 新；同时失效用户自身缓存
+	// 受影响群�?= �?�?新；同时失效用户自身缓存
 	for _, gid := range unionStringSet(oldGroups, req.GroupIDs) {
 		enterprise.InvalidateGroupMembersPerms(ctx, gid)
 	}
@@ -368,7 +361,7 @@ type createRoleRequest struct {
 	Permissions []string `json:"permissions"`
 }
 
-// CreateRole POST /v1/ent/roles（新建角色一律 is_builtin=false）。
+// CreateRole POST /v1/ent/roles（新建角色一�?is_builtin=false）�?
 func (h *EntIdentityHandler) CreateRole(w http.ResponseWriter, r *http.Request) {
 	var req createRoleRequest
 	if err := DecodeJSON(w, r, &req); err != nil {
@@ -411,8 +404,8 @@ type updateRoleRequest struct {
 	Permissions *[]string `json:"permissions"`
 }
 
-// UpdateRole PUT /v1/ent/roles/{id}。
-// 内置角色禁止修改 name/permissions，违反返回 409。
+// UpdateRole PUT /v1/ent/roles/{id}�?
+// 内置角色禁止修改 name/permissions，违反返�?409�?
 func (h *EntIdentityHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if !isValidUUID(id) {
@@ -472,7 +465,7 @@ func (h *EntIdentityHandler) UpdateRole(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// 权限变更后失效受影响用户缓存（直接绑定 + 经群组间接绑定）
+	// 权限变更后失效受影响用户缓存（直接绑�?+ 经群组间接绑定）
 	if req.Permissions != nil {
 		for _, uid := range h.usersAffectedByRole(ctx, id) {
 			enterprise.InvalidateUserPerms(ctx, uid)
@@ -481,7 +474,7 @@ func (h *EntIdentityHandler) UpdateRole(w http.ResponseWriter, r *http.Request) 
 	OK(w, map[string]string{"status": "updated"})
 }
 
-// DeleteRole DELETE /v1/ent/roles/{id}。内置角色禁止删除（409）。
+// DeleteRole DELETE /v1/ent/roles/{id}。内置角色禁止删除（409）�?
 func (h *EntIdentityHandler) DeleteRole(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if !isValidUUID(id) {
@@ -731,7 +724,7 @@ type setGroupMembersRequest struct {
 	UserIDs []string `json:"user_ids"`
 }
 
-// SetGroupMembers PUT /v1/ent/groups/{id}/members 全量替换群组成员。
+// SetGroupMembers PUT /v1/ent/groups/{id}/members 全量替换群组成员�?
 func (h *EntIdentityHandler) SetGroupMembers(w http.ResponseWriter, r *http.Request) {
 	groupID := r.PathValue("id")
 	if !isValidUUID(groupID) {
@@ -792,7 +785,7 @@ type setGroupRolesRequest struct {
 	RoleIDs []string `json:"role_ids"`
 }
 
-// SetGroupRoles PUT /v1/ent/groups/{id}/roles 全量替换群组角色绑定。
+// SetGroupRoles PUT /v1/ent/groups/{id}/roles 全量替换群组角色绑定�?
 func (h *EntIdentityHandler) SetGroupRoles(w http.ResponseWriter, r *http.Request) {
 	groupID := r.PathValue("id")
 	if !isValidUUID(groupID) {
@@ -842,14 +835,14 @@ func (h *EntIdentityHandler) SetGroupRoles(w http.ResponseWriter, r *http.Reques
 type entTenantItem struct {
 	ID        string          `json:"id"`
 	Name      string          `json:"name"`
-	Status    string          `json:"status"` // 真实 tenants 表无状态列，恒为 "active"
+	Status    string          `json:"status"` // 真实 tenants 表无状态列，恒�?"active"
 	CreatedAt time.Time       `json:"created_at"`
 	UserCount int             `json:"user_count"`
 	Quotas    json.RawMessage `json:"quotas"`
 }
 
 // ListTenants GET /v1/ent/tenants?page=&page_size=
-// 读真实 tenants 表 + LEFT JOIN ent_quota_pools 汇总（不引用影子表 admin_tenants）。
+// 读真�?tenants �?+ LEFT JOIN ent_quota_pools 汇总（不引用影子表 admin_tenants）�?
 func (h *EntIdentityHandler) ListTenants(w http.ResponseWriter, r *http.Request) {
 	page, pageSize := parsePageQuery(r)
 	ctx := r.Context()
@@ -912,7 +905,7 @@ func (h *EntIdentityHandler) groupExists(ctx context.Context, id string) bool {
 	return h.db.QueryRow(ctx, `SELECT 1 FROM ent_groups WHERE id = $1`, id).Scan(&one) == nil
 }
 
-// allExist 校验 ids 全部存在于目标表（countSQL 需返回 DISTINCT 计数，$1 为 uuid[]）。
+// allExist 校验 ids 全部存在于目标表（countSQL 需返回 DISTINCT 计数�?1 �?uuid[]）�?
 func (h *EntIdentityHandler) allExist(ctx context.Context, countSQL string, ids []string) bool {
 	var count int
 	if err := h.db.QueryRow(ctx, countSQL, ids).Scan(&count); err != nil {
@@ -949,7 +942,7 @@ func (h *EntIdentityHandler) queryIDList(ctx context.Context, sql string, arg an
 	return ids
 }
 
-// usersAffectedByRole 返回角色影响到的全部用户（直接绑定 + 经群组间接绑定）。
+// usersAffectedByRole 返回角色影响到的全部用户（直接绑�?+ 经群组间接绑定）�?
 func (h *EntIdentityHandler) usersAffectedByRole(ctx context.Context, roleID string) []string {
 	return h.queryIDList(ctx,
 		`SELECT user_id FROM ent_user_roles WHERE role_id = $1
@@ -973,7 +966,7 @@ func validateUUIDList(ids []string) error {
 	return nil
 }
 
-// parsePageQuery 解析分页参数：page ≥ 1（默认 1），page_size 1..100（默认 20）。
+// parsePageQuery 解析分页参数：page �?1（默�?1），page_size 1..100（默�?20）�?
 func parsePageQuery(r *http.Request) (int, int) {
 	page := 1
 	if v, err := strconv.Atoi(r.URL.Query().Get("page")); err == nil && v > 0 {
@@ -989,9 +982,9 @@ func parsePageQuery(r *http.Request) (int, int) {
 	return page, pageSize
 }
 
-// isUniqueViolation 复用 ent_costcenter_handler.go 中的定义（SQLSTATE 23505 判定）。
+// isUniqueViolation 复用 ent_costcenter_handler.go 中的定义（SQLSTATE 23505 判定）�?
 
-// equalStringSet 以集合语义比较两个字符串切片（权限数组顺序不敏感）。
+// equalStringSet 以集合语义比较两个字符串切片（权限数组顺序不敏感）�?
 func equalStringSet(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
@@ -1008,7 +1001,7 @@ func equalStringSet(a, b []string) bool {
 	return true
 }
 
-// unionStringSet 返回两个字符串切片的去重并集（保持首次出现顺序）。
+// unionStringSet 返回两个字符串切片的去重并集（保持首次出现顺序）�?
 func unionStringSet(a, b []string) []string {
 	seen := make(map[string]struct{}, len(a)+len(b))
 	out := make([]string, 0, len(a)+len(b))

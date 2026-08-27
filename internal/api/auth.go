@@ -17,13 +17,13 @@ import (
 
 const tokenCookieName = "chiron_token"
 
-// DefaultTenantID 是默认租户 ID（用于单租户模式），单一来源见 internal/db/seed.go。
+// DefaultTenantID 是默认租�?ID（用于单租户模式），单一来源�?internal/db/seed.go�?
 const DefaultTenantID = db.DefaultTenantID
 
 type AuthHandler struct {
 	auth    *auth.Authenticator
 	cfg     *config.Config
-	captcha *CaptchaHandler // 可选：启用后人机验证 + 失败升级（nil = 跳过，单测用）
+	captcha *CaptchaHandler // 可选：启用后人机验�?+ 失败升级（nil = 跳过，单测用�?
 }
 
 func NewAuthHandler(cfg *config.Config) *AuthHandler {
@@ -33,7 +33,7 @@ func NewAuthHandler(cfg *config.Config) *AuthHandler {
 	}
 }
 
-// SetCaptchaHandler 注入人机验证栅栏（网关装配时调用）。
+// SetCaptchaHandler 注入人机验证栅栏（网关装配时调用）�?
 func (h *AuthHandler) SetCaptchaHandler(c *CaptchaHandler) {
 	h.captcha = c
 }
@@ -59,7 +59,7 @@ func SetTokenCookie(w http.ResponseWriter, token string, maxAge int, secure bool
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   secure, // 生产 HTTPS（COOKIE_SECURE=true）下防止明文传输（S 安全修复）
+		Secure:   secure, // 生产 HTTPS（COOKIE_SECURE=true）下防止明文传输（S 安全修复�?
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   maxAge,
 	})
@@ -96,7 +96,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 人机验证栅栏：启用/失败升级时强制校验；达到硬上限直接 429
+	// 人机验证栅栏：启�?失败升级时强制校验；达到硬上限直�?429
 	if h.captcha != nil {
 		if err := h.captcha.Enforce(w, r, &auth.CaptchaToken{
 			Token:   req.CaptchaToken,
@@ -106,11 +106,11 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// No dev bypass — always validate against DB
+	// No dev bypass �?always validate against DB
 	ctx := r.Context()
 
-	// 设置租户上下文以绕过 RLS —— 必须在事务中才能让 SET LOCAL 持续生效
-	tx, err := db.Pool.Begin(ctx)
+	// 设置租户上下文以绕过 RLS —�?必须在事务中才能�?SET LOCAL 持续生效
+	tx, err := db.GlobalDBManager.Begin(ctx)
 	if err != nil {
 		slog.Error("begin tx for tenant context", "error", err)
 		InternalError(w, "login failed")
@@ -154,10 +154,10 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		h.captcha.ClearFailures(r.Context(), r)
 	}
 
-	// 多租户隔离：将用户记录的 tenant_id 写入 JWT，后续所有 SQL 用 claims.TenantID
-	// P1-5: tenant_id 为空直接拒绝登录，不再回退 DefaultTenantID。
-	// 历史数据中 tenant_id=NULL 的 user 走 DefaultTenantID 会落到默认租户，
-	// 造成跨租户数据访问；多租户部署必须强制每个用户绑定租户。
+	// 多租户隔离：将用户记录的 tenant_id 写入 JWT，后续所�?SQL �?claims.TenantID
+	// P1-5: tenant_id 为空直接拒绝登录，不再回退 DefaultTenantID�?
+	// 历史数据�?tenant_id=NULL �?user �?DefaultTenantID 会落到默认租户，
+	// 造成跨租户数据访问；多租户部署必须强制每个用户绑定租户�?
 	if tenantID == "" {
 		slog.Warn("login rejected: user has null tenant_id", "user_id", user.ID)
 		Unauthorized(w, "user has no tenant binding; contact admin")
@@ -197,7 +197,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 注册接口防刷：人机验证栅栏
+	// 注册接口防刷：人机验证栅�?
 	if h.captcha != nil {
 		if err := h.captcha.Enforce(w, r, &auth.CaptchaToken{
 			Token:   req.CaptchaToken,
@@ -226,8 +226,8 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	// 设置租户上下文以绕过 RLS —— 必须在事务中才能让 SET LOCAL 持续生效
-	tx, err := db.Pool.Begin(ctx)
+	// 设置租户上下文以绕过 RLS —�?必须在事务中才能�?SET LOCAL 持续生效
+	tx, err := db.GlobalDBManager.Begin(ctx)
 	if err != nil {
 		slog.Error("begin tx for tenant context", "error", err)
 		InternalError(w, "registration failed")
@@ -262,7 +262,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 使用 PostgreSQL 的 gen_random_uuid() 生成 UUID
+	// 使用 PostgreSQL �?gen_random_uuid() 生成 UUID
 	var userID string
 	err = tx.QueryRow(ctx,
 		`INSERT INTO users (id, tenant_id, email, name, password_hash, role, created_at, updated_at)
@@ -296,14 +296,14 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
-	// ── JWT 黑名单：将该 token 加入 Redis 黑名单，TTL 等于剩余有效期 ──
+	// ── JWT 黑名单：将该 token 加入 Redis 黑名单，TTL 等于剩余有效�?──
 	if claims := auth.GetClaims(r.Context()); claims != nil && claims.ID != "" && db.Redis != nil {
 		remaining := time.Until(claims.ExpiresAt.Time)
 		if remaining > 0 {
 			db.Redis.Set(r.Context(), "jwt:blacklist:"+claims.ID, "1", remaining)
 		}
 	}
-	// 同步本地正缓存，确保本实例后续请求立即拒绝该 token（P1 优化）
+	// 同步本地正缓存，确保本实例后续请求立即拒绝该 token（P1 优化�?
 	if claims := auth.GetClaims(r.Context()); claims != nil {
 		markJWTBlacklisted(claims.ID)
 	}
@@ -319,7 +319,7 @@ func (h *AuthHandler) Profile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var settings map[string]interface{}
-	if err := db.ReadPool().QueryRow(r.Context(),
+	if err := db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT COALESCE(settings::jsonb, '{}'::jsonb) FROM users WHERE id = $1`, claims.UserID).Scan(&settings); err != nil {
 		settings = map[string]interface{}{}
 	}
@@ -373,7 +373,7 @@ func (h *AuthHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 			InternalError(w, "invalid settings")
 			return
 		}
-		// 局部合并：settings = settings || $n（jsonb 合并保留未提及键）
+		// 局部合并：settings = settings || $n（jsonb 合并保留未提及键�?
 		setClauses += fmt.Sprintf("settings = COALESCE(settings::jsonb, '{}'::jsonb) || $%d::jsonb, ", argIdx)
 		args = append(args, string(settingsJSON))
 		argIdx++
@@ -381,7 +381,7 @@ func (h *AuthHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	setClauses = strings.TrimSuffix(setClauses, ", ")
 	args = append(args, claims.UserID)
 
-	if _, err := db.Pool.Exec(r.Context(),
+	if _, err := db.GlobalDBManager.Exec(r.Context(),
 		fmt.Sprintf("UPDATE users SET %s, updated_at = NOW() WHERE id = $%d", setClauses, argIdx),
 		args...); err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "update profile failed")
@@ -395,10 +395,10 @@ type RefreshRequest struct {
 	Token string `json:"token"`
 }
 
-// Session GET /v1/auth/session（公开，凭 httpOnly cookie）
-// SSO 回调只设置 JWT cookie；前端登录态基于 localStorage Bearer token。
-// 本端点把 cookie 会话引导为与 login 相同 shape 的 {token, user} 响应，
-// 供 SSO 登录回跳后前端建立本地会话。
+// Session GET /v1/auth/session（公开，凭 httpOnly cookie�?
+// SSO 回调只设�?JWT cookie；前端登录态基�?localStorage Bearer token�?
+// 本端点把 cookie 会话引导为与 login 相同 shape �?{token, user} 响应�?
+// �?SSO 登录回跳后前端建立本地会话�?
 func (h *AuthHandler) Session(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie(tokenCookieName)
 	if err != nil || cookie.Value == "" {
@@ -412,7 +412,7 @@ func (h *AuthHandler) Session(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	tx, err := db.Pool.Begin(ctx)
+	tx, err := db.GlobalDBManager.Begin(ctx)
 	if err != nil {
 		slog.Error("begin tx for tenant context", "error", err)
 		InternalError(w, "session lookup failed")
@@ -447,7 +447,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1) 校验旧 token 未被加入黑名单（已登出/已撤销）
+	// 1) 校验�?token 未被加入黑名单（已登�?已撤销�?
 	oldClaims, err := h.auth.ValidateToken(cookie.Value)
 	if err != nil {
 		Unauthorized(w, "session expired")
@@ -460,9 +460,9 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 2) 校验用户仍然存在（防止已删除用户刷 token）
+	// 2) 校验用户仍然存在（防止已删除用户�?token�?
 	var userExists bool
-	err = db.ReadPool().QueryRow(r.Context(),
+	err = db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)`, oldClaims.UserID).Scan(&userExists)
 	if err != nil || !userExists {
 		Unauthorized(w, "user not found")

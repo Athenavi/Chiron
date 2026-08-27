@@ -34,7 +34,7 @@ func (s SpanID) String() string {
 func newTraceID() TraceID {
 	var id TraceID
 	if _, err := rand.Read(id[:]); err != nil {
-		// 失败时退化为时间戳+原子计数，避免全零 ID 引发 trace 冲突
+		// 失败时退化为时间�?原子计数，避免全�?ID 引发 trace 冲突
 		binary.BigEndian.PutUint64(id[8:], uint64(time.Now().UnixNano()))
 		binary.BigEndian.PutUint64(id[0:], traceCounter.Add(1))
 	}
@@ -49,7 +49,7 @@ func newSpanID() SpanID {
 	return id
 }
 
-// traceCounter 提供 rand 失败时的回退自增计数，保证 ID 唯一性。
+// traceCounter 提供 rand 失败时的回退自增计数，保�?ID 唯一性�?
 var traceCounter atomic.Uint64
 
 // ── Span ──────────────────────────────────────────────────────────────────
@@ -108,7 +108,7 @@ func defaultExport(s *Span) {
 	if len(s.Tags) > 0 {
 		attrs = append(attrs, slog.Any("tags", s.Tags))
 	}
-	// slog.Debug 参数为 ...any：显式展开 []slog.Attr（Go 1.26 不再接受切片直接展开）
+	// slog.Debug 参数�?...any：显式展开 []slog.Attr（Go 1.26 不再接受切片直接展开�?
 	args := make([]any, 0, len(attrs))
 	for _, a := range attrs {
 		args = append(args, a)
@@ -220,7 +220,7 @@ func (s *Span) End() {
 	}
 	s.mu.Unlock()
 
-	// 在锁外调用 exportFn，避免回调中获取其他锁导致死锁
+	// 在锁外调�?exportFn，避免回调中获取其他锁导致死�?
 	GlobalTracer.exportFn(s)
 }
 

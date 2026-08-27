@@ -104,8 +104,7 @@ func isEmptyMigration(filePath string) (bool, error) {
 	return false, nil
 }
 
-// RunMigrations 执行 Alembic 数据库迁移（alembic upgrade head）
-// dsn 为 PostgreSQL 连接串，通过环境变量 DATABASE_DSN 传递给 Alembic
+// RunMigrations 执行 Alembic 数据库迁移（alembic upgrade head�?// dsn �?PostgreSQL 连接串，通过环境变量 DATABASE_DSN 传递给 Alembic
 func RunMigrations(dsn string) error {
 	// Normalize DSN: postgres:// -> postgresql:// for Alembic
 	dsn = strings.Replace(dsn, "postgres://", "postgresql://", 1)

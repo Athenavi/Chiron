@@ -1,4 +1,4 @@
-ï»¿package api
+package api
 
 import (
 	"errors"
@@ -9,18 +9,18 @@ import (
 	"github.com/athenavi/chiron/internal/enterprise"
 )
 
-// RequireEntPerm ä¼ä¸šç‰ˆæƒé™ä¸­é—´ä»¶ï¼Œç­¾åä¸ RequirePermission ä¿æŒä¸€è‡´ã€‚
+// RequireEntPerm ÆóÒµ°æÈ¨ÏŞÖĞ¼ä¼ş£¬Ç©ÃûÓë RequirePermission ±£³ÖÒ»ÖÂ¡£
 //
-// å†³ç­–æµç¨‹ï¼š
-//  1. ä» auth.GetClaims å– UserIDï¼Œè°ƒç”¨ enterprise.LoadEffectivePerms èšåˆ
-//     ç”¨æˆ·çš„ä¼ä¸šçº§æœ‰æ•ˆæƒé™ï¼ˆç›´æ¥è§’è‰² âˆª ç¾¤ç»„æˆå‘˜è§’è‰²ï¼Œå¸¦ Redis ç¼“å­˜ï¼‰ã€‚
-//  2. è¿”å› nilï¼ˆç”¨æˆ·æ—  ent è§’è‰²é…ç½®ï¼‰â†’ å›é€€æ—§æƒé™ä½“ç³» auth.HasPermissionã€‚
-//  3. è¿”å›é nilï¼ˆå«ç©ºåˆ‡ç‰‡ï¼‰â†’ ä»…å½“ perm åœ¨åˆ‡ç‰‡å†…æ”¾è¡Œï¼Œå¦åˆ™ 403ï¼›
-//     ç©ºåˆ‡ç‰‡è¡¨ç¤º"æ˜ç¡®æ— æƒé™"ï¼Œç¦æ­¢å›é€€æ—§ä½“ç³»ï¼ˆé˜²è¶Šæƒï¼‰ã€‚
-//  4. LoadEffectivePerms å‡ºé”™ï¼ˆent åŸºç¡€è®¾æ–½æ•…éšœï¼‰â†’ fail-open å›é€€
-//     auth.HasPermission + slog.Warnï¼Œä¿è¯æ•…éšœä¸é˜»æ–­ç®¡ç†é¢ã€‚
+// ¾ö²ßÁ÷³Ì£º
+//  1. ´Ó auth.GetClaims È¡ UserID£¬µ÷ÓÃ enterprise.LoadEffectivePerms ¾ÛºÏ
+//     ÓÃ»§µÄÆóÒµ¼¶ÓĞĞ§È¨ÏŞ£¨Ö±½Ó½ÇÉ« ¡È Èº×é³ÉÔ±½ÇÉ«£¬´ø Redis »º´æ£©¡£
+//  2. ·µ»Ø nil£¨ÓÃ»§ÎŞ ent ½ÇÉ«ÅäÖÃ£©¡ú »ØÍË¾ÉÈ¨ÏŞÌåÏµ auth.HasPermission¡£
+//  3. ·µ»Ø·Ç nil£¨º¬¿ÕÇĞÆ¬£©¡ú ½öµ± perm ÔÚÇĞÆ¬ÄÚ·ÅĞĞ£¬·ñÔò 403£»
+//     ¿ÕÇĞÆ¬±íÊ¾"Ã÷È·ÎŞÈ¨ÏŞ"£¬½ûÖ¹»ØÍË¾ÉÌåÏµ£¨·ÀÔ½È¨£©¡£
+//  4. LoadEffectivePerms ³ö´í£¨ent »ù´¡ÉèÊ©¹ÊÕÏ£©¡ú fail-open »ØÍË
+//     auth.HasPermission + slog.Warn£¬±£Ö¤¹ÊÕÏ²»×è¶Ï¹ÜÀíÃæ¡£
 //
-// æ³¨æ„ï¼šæœ¬ä¸­é—´ä»¶ä»…ä¾›åç»­ä»»åŠ¡æŒ‚è½½åˆ° /v1/ent/* è·¯ç”±ä½¿ç”¨ï¼Œå½“å‰ä¸æ³¨å†Œä»»ä½•è·¯ç”±ã€‚
+// ×¢Òâ£º±¾ÖĞ¼ä¼ş½ö¹©ºóĞøÈÎÎñ¹ÒÔØµ½ /v1/ent/* Â·ÓÉÊ¹ÓÃ£¬µ±Ç°²»×¢²áÈÎºÎÂ·ÓÉ¡£
 func RequireEntPerm(perm string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -33,7 +33,7 @@ func RequireEntPerm(perm string) func(http.Handler) http.Handler {
 
 			perms, err := enterprise.LoadEffectivePerms(r.Context(), claims.UserID)
 			if err != nil {
-				// ent åŸºç¡€è®¾æ–½æ•…éšœï¼ˆå¦‚ PG æŸ¥è¯¢å¤±è´¥ï¼‰ï¼šfail-open å›é€€æ—§æƒé™ä½“ç³»
+				// ent »ù´¡ÉèÊ©¹ÊÕÏ£¨Èç PG ²éÑ¯Ê§°Ü£©£ºfail-open »ØÍË¾ÉÈ¨ÏŞÌåÏµ
 				slog.Warn("ent rbac: load effective perms failed, falling back to legacy permissions",
 					"user_id", claims.UserID, "perm", perm, "error", err)
 				if !auth.HasPermission(claims, perm) {
@@ -46,7 +46,7 @@ func RequireEntPerm(perm string) func(http.Handler) http.Handler {
 			}
 
 			if perms == nil {
-				// ç”¨æˆ·æ—  ent è§’è‰²é…ç½®ï¼šå›é€€æ—§æƒé™ä½“ç³»
+				// ÓÃ»§ÎŞ ent ½ÇÉ«ÅäÖÃ£º»ØÍË¾ÉÈ¨ÏŞÌåÏµ
 				if !auth.HasPermission(claims, perm) {
 					logAndRespond(w, errors.New("insufficient permissions"),
 						http.StatusForbidden, "insufficient permissions")
@@ -56,7 +56,7 @@ func RequireEntPerm(perm string) func(http.Handler) http.Handler {
 				return
 			}
 
-			// ç”¨æˆ·æœ‰ ent é…ç½®ï¼ˆå«ç©ºåˆ‡ç‰‡ = æ˜ç¡®æ— æƒé™ï¼‰ï¼šä»…ä»¥èšåˆæƒé™ä¸ºå‡†ï¼Œç¦æ­¢å›é€€
+			// ÓÃ»§ÓĞ ent ÅäÖÃ£¨º¬¿ÕÇĞÆ¬ = Ã÷È·ÎŞÈ¨ÏŞ£©£º½öÒÔ¾ÛºÏÈ¨ÏŞÎª×¼£¬½ûÖ¹»ØÍË
 			for _, p := range perms {
 				if p == perm {
 					next.ServeHTTP(w, r)

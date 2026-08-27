@@ -1,4 +1,4 @@
-ï»¿package api
+package api
 
 import (
 	"fmt"
@@ -40,7 +40,7 @@ func NewAdminHandler(a *auth.Authenticator, store *storage.AtomicStore, redis *d
 // RegisterRoutes adds admin endpoints to the given router under /v1/admin.
 // Caller is responsible for auth middleware.
 func (h *AdminHandler) RegisterRoutes(r *http.ServeMux) {
-	// åŸæœ‰ç«¯ç‚¹
+	// Ô­ÓĞ¶Ëµã
 	r.HandleFunc("GET /metrics", h.Metrics)
 	r.HandleFunc("GET /users", h.ListUsers)
 	r.HandleFunc("GET /users/{id}", h.GetUser)
@@ -57,26 +57,26 @@ func (h *AdminHandler) RegisterRoutes(r *http.ServeMux) {
 	r.HandleFunc("PUT /redis", h.UpdateRedis)
 	r.HandleFunc("POST /redis/test", h.TestRedis)
 
-	// æ–°å¢ç«¯ç‚¹ï¼šé˜Ÿåˆ—ç®¡ç†
+	// ĞÂÔö¶Ëµã£º¶ÓÁĞ¹ÜÀí
 	r.HandleFunc("GET /queue", h.GetQueueStats)
 	r.HandleFunc("POST /queue/flush", h.FlushQueue)
 	r.HandleFunc("POST /queue/pause", h.PauseQueue)
 
-	// æ–°å¢ç«¯ç‚¹ï¼šç¼“å­˜ç›‘æ§
+	// ĞÂÔö¶Ëµã£º»º´æ¼à¿Ø
 	r.HandleFunc("GET /cache/stats", h.GetCacheStats)
 
-	// æ–°å¢ç«¯ç‚¹ï¼šæ€§èƒ½ç›‘æ§
+	// ĞÂÔö¶Ëµã£ºĞÔÄÜ¼à¿Ø
 	r.HandleFunc("GET /performance", h.GetPerformance)
 
-	// æ–°å¢ç«¯ç‚¹ï¼šAPI Key ç®¡ç†
+	// ĞÂÔö¶Ëµã£ºAPI Key ¹ÜÀí
 	r.HandleFunc("GET /api-keys", h.ListApiKeys)
-	// è¿ç»´ç±»ç«¯ç‚¹ï¼ˆç§Ÿæˆ·/åŸŸå/æ•°æ®åº“/Redis/æ¨¡å‹/å®šæ—¶ä»»åŠ¡ï¼‰â€”â€” /admin å…¨æ ˆå®è£…
+	// ÔËÎ¬Àà¶Ëµã£¨×â»§/ÓòÃû/Êı¾İ¿â/Redis/Ä£ĞÍ/¶¨Ê±ÈÎÎñ£©¡ª¡ª /admin È«Õ»Êµ×°
 	h.registerOpsRoutes(r)
 	r.HandleFunc("POST /api-keys", h.AddApiKey)
 	r.HandleFunc("PUT /api-keys/{id}", h.UpdateApiKey)
 	r.HandleFunc("DELETE /api-keys/{id}", h.DeleteApiKey)
 
-	// æ–°å¢ç«¯ç‚¹ï¼šç³»ç»Ÿè®¾ç½®
+	// ĞÂÔö¶Ëµã£ºÏµÍ³ÉèÖÃ
 	r.HandleFunc("PUT /settings", h.SaveSettings)
 	r.HandleFunc("GET /settings", h.GetSettings)
 }
@@ -190,15 +190,15 @@ func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		BadRequest(w, "invalid role: must be owner, admin, or user")
 		return
 	}
-	// S å®‰å…¨ä¿®å¤ï¼šé owner ä¸å¯å°†è§’è‰²æå‡ä¸º ownerï¼ˆé˜²æ­¢ admin ææƒï¼‰
+	// S °²È«ĞŞ¸´£º·Ç owner ²»¿É½«½ÇÉ«ÌáÉıÎª owner£¨·ÀÖ¹ admin ÌáÈ¨£©
 	claims := auth.GetClaims(r.Context())
 	if body.Role == "owner" && (claims == nil || claims.Role != "owner") {
 		BadRequest(w, "only owner can assign owner role")
 		return
 	}
 
-	// Build dynamic UPDATE with column name whitelist â€” tenant_id ä½œä¸ºé¢å¤– WHERE æ¡ä»¶é˜²è¶Šæƒ
-	// S å®‰å…¨ä¿®å¤ï¼šåˆ—åå¿…é¡»æ¥è‡ªç™½åå•ï¼Œé˜²æ­¢ SQL æ³¨å…¥
+	// Build dynamic UPDATE with column name whitelist ¡ª tenant_id ×÷Îª¶îÍâ WHERE Ìõ¼ş·ÀÔ½È¨
+	// S °²È«ĞŞ¸´£ºÁĞÃû±ØĞëÀ´×Ô°×Ãûµ¥£¬·ÀÖ¹ SQL ×¢Èë
 	userColumnMap := map[string]string{
 		"email": "email",
 		"name":  "name",
@@ -279,7 +279,7 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	OK(w, map[string]string{"status": "deleted"})
 }
 
-// éˆ¹â‚¬éˆ¹â‚¬ System Management éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬éˆ¹â‚¬
+// â”€â”€ System Management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 func (h *AdminHandler) SystemInfo(w http.ResponseWriter, r *http.Request) {
 	info := map[string]interface{}{
@@ -365,16 +365,16 @@ func dbNameFromDSN() string {
 		return "chiron"
 	}
 	if u.Path != "" && u.Path != "/" {
-		// Path is /dbname éˆ¥?trim leading slash
+		// Path is /dbname â€?trim leading slash
 		return u.Path[1:]
 	}
 	return "chiron"
 }
 
-// éˆ¹â‚¬éˆ¹â‚¬ Backup & Restore éˆ¹â‚¬éˆ¹â‚¬
+// â”€â”€ Backup & Restore â”€â”€
 
 func (h *AdminHandler) CreateBackup(w http.ResponseWriter, r *http.Request) {
-	// P0-P4 ä¿®å¤ï¼špg_dump è¾“å‡ºæµå¼è½¬å‘ï¼Œé¿å…æ•´åº“ç¼“å†²å…¥å†…å­˜å¯¼è‡´ OOM
+	// P0-P4 ĞŞ¸´£ºpg_dump Êä³öÁ÷Ê½×ª·¢£¬±ÜÃâÕû¿â»º³åÈëÄÚ´æµ¼ÖÂ OOM
 	cmd := exec.CommandContext(r.Context(), "pg_dump", "--dbname="+extractDSN())
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -402,7 +402,7 @@ func (h *AdminHandler) RestoreBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
-	// P0-P4 é˜²æŠ¤ï¼šé™åˆ¶æ¢å¤æ–‡ä»¶å¤§å°ï¼Œé¿å…æ•´æ–‡ä»¶è¯»å…¥å†…å­˜
+	// P0-P4 ·À»¤£ºÏŞÖÆ»Ö¸´ÎÄ¼ş´óĞ¡£¬±ÜÃâÕûÎÄ¼ş¶ÁÈëÄÚ´æ
 	sqlData, err := io.ReadAll(io.LimitReader(file, 512<<20))
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "read file failed")
@@ -433,7 +433,7 @@ func extractDSN() string {
 	return os.Getenv("POSTGRES_DSN")
 }
 
-// â”€â”€â”€ Storage Management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ©¤©¤©¤ Storage Management ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
 
 type StorageConfig struct {
 	Backend     string `json:"backend"`
@@ -511,9 +511,9 @@ func (h *AdminHandler) UpdateStorage(w http.ResponseWriter, r *http.Request) {
 	warning := ""
 	if previous != body.Backend {
 		if previous == "local" {
-			warning = "å­˜å‚¨åç«¯å·²ä» local åˆ‡æ¢ä¸º s3ã€‚æ—§åç«¯ä¸­çš„æ–‡ä»¶ä¸ä¼šè‡ªåŠ¨è¿ç§»ã€‚"
+			warning = "´æ´¢ºó¶ËÒÑ´Ó local ÇĞ»»Îª s3¡£¾Éºó¶ËÖĞµÄÎÄ¼ş²»»á×Ô¶¯Ç¨ÒÆ¡£"
 		} else {
-			warning = "å­˜å‚¨åç«¯å·²ä» s3 åˆ‡æ¢ä¸º localã€‚æ—§åç«¯ä¸­çš„æ–‡ä»¶ä¸ä¼šè‡ªåŠ¨è¿ç§»ã€‚"
+			warning = "´æ´¢ºó¶ËÒÑ´Ó s3 ÇĞ»»Îª local¡£¾Éºó¶ËÖĞµÄÎÄ¼ş²»»á×Ô¶¯Ç¨ÒÆ¡£"
 		}
 	}
 
@@ -543,7 +543,7 @@ func (h *AdminHandler) TestStorage(w http.ResponseWriter, r *http.Request) {
 	case "local":
 		OK(w, map[string]interface{}{
 			"status":  "ok",
-			"message": "æœ¬åœ°å­˜å‚¨å¯ç”¨",
+			"message": "±¾µØ´æ´¢¿ÉÓÃ",
 		})
 	case "s3":
 		if body.S3Endpoint == "" || body.S3Bucket == "" || body.S3AccessKey == "" || body.S3SecretKey == "" {
@@ -554,7 +554,7 @@ func (h *AdminHandler) TestStorage(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			OK(w, map[string]interface{}{
 				"status":  "error",
-				"message": fmt.Errorf("S3 è¿æ¥å¤±è´¥: %w", err).Error(),
+				"message": fmt.Errorf("S3 Á¬½ÓÊ§°Ü: %w", err).Error(),
 			})
 			return
 		}
@@ -563,20 +563,20 @@ func (h *AdminHandler) TestStorage(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			OK(w, map[string]interface{}{
 				"status":  "error",
-				"message": fmt.Errorf("S3 bucket è®¿é—®å¤±è´¥: %w", err).Error(),
+				"message": fmt.Errorf("S3 bucket ·ÃÎÊÊ§°Ü: %w", err).Error(),
 			})
 			return
 		}
 		OK(w, map[string]interface{}{
 			"status":  "ok",
-			"message": fmt.Sprintf("S3 è¿æ¥æˆåŠŸï¼Œbucket '%s' å¯è®¿é—®", body.S3Bucket),
+			"message": fmt.Sprintf("S3 Á¬½Ó³É¹¦£¬bucket '%s' ¿É·ÃÎÊ", body.S3Bucket),
 		})
 	default:
 		BadRequest(w, "backend must be 'local' or 's3'")
 	}
 }
 
-// â”€â”€â”€ Redis Management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ©¤©¤©¤ Redis Management ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
 
 func (h *AdminHandler) GetRedis(w http.ResponseWriter, r *http.Request) {
 	if h.redis == nil {

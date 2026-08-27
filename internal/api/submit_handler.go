@@ -34,7 +34,7 @@ func NewSubmitHandler(python *engine.PythonClient, sessionMgr *session.Manager, 
 }
 
 // SubmitApproval proxies the user's tool-approval decision to the Python engine
-// (S 安全修复：工具三态栅栏的“确认”态 — 前端确认卡片回调这里).
+// (S 安全修复：工具三态栅栏的“确认”�?�?前端确认卡片回调这里).
 func (h *SubmitHandler) SubmitApproval(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		SessionID  string `json:"session_id"`
@@ -52,8 +52,8 @@ func (h *SubmitHandler) SubmitApproval(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var out map[string]any
-	// S 修复：把已验证 JWT claims 的 user_id 一并透传，供 Python 端校验
-	// 来电者是否为会话 owner，防止他人代批/拒批危险工具。
+	// S 修复：把已验�?JWT claims �?user_id 一并透传，供 Python 端校�?
+	// 来电者是否为会话 owner，防止他人代�?拒批危险工具�?
 	if claims := auth.GetClaims(r.Context()); claims != nil {
 		req.UserID = claims.UserID
 	}
@@ -67,7 +67,7 @@ func (h *SubmitHandler) SubmitApproval(w http.ResponseWriter, r *http.Request) {
 
 // HandleSubmit proxies the submit request to Python engine and streams SSE events.
 func (h *SubmitHandler) HandleSubmit(ctx context.Context, userID, sessionID, content string, llmConfig map[string]interface{}) {
-	// P1 修复：与 Python 引擎 5min 客户端超时对齐，避免长任务被 180s 硬超时截断
+	// P1 修复：与 Python 引擎 5min 客户端超时对齐，避免长任务被 180s 硬超时截�?
 	ctx, cancel := context.WithTimeout(ctx, 300*time.Second)
 	defer cancel()
 	if sessionID != "" {
@@ -75,18 +75,18 @@ func (h *SubmitHandler) HandleSubmit(ctx context.Context, userID, sessionID, con
 		defer sessionCancels.Delete(sessionID)
 	}
 
-	// 落库专用 ctx：不继承主 ctx 的取消/超时。
+	// 落库专用 ctx：不继承�?ctx 的取�?超时�?
 	// 流可能被 180s 超时、前端断开、会话取消等截断，但已产生的消息
-	// （user/assistant/tool_call）必须写入，否则刷新后对话丢失。
+	// （user/assistant/tool_call）必须写入，否则刷新后对话丢失�?
 	storeCtx, storeCancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer storeCancel()
 
-	// S 修复：上下文丢失 — 提交时立即持久化用户消息（SSE 中断/停止也不丢历史）
+	// S 修复：上下文丢失 �?提交时立即持久化用户消息（SSE 中断/停止也不丢历史）
 	h.sessionMgr.SaveUserMessage(storeCtx, sessionID, userID, content)
 
 	histMsgs := make([]map[string]string, 0)
 	if hist, err := h.sessionMgr.GetMessages(ctx, sessionID, 50); err == nil && len(hist) > 0 {
-		// 只保留最近 8 条消息（Python SessionStore 有完整缓存）
+		// 只保留最�?8 条消息（Python SessionStore 有完整缓存）
 		const maxHistory = 8
 		start := 0
 		if len(hist) > maxHistory {
@@ -99,7 +99,7 @@ func (h *SubmitHandler) HandleSubmit(ctx context.Context, userID, sessionID, con
 		}
 	}
 
-	// 默认 max_turns，若 llm_config 中有则使用前端指定的值
+	// 默认 max_turns，若 llm_config 中有则使用前端指定的�?
 	defaultMaxTurns := 5
 	if llmConfig != nil {
 		if mt, ok := llmConfig["max_turns"].(float64); ok && mt > 0 {
@@ -128,9 +128,9 @@ func (h *SubmitHandler) HandleSubmit(ctx context.Context, userID, sessionID, con
 
 	var finalContent string
 	var inputTokens, outputTokens int
-	turnToolCallIDs := []string{} // S 修复：messages.tool_calls 列只存 tool_call id 集合（内容在 tool_calls 表）
+	turnToolCallIDs := []string{} // S 修复：messages.tool_calls 列只�?tool_call id 集合（内容在 tool_calls 表）
 
-	// P 性能：text 事件 50ms 合帧转发（公网多租户下 SSE 帧数减半，减少网关/前端处理开销）
+	// P 性能：text 事件 50ms 合帧转发（公网多租户�?SSE 帧数减半，减少网�?前端处理开销�?
 	const textFrameInterval = 50 * time.Millisecond
 	var textBuf strings.Builder
 	lastTextFlush := time.Now()
@@ -150,7 +150,7 @@ func (h *SubmitHandler) HandleSubmit(ctx context.Context, userID, sessionID, con
 
 	for evt := range events {
 		// 思考事件（[thinking] 前缀）不参与合帧：过程性内容需即时逐段推送，
-		// 否则毫秒级到达的 thinking 片段会被 50ms 合帧合并成整段（思考不流式）。
+		// 否则毫秒级到达的 thinking 片段会被 50ms 合帧合并成整段（思考不流式）�?
 		isThinking := strings.HasPrefix(evt.Content, "[thinking]")
 		if evt.Type == "text" && evt.Content != "" && !isThinking {
 			textBuf.WriteString(evt.Content)
@@ -158,10 +158,10 @@ func (h *SubmitHandler) HandleSubmit(ctx context.Context, userID, sessionID, con
 				flushText()
 			}
 		} else {
-			flushText() // 非 text 事件先冲刷缓冲，保持顺序
+			flushText() // �?text 事件先冲刷缓冲，保持顺序
 			h.eventHub.Publish(broadcast.Event{Type: evt.Type, SessionID: sessionID, Data: evt})
 		}
-		// S 修复：工具调用过程落库（tool_call 记录 + tool_result 回填），刷新后显示一致
+		// S 修复：工具调用过程落库（tool_call 记录 + tool_result 回填），刷新后显示一�?
 		switch evt.Type {
 		case "tool_call":
 			h.sessionMgr.SaveToolCall(storeCtx, sessionID, evt.ID, evt.Name, evt.Arguments)
@@ -171,7 +171,7 @@ func (h *SubmitHandler) HandleSubmit(ctx context.Context, userID, sessionID, con
 		case "tool_result":
 			h.sessionMgr.UpdateToolCall(storeCtx, evt.ID, evt.Content, strings.Contains(evt.Content, `"error"`))
 		case "guardrail_blocked":
-			// SaaS 合规：栅栏拒绝留痕（输入注入/输出泄露/工具 block 审计）
+			// SaaS 合规：栅栏拒绝留痕（输入注入/输出泄露/工具 block 审计�?
 			h.sessionMgr.SaveToolCall(storeCtx, sessionID,
 				"guard_"+evt.ID, "guardrail",
 				fmt.Sprintf(`{"reason":%q}`, evt.Content))
@@ -183,15 +183,15 @@ func (h *SubmitHandler) HandleSubmit(ctx context.Context, userID, sessionID, con
 			outputTokens += evt.OutputTokens
 		}
 	}
-	flushText() // 流结束兜底冲刷
+	flushText() // 流结束兜底冲�?
 
 	if finalContent != "" || len(turnToolCallIDs) > 0 {
-		// S 修复：纯工具调用轮（无文本）也保存 assistant 消息；
-		// messages.tool_calls 列只存 id 集合（内容在 tool_calls 表，避免重复存储）
+		// S 修复：纯工具调用轮（无文本）也保�?assistant 消息�?
+		// messages.tool_calls 列只�?id 集合（内容在 tool_calls 表，避免重复存储�?
 		toolCallsJSON, _ := json.Marshal(turnToolCallIDs)
 		h.sessionMgr.SaveAssistantMessage(storeCtx, sessionID, finalContent, string(toolCallsJSON))
 	} else {
-		// 无文本无工具：仅用户消息已由 SaveUserMessage 持久化
+		// 无文本无工具：仅用户消息已由 SaveUserMessage 持久�?
 	}
 
 	if inputTokens > 0 || outputTokens > 0 {
@@ -199,7 +199,7 @@ func (h *SubmitHandler) HandleSubmit(ctx context.Context, userID, sessionID, con
 			// 检查是否仍在免费额度内
 			freeCount, fcErr := h.biller.DailyFreeCount(storeCtx, userID)
 			if fcErr == nil && freeCount < billing.DailyFreeLimit {
-				// 免费对话：记录使用，不扣费
+				// 免费对话：记录使用，不扣�?
 				if markErr := h.biller.MarkFreeUsage(storeCtx, userID); markErr != nil {
 					slog.Error("billing: MarkFreeUsage failed", "user", userID, "error", markErr)
 				}

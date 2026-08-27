@@ -17,18 +17,18 @@ import (
 
 // ── 企业成本中心：类型与错误 ──────────────────────────────────────────────
 
-// EntQuotaPool 对应 ent_quota_pools 表。
+// EntQuotaPool 对应 ent_quota_pools 表�?
 type EntQuotaPool struct {
 	ID           string    `json:"id"`
 	TenantID     string    `json:"tenant_id"`
 	ResourceType string    `json:"resource_type"` // token/storage_mb/concurrency/credits
-	TotalAmount  int64     `json:"total_amount"`  // 0 = 无限制
+	TotalAmount  int64     `json:"total_amount"`  // 0 = 无限�?
 	Period       string    `json:"period"`        // daily/monthly
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
-// EntQuotaAllocation 对应 ent_quota_allocations 表。
+// EntQuotaAllocation 对应 ent_quota_allocations 表�?
 type EntQuotaAllocation struct {
 	ID         string    `json:"id"`
 	PoolID     string    `json:"pool_id"`
@@ -39,9 +39,9 @@ type EntQuotaAllocation struct {
 }
 
 var (
-	// errQuotaConflict 唯一约束冲突（配额池 tenant+resource+period 或分配 pool+target）
+	// errQuotaConflict 唯一约束冲突（配额池 tenant+resource+period 或分�?pool+target�?
 	errQuotaConflict = errors.New("ent quota: unique constraint conflict")
-	// errQuotaNotFound 配额池/分配不存在
+	// errQuotaNotFound 配额�?分配不存�?
 	errQuotaNotFound = errors.New("ent quota: not found")
 )
 
@@ -52,7 +52,7 @@ var (
 	validTargetTypes   = map[string]bool{"group": true, "user": true}
 )
 
-// ── 汇总结果类型 ──────────────────────────────────────────────────────────
+// ── 汇总结果类�?──────────────────────────────────────────────────────────
 
 type entCostSummaryRow struct {
 	Key          string `json:"key"`
@@ -92,7 +92,7 @@ type entGroupCost struct {
 
 // ── 数据访问接口（PG 实现 + 测试 fake 可替换） ────────────────────────────
 
-// EntCostStore 是企业成本中心的数据访问接口。
+// EntCostStore 是企业成本中心的数据访问接口�?
 type EntCostStore interface {
 	CostSummary(ctx context.Context, from, to time.Time, groupBy string) (*entCostSummary, error)
 	GroupCost(ctx context.Context, groupID string, from, to time.Time) (*entGroupCost, error)
@@ -108,20 +108,20 @@ type EntCostStore interface {
 	CreateAllocation(ctx context.Context, a *EntQuotaAllocation) error
 	DeleteAllocation(ctx context.Context, poolID, id string) (bool, error)
 
-	// TenantTokenPools 返回租户的 resource_type='token' 配额池（quota 强制用）
+	// TenantTokenPools 返回租户�?resource_type='token' 配额池（quota 强制用）
 	TenantTokenPools(ctx context.Context, tenantID string) ([]EntQuotaPool, error)
-	// TokenUsageSQL 从 billing_records SQL 聚合 token 用量（Redis 计数器回填用）
+	// TokenUsageSQL �?billing_records SQL 聚合 token 用量（Redis 计数器回填用�?
 	TokenUsageSQL(ctx context.Context, tenantID string, since time.Time) (int64, error)
-	// ResolveTenantID 经 users 表解析用户所属租户
+	// ResolveTenantID �?users 表解析用户所属租�?
 	ResolveTenantID(ctx context.Context, userID string) (string, error)
 }
 
-// pgEntCostStore 是基于全局 db.Pool / db.ReadPool 的 EntCostStore 实现。
+// pgEntCostStore 是基于全局 db.Pool / db.ReadPool �?EntCostStore 实现�?
 type pgEntCostStore struct{}
 
 func newPGEntCostStore() *pgEntCostStore { return &pgEntCostStore{} }
 
-// isUniqueViolation 判断是否为 PostgreSQL 唯一约束冲突（SQLSTATE 23505）。
+// isUniqueViolation 判断是否�?PostgreSQL 唯一约束冲突（SQLSTATE 23505）�?
 func isUniqueViolation(err error) bool {
 	var pe *pgconn.PgError
 	if errors.As(err, &pe) {
@@ -130,7 +130,7 @@ func isUniqueViolation(err error) bool {
 	return false
 }
 
-// ── CostSummary：billing_records + credit_transactions + payments 跨租户汇总 ──
+// ── CostSummary：billing_records + credit_transactions + payments 跨租户汇�?──
 
 func (s *pgEntCostStore) CostSummary(ctx context.Context, from, to time.Time, groupBy string) (*entCostSummary, error) {
 	var keyExpr, groupExpr string
@@ -160,13 +160,13 @@ func (s *pgEntCostStore) CostSummary(ctx context.Context, from, to time.Time, gr
 		return r
 	}
 
-	// 1) billing_records：成本与 token 明细（SQL 聚合）
+	// 1) billing_records：成本与 token 明细（SQL 聚合�?
 	qBilling := fmt.Sprintf(
 		`SELECT %s AS k, COALESCE(SUM(cost_cents),0), COALESCE(SUM(input_tokens),0),
 		        COALESCE(SUM(output_tokens),0), COUNT(*)
 		 FROM billing_records WHERE created_at >= $1 AND created_at < $2
 		 GROUP BY %s`, keyExpr, groupExpr)
-	rows, err := db.ReadPool().Query(ctx, qBilling, from, to)
+	rows, err := db.GlobalDBManager.Query(ctx, qBilling, from, to)
 	if err != nil {
 		return nil, fmt.Errorf("summary billing_records: %w", err)
 	}
@@ -186,7 +186,7 @@ func (s *pgEntCostStore) CostSummary(ctx context.Context, from, to time.Time, gr
 		return nil, fmt.Errorf("summary billing iterate: %w", err)
 	}
 
-	// 2) credit_transactions：credits 消耗（负向流水求和；经 users 关联租户）
+	// 2) credit_transactions：credits 消耗（负向流水求和；经 users 关联租户�?
 	ctKey := "u.tenant_id::text"
 	ctGroup := "u.tenant_id"
 	if groupBy == "day" {
@@ -197,7 +197,7 @@ func (s *pgEntCostStore) CostSummary(ctx context.Context, from, to time.Time, gr
 		 FROM credit_transactions ct JOIN users u ON u.id::text = ct.user_id::text
 		 WHERE ct.amount < 0 AND ct.created_at >= $1 AND ct.created_at < $2
 		 GROUP BY %s`, ctKey, ctGroup)
-	rows, err = db.ReadPool().Query(ctx, qCredits, from, to)
+	rows, err = db.GlobalDBManager.Query(ctx, qCredits, from, to)
 	if err != nil {
 		return nil, fmt.Errorf("summary credit_transactions: %w", err)
 	}
@@ -215,7 +215,7 @@ func (s *pgEntCostStore) CostSummary(ctx context.Context, from, to time.Time, gr
 		return nil, fmt.Errorf("summary credits iterate: %w", err)
 	}
 
-	// 3) payments：充值收入（已支付订单；经 users 关联租户）
+	// 3) payments：充值收入（已支付订单；�?users 关联租户�?
 	pKey := "u.tenant_id::text"
 	pGroup := "u.tenant_id"
 	if groupBy == "day" {
@@ -228,7 +228,7 @@ func (s *pgEntCostStore) CostSummary(ctx context.Context, from, to time.Time, gr
 		 WHERE p.status = 'paid'
 		   AND COALESCE(p.paid_at, p.created_at) >= $1 AND COALESCE(p.paid_at, p.created_at) < $2
 		 GROUP BY %s`, pKey, pGroup)
-	rows, err = db.ReadPool().Query(ctx, qPayments, from, to)
+	rows, err = db.GlobalDBManager.Query(ctx, qPayments, from, to)
 	if err != nil {
 		return nil, fmt.Errorf("summary payments: %w", err)
 	}
@@ -259,12 +259,12 @@ func (s *pgEntCostStore) CostSummary(ctx context.Context, from, to time.Time, gr
 	return summary, nil
 }
 
-// ── GroupCost：群组计费归集明细 + 合计 ──
+// ── GroupCost：群组计费归集明�?+ 合计 ──
 
 func (s *pgEntCostStore) GroupCost(ctx context.Context, groupID string, from, to time.Time) (*entGroupCost, error) {
 	out := &entGroupCost{GroupID: groupID, Records: []entGroupCostRow{}}
 
-	err := db.ReadPool().QueryRow(ctx,
+	err := db.GlobalDBManager.QueryRow(ctx,
 		`SELECT COUNT(*), COALESCE(SUM(cost_cents),0), COALESCE(SUM(input_tokens),0),
 		        COALESCE(SUM(output_tokens),0)
 		 FROM billing_records WHERE group_id = $1 AND created_at >= $2 AND created_at < $3`,
@@ -274,7 +274,7 @@ func (s *pgEntCostStore) GroupCost(ctx context.Context, groupID string, from, to
 		return nil, fmt.Errorf("group cost totals: %w", err)
 	}
 
-	rows, err := db.ReadPool().Query(ctx,
+	rows, err := db.GlobalDBManager.Query(ctx,
 		`SELECT id, user_id, session_id, input_tokens, output_tokens, cost_cents, created_at
 		 FROM billing_records WHERE group_id = $1 AND created_at >= $2 AND created_at < $3
 		 ORDER BY created_at DESC LIMIT 500`, groupID, from, to)
@@ -296,7 +296,7 @@ func (s *pgEntCostStore) GroupCost(ctx context.Context, groupID string, from, to
 	return out, nil
 }
 
-// ── 配额池 CRUD ──
+// ── 配额�?CRUD ──
 
 const quotaPoolColumns = `id, tenant_id, resource_type, total_amount, period, created_at, updated_at`
 
@@ -317,7 +317,7 @@ func (s *pgEntCostStore) ListQuotaPools(ctx context.Context, tenantID string) ([
 		args = append(args, tenantID)
 	}
 	query += ` ORDER BY created_at`
-	rows, err := db.ReadPool().Query(ctx, query, args...)
+	rows, err := db.GlobalDBManager.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -334,7 +334,7 @@ func (s *pgEntCostStore) ListQuotaPools(ctx context.Context, tenantID string) ([
 }
 
 func (s *pgEntCostStore) GetQuotaPool(ctx context.Context, id string) (*EntQuotaPool, error) {
-	p, err := scanQuotaPool(db.ReadPool().QueryRow(ctx,
+	p, err := scanQuotaPool(db.GlobalDBManager.QueryRow(ctx,
 		`SELECT `+quotaPoolColumns+` FROM ent_quota_pools WHERE id = $1`, id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -346,7 +346,7 @@ func (s *pgEntCostStore) GetQuotaPool(ctx context.Context, id string) (*EntQuota
 }
 
 func (s *pgEntCostStore) CreateQuotaPool(ctx context.Context, p *EntQuotaPool) error {
-	row := db.Pool.QueryRow(ctx,
+	row := db.GlobalDBManager.QueryRow(ctx,
 		`INSERT INTO ent_quota_pools (tenant_id, resource_type, total_amount, period)
 		 VALUES ($1, $2, $3, $4) RETURNING `+quotaPoolColumns,
 		p.TenantID, p.ResourceType, p.TotalAmount, p.Period)
@@ -362,7 +362,7 @@ func (s *pgEntCostStore) CreateQuotaPool(ctx context.Context, p *EntQuotaPool) e
 }
 
 func (s *pgEntCostStore) UpdateQuotaPool(ctx context.Context, p *EntQuotaPool) error {
-	row := db.Pool.QueryRow(ctx,
+	row := db.GlobalDBManager.QueryRow(ctx,
 		`UPDATE ent_quota_pools
 		 SET resource_type = $2, total_amount = $3, period = $4, updated_at = NOW()
 		 WHERE id = $1 RETURNING `+quotaPoolColumns,
@@ -382,7 +382,7 @@ func (s *pgEntCostStore) UpdateQuotaPool(ctx context.Context, p *EntQuotaPool) e
 }
 
 func (s *pgEntCostStore) DeleteQuotaPool(ctx context.Context, id string) error {
-	tag, err := db.Pool.Exec(ctx, `DELETE FROM ent_quota_pools WHERE id = $1`, id)
+	tag, err := db.GlobalDBManager.Exec(ctx, `DELETE FROM ent_quota_pools WHERE id = $1`, id)
 	if err != nil {
 		return err
 	}
@@ -395,7 +395,7 @@ func (s *pgEntCostStore) DeleteQuotaPool(ctx context.Context, id string) error {
 // ── 配额分配 ──
 
 func (s *pgEntCostStore) ListAllocations(ctx context.Context, poolID string) ([]EntQuotaAllocation, error) {
-	rows, err := db.ReadPool().Query(ctx,
+	rows, err := db.GlobalDBManager.Query(ctx,
 		`SELECT id, pool_id, target_type, target_id, amount, created_at
 		 FROM ent_quota_allocations WHERE pool_id = $1 ORDER BY created_at`, poolID)
 	if err != nil {
@@ -415,14 +415,14 @@ func (s *pgEntCostStore) ListAllocations(ctx context.Context, poolID string) ([]
 
 func (s *pgEntCostStore) SumAllocated(ctx context.Context, poolID string) (int64, error) {
 	var sum int64
-	err := db.ReadPool().QueryRow(ctx,
+	err := db.GlobalDBManager.QueryRow(ctx,
 		`SELECT COALESCE(SUM(amount),0) FROM ent_quota_allocations WHERE pool_id = $1`, poolID).
 		Scan(&sum)
 	return sum, err
 }
 
 func (s *pgEntCostStore) CreateAllocation(ctx context.Context, a *EntQuotaAllocation) error {
-	row := db.Pool.QueryRow(ctx,
+	row := db.GlobalDBManager.QueryRow(ctx,
 		`INSERT INTO ent_quota_allocations (pool_id, target_type, target_id, amount)
 		 VALUES ($1, $2, $3, $4)
 		 RETURNING id, pool_id, target_type, target_id, amount, created_at`,
@@ -437,7 +437,7 @@ func (s *pgEntCostStore) CreateAllocation(ctx context.Context, a *EntQuotaAlloca
 }
 
 func (s *pgEntCostStore) DeleteAllocation(ctx context.Context, poolID, id string) (bool, error) {
-	tag, err := db.Pool.Exec(ctx,
+	tag, err := db.GlobalDBManager.Exec(ctx,
 		`DELETE FROM ent_quota_allocations WHERE id = $1 AND pool_id = $2`, id, poolID)
 	if err != nil {
 		return false, err
@@ -448,7 +448,7 @@ func (s *pgEntCostStore) DeleteAllocation(ctx context.Context, poolID, id string
 // ── quota 强制 / 用量支撑查询 ──
 
 func (s *pgEntCostStore) TenantTokenPools(ctx context.Context, tenantID string) ([]EntQuotaPool, error) {
-	rows, err := db.ReadPool().Query(ctx,
+	rows, err := db.GlobalDBManager.Query(ctx,
 		`SELECT `+quotaPoolColumns+` FROM ent_quota_pools
 		 WHERE tenant_id = $1 AND resource_type = 'token' ORDER BY created_at`, tenantID)
 	if err != nil {
@@ -468,7 +468,7 @@ func (s *pgEntCostStore) TenantTokenPools(ctx context.Context, tenantID string) 
 
 func (s *pgEntCostStore) TokenUsageSQL(ctx context.Context, tenantID string, since time.Time) (int64, error) {
 	var used int64
-	err := db.ReadPool().QueryRow(ctx,
+	err := db.GlobalDBManager.QueryRow(ctx,
 		`SELECT COALESCE(SUM(input_tokens + output_tokens),0)
 		 FROM billing_records WHERE tenant_id = $1 AND created_at >= $2`, tenantID, since).
 		Scan(&used)
@@ -477,7 +477,7 @@ func (s *pgEntCostStore) TokenUsageSQL(ctx context.Context, tenantID string, sin
 
 func (s *pgEntCostStore) ResolveTenantID(ctx context.Context, userID string) (string, error) {
 	var tenantID string
-	err := db.ReadPool().QueryRow(ctx,
+	err := db.GlobalDBManager.QueryRow(ctx,
 		`SELECT tenant_id FROM users WHERE id = $1`, userID).Scan(&tenantID)
 	if err != nil {
 		return "", err
@@ -487,8 +487,8 @@ func (s *pgEntCostStore) ResolveTenantID(ctx context.Context, userID string) (st
 
 // ── Handler ───────────────────────────────────────────────────────────────
 
-// EntCostCenterHandler 提供企业成本中心 API（成本汇总 / 群组归集 / 配额池 CRUD / 分配 / 用量）。
-// 路由注册由集成任务统一接入（本任务不注册）：
+// EntCostCenterHandler 提供企业成本中心 API（成本汇�?/ 群组归集 / 配额�?CRUD / 分配 / 用量）�?
+// 路由注册由集成任务统一接入（本任务不注册）�?
 //
 //	costHandler := api.NewEntCostCenterHandler(nil, nil)
 //	costHandler.RegisterRoutes(mux, authMW, rlMW)
@@ -497,8 +497,8 @@ type EntCostCenterHandler struct {
 	redis db.RedisClient
 }
 
-// NewEntCostCenterHandler 创建 handler。store/redis 为 nil 时分别回退到
-// pgEntCostStore（全局 db.Pool）与全局 db.Redis。
+// NewEntCostCenterHandler 创建 handler。store/redis �?nil 时分别回退�?
+// pgEntCostStore（全局 db.Pool）与全局 db.Redis�?
 func NewEntCostCenterHandler(store EntCostStore, redis db.RedisClient) *EntCostCenterHandler {
 	if store == nil {
 		store = newPGEntCostStore()
@@ -509,8 +509,8 @@ func NewEntCostCenterHandler(store EntCostStore, redis db.RedisClient) *EntCostC
 	return &EntCostCenterHandler{store: store, redis: redis}
 }
 
-// RegisterRoutes 挂载成本中心路由（仅定义，不在本任务注册）。
-// mws 建议传入 authMW、rlMW（与 UploadHandler.RegisterRoutes 惯例一致）。
+// RegisterRoutes 挂载成本中心路由（仅定义，不在本任务注册）�?
+// mws 建议传入 authMW、rlMW（与 UploadHandler.RegisterRoutes 惯例一致）�?
 func (h *EntCostCenterHandler) RegisterRoutes(mux *http.ServeMux, mws ...func(http.Handler) http.Handler) {
 	handle := func(pattern string, hf http.HandlerFunc) {
 		mux.Handle(pattern, middlewareChain(http.HandlerFunc(hf), mws...))
@@ -527,7 +527,7 @@ func (h *EntCostCenterHandler) RegisterRoutes(mux *http.ServeMux, mws ...func(ht
 	handle("DELETE /v1/ent/quotas/{id}/allocations/{allocID}", h.DeleteAllocation)
 }
 
-// requirePerm 校验权限并返回 claims；不满足时已写响应，返回 nil。
+// requirePerm 校验权限并返�?claims；不满足时已写响应，返回 nil�?
 func requirePerm(w http.ResponseWriter, r *http.Request, perm string) *auth.Claims {
 	claims := auth.GetClaims(r.Context())
 	if !auth.HasPermission(claims, perm) {
@@ -537,7 +537,7 @@ func requirePerm(w http.ResponseWriter, r *http.Request, perm string) *auth.Clai
 	return claims
 }
 
-// scopedTenantID：非 owner 且 claims 携带租户时，强制锚定自身租户。
+// scopedTenantID：非 owner �?claims 携带租户时，强制锚定自身租户�?
 func scopedTenantID(claims *auth.Claims, requested string) string {
 	if claims != nil && claims.TenantID != "" && claims.Role != "owner" {
 		return claims.TenantID
@@ -545,8 +545,8 @@ func scopedTenantID(claims *auth.Claims, requested string) string {
 	return requested
 }
 
-// parseTimeRange 解析 from/to（支持 YYYY-MM-DD 与 RFC3339）。
-// 缺省：to = 现在，from = to - 30 天。
+// parseTimeRange 解析 from/to（支�?YYYY-MM-DD �?RFC3339）�?
+// 缺省：to = 现在，from = to - 30 天�?
 func parseTimeRange(fromStr, toStr string) (time.Time, time.Time, error) {
 	parse := func(s string) (time.Time, error) {
 		if t, err := time.Parse("2006-01-02", s); err == nil {
@@ -828,7 +828,7 @@ func (h *EntCostCenterHandler) DeleteQuota(w http.ResponseWriter, r *http.Reques
 }
 
 // CreateAllocation POST /v1/ent/quotas/{id}/allocations
-// 校验分配总额不超过池总量（total_amount > 0 时），超出返回 422。
+// 校验分配总额不超过池总量（total_amount > 0 时），超出返�?422�?
 func (h *EntCostCenterHandler) CreateAllocation(w http.ResponseWriter, r *http.Request) {
 	if requirePerm(w, r, auth.PermAdminWrite) == nil {
 		return
@@ -870,7 +870,7 @@ func (h *EntCostCenterHandler) CreateAllocation(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// 分配总额校验：existing + new <= total_amount（0 = 无限制不校验）
+	// 分配总额校验：existing + new <= total_amount�? = 无限制不校验�?
 	if pool.TotalAmount > 0 {
 		existing, sErr := h.store.SumAllocated(r.Context(), poolID)
 		if sErr != nil {
@@ -934,7 +934,7 @@ func (h *EntCostCenterHandler) DeleteAllocation(w http.ResponseWriter, r *http.R
 func uuidValidate(s string) error { _, err := uuid.Parse(s); return err }
 
 // QuotaUsage GET /v1/ent/quotas/usage?tenant_id=
-// token 用量优先读 Redis 计数器，缺失时从 billing_records SQL 聚合。
+// token 用量优先�?Redis 计数器，缺失时从 billing_records SQL 聚合�?
 func (h *EntCostCenterHandler) QuotaUsage(w http.ResponseWriter, r *http.Request) {
 	claims := requirePerm(w, r, auth.PermAdminRead)
 	if claims == nil {

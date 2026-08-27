@@ -17,10 +17,10 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// maskedSecret 是 provider 读响应中 client_secret 的唯一脱敏形态。
+// maskedSecret �?provider 读响应中 client_secret 的唯一脱敏形态�?
 const maskedSecret = "********"
 
-// ssoStateTTL 是 SSO state 令牌有效期（防重放窗口）。
+// ssoStateTTL �?SSO state 令牌有效期（防重放窗口）�?
 const ssoStateTTL = 10 * time.Minute
 
 // ── 数据模型 ────────────────────────────────────────────
@@ -57,7 +57,7 @@ type ssoUser struct {
 	Role  string
 }
 
-// sanitizeProvider 构造 provider 的对外响应：client_secret 一律脱敏。
+// sanitizeProvider 构�?provider 的对外响应：client_secret 一律脱敏�?
 func sanitizeProvider(p *ssoProvider) map[string]any {
 	roleMapping := p.RoleMapping
 	if roleMapping == nil {
@@ -98,7 +98,7 @@ func sanitizeProvider(p *ssoProvider) map[string]any {
 
 type scanner interface{ Scan(dest ...any) error }
 
-// 可空列统一 COALESCE 为空串：未覆盖（''）即"用模板缺省值"，语义与 OAuth2 端点覆盖一致。
+// 可空列统一 COALESCE 为空串：未覆盖（''）即"用模板缺省�?，语义与 OAuth2 端点覆盖一致�?
 const ssoProviderColumns = `id, tenant_id, name, COALESCE(issuer, ''), client_id, client_secret_enc,
        scopes, enabled, auto_provision, role_mapping,
        COALESCE(protocol, 'oidc'), COALESCE(provider_type, 'custom'),
@@ -144,23 +144,23 @@ func scanSSOProvider(row scanner) (*ssoProvider, error) {
 
 // ── Handler ─────────────────────────────────────────────
 
-// SSOHandler 负责 OIDC/OAuth2 SSO 公开流程、用户自助绑定与管理端 CRUD。
-// db 抽象为 entQuerier 便于测试注入 fake；exchanger 抽象 IdP 交互。
+// SSOHandler 负责 OIDC/OAuth2 SSO 公开流程、用户自助绑定与管理�?CRUD�?
+// db 抽象�?entQuerier 便于测试注入 fake；exchanger 抽象 IdP 交互�?
 type SSOHandler struct {
 	auth       *auth.Authenticator
 	cfg        *config.Config
 	db         entQuerier
-	exchanger  auth.OIDCExchanger // OIDC 协议交换器（go-oidc）
-	oauth2     auth.OIDCExchanger // OAuth2 协议交换器（github/微信/钉钉/飞书/qq）
+	exchanger  auth.OIDCExchanger // OIDC 协议交换器（go-oidc�?
+	oauth2     auth.OIDCExchanger // OAuth2 协议交换器（github/微信/钉钉/飞书/qq�?
 	codec      *auth.StateCodec
 	encKey     []byte
-	redirectURL string // OAuth2 redirect_uri（授权回调地址）
-	successURL  string // 登录成功后 302 回前端的目标
-	bindURL     string // 绑定成功后 302 回前端的目标
+	redirectURL string // OAuth2 redirect_uri（授权回调地址�?
+	successURL  string // 登录成功�?302 回前端的目标
+	bindURL     string // 绑定成功�?302 回前端的目标
 }
 
 func NewSSOHandler(authenticator *auth.Authenticator, cfg *config.Config) *SSOHandler {
-	// 前端独立部署（dev 5173 / 独立域名）时 302 到绝对地址；同源部署保持相对路径
+	// 前端独立部署（dev 5173 / 独立域名）时 302 到绝对地址；同源部署保持相对路�?
 	feBase := strings.TrimRight(cfg.FrontendURL, "/")
 	h := &SSOHandler{
 		auth:        authenticator,
@@ -179,22 +179,22 @@ func NewSSOHandler(authenticator *auth.Authenticator, cfg *config.Config) *SSOHa
 	return h
 }
 
-// RegisterPublicRoutes 挂载公开 SSO 路由（无 authMW；外层须套 rlMW 限流）：
-// 发现列表 / 登录跳转 / IdP 回调。bind 模式的登录态从 JWT cookie 解析。
+// RegisterPublicRoutes 挂载公开 SSO 路由（无 authMW；外层须�?rlMW 限流）：
+// 发现列表 / 登录跳转 / IdP 回调。bind 模式的登录态从 JWT cookie 解析�?
 func (h *SSOHandler) RegisterPublicRoutes(mux *http.ServeMux, rlMW func(http.Handler) http.Handler) {
 	mux.Handle("GET /v1/auth/sso/providers", rlMW(http.HandlerFunc(h.ListPublicProviders)))
 	mux.Handle("GET /v1/auth/sso/login/{providerID}", rlMW(http.HandlerFunc(h.Login)))
 	mux.Handle("GET /v1/auth/sso/callback", rlMW(http.HandlerFunc(h.Callback)))
 }
 
-// RegisterUserRoutes 挂载用户自助路由（authMW）：绑定列表 / 解绑 / 设置密码。
+// RegisterUserRoutes 挂载用户自助路由（authMW）：绑定列表 / 解绑 / 设置密码�?
 func (h *SSOHandler) RegisterUserRoutes(mux *http.ServeMux, authMW func(http.Handler) http.Handler) {
 	mux.Handle("GET /v1/auth/sso/identities", authMW(http.HandlerFunc(h.ListIdentities)))
 	mux.Handle("DELETE /v1/auth/sso/identities/{id}", authMW(http.HandlerFunc(h.DeleteIdentity)))
 	mux.Handle("POST /v1/auth/password", authMW(http.HandlerFunc(h.SetPassword)))
 }
 
-// RegisterAdminRoutes 挂载 SSO 管理路由：authMW + RequireEntPerm("sso:manage")。
+// RegisterAdminRoutes 挂载 SSO 管理路由：authMW + RequireEntPerm("sso:manage")�?
 func (h *SSOHandler) RegisterAdminRoutes(mux *http.ServeMux, authMW func(http.Handler) http.Handler) {
 	sso := func(hf http.HandlerFunc) http.Handler {
 		return authMW(RequireEntPerm("sso:manage")(hf))
@@ -209,7 +209,7 @@ func (h *SSOHandler) RegisterAdminRoutes(mux *http.ServeMux, authMW func(http.Ha
 // ── 公开路由 ────────────────────────────────────────────
 
 // ListPublicProviders GET /v1/auth/sso/providers
-// 返回 enabled provider 的展示字段（不含任何敏感信息），按 sort_order 排序。
+// 返回 enabled provider 的展示字段（不含任何敏感信息），�?sort_order 排序�?
 func (h *SSOHandler) ListPublicProviders(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(r.Context(),
 		`SELECT id, name, display_name, provider_type, icon, sort_order, protocol
@@ -255,8 +255,8 @@ func (h *SSOHandler) ListPublicProviders(w http.ResponseWriter, r *http.Request)
 }
 
 // Login GET /v1/auth/sso/login/{providerID}[?mode=bind]
-// 生成 state+nonce → 302 到 IdP 授权页。
-// mode=bind 需登录态（authMW 保证），uid 写入 HMAC 签名 state。
+// 生成 state+nonce �?302 �?IdP 授权页�?
+// mode=bind 需登录态（authMW 保证），uid 写入 HMAC 签名 state�?
 func (h *SSOHandler) Login(w http.ResponseWriter, r *http.Request) {
 	providerID := r.PathValue("providerID")
 	if !isValidUUID(providerID) {
@@ -284,7 +284,7 @@ func (h *SSOHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// bind 模式：必须携带登录态（从 JWT cookie 解析，公开路由无 authMW）
+	// bind 模式：必须携带登录态（�?JWT cookie 解析，公开路由�?authMW�?
 	mode := auth.StateModeLogin
 	uid := ""
 	if r.URL.Query().Get("mode") == auth.StateModeBind {
@@ -329,7 +329,7 @@ func (h *SSOHandler) Login(w http.ResponseWriter, r *http.Request) {
 }
 
 // Callback GET /v1/auth/sso/callback?code=&state=
-// 校验 state → 授权码换身份 → 登录绑定/自动建号（或 bind 模式绑定当前账号）→ 颁发会话。
+// 校验 state �?授权码换身份 �?登录绑定/自动建号（或 bind 模式绑定当前账号）→ 颁发会话�?
 func (h *SSOHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	state := r.URL.Query().Get("state")
 	code := r.URL.Query().Get("code")
@@ -342,14 +342,14 @@ func (h *SSOHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1. state 校验（HMAC 防 CSRF/篡改，TTL 防重放）——失败一律 400，且不触碰 DB
+	// 1. state 校验（HMAC �?CSRF/篡改，TTL 防重放）——失败一�?400，且不触�?DB
 	payload, err := h.codec.Verify(state)
 	if err != nil {
 		logAndRespond(w, err, http.StatusBadRequest, "invalid sso state")
 		return
 	}
 
-	// 2. 加载 provider（必须 enabled）
+	// 2. 加载 provider（必�?enabled�?
 	provider, err := h.getEnabledProvider(r.Context(), payload.ProviderID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		BadRequest(w, "unknown sso provider in state")
@@ -365,7 +365,7 @@ func (h *SSOHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3. 授权码交换 + 身份校验（OIDC 含 nonce 比对；OAuth2 由 state HMAC 防重放）
+	// 3. 授权码交�?+ 身份校验（OIDC �?nonce 比对；OAuth2 �?state HMAC 防重放）
 	exchanger, cfg, err := h.exchangerFor(provider, clientSecret)
 	if err != nil {
 		BadRequest(w, err.Error())
@@ -387,14 +387,14 @@ func (h *SSOHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 4. 按 (provider_id, subject) 查绑定
+	// 4. �?(provider_id, subject) 查绑�?
 	user, err := h.findIdentityUser(r.Context(), provider.ID, idToken.Subject)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		logAndRespond(w, err, http.StatusInternalServerError, ErrDBUnavailable)
 		return
 	}
 
-	// 5. 未绑定：auto_provision 决定建号或拒绝
+	// 5. 未绑定：auto_provision 决定建号或拒�?
 	if errors.Is(err, pgx.ErrNoRows) {
 		if !provider.AutoProvision {
 			logAndRespond(w, errors.New("sso subject not bound and auto_provision disabled"),
@@ -408,9 +408,9 @@ func (h *SSOHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 6. 复用现有登录的会话颁发逻辑（GenerateToken + SetTokenCookie）
-	// 多租户隔离：SSO 用户的 tenant_id 来自 sso_provider 表配置（ent_oidc_providers.tenant_id），
-	// 与自动建号 provisionAndBind 使用的 provider.TenantID 一致，保证 JWT 与 DB 行为对齐
+	// 6. 复用现有登录的会话颁发逻辑（GenerateToken + SetTokenCookie�?
+	// 多租户隔离：SSO 用户�?tenant_id 来自 sso_provider 表配置（ent_oidc_providers.tenant_id），
+	// 与自动建�?provisionAndBind 使用�?provider.TenantID 一致，保证 JWT �?DB 行为对齐
 	if provider.TenantID == "" {
 		InternalError(w, "sso provider missing tenant_id configuration")
 		return
@@ -425,8 +425,8 @@ func (h *SSOHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, h.successURL, http.StatusFound)
 }
 
-// handleBindCallback bind 模式回调：该三方身份 → state.uid 本地账号。
-// 冲突（已绑定他人）→ 409；已绑定本人 → 幂等成功。
+// handleBindCallback bind 模式回调：该三方身份 �?state.uid 本地账号�?
+// 冲突（已绑定他人）→ 409；已绑定本人 �?幂等成功�?
 func (h *SSOHandler) handleBindCallback(w http.ResponseWriter, r *http.Request, provider *ssoProvider, idToken *auth.IDTokenResult, payload *auth.StatePayload) {
 	ctx := r.Context()
 
@@ -441,11 +441,11 @@ func (h *SSOHandler) handleBindCallback(w http.ResponseWriter, r *http.Request, 
 				"provider="+provider.Name, r.RemoteAddr, nil)
 			JSON(w, http.StatusConflict, APIResponse{
 				Success: false,
-				Error:   "该三方账号已绑定其他用户，请改用其登录",
+				Error:   "该三方账号已绑定其他用户，请改用其登�?,
 			})
 			return
 		}
-		// 已绑定本人 → 幂等
+		// 已绑定本�?�?幂等
 		http.Redirect(w, r, h.bindURL, http.StatusFound)
 		return
 	}
@@ -458,7 +458,7 @@ func (h *SSOHandler) handleBindCallback(w http.ResponseWriter, r *http.Request, 
 			// 并发绑定冲突
 			JSON(w, http.StatusConflict, APIResponse{
 				Success: false,
-				Error:   "该三方账号已绑定其他用户，请改用其登录",
+				Error:   "该三方账号已绑定其他用户，请改用其登�?,
 			})
 			return
 		}
@@ -470,9 +470,9 @@ func (h *SSOHandler) handleBindCallback(w http.ResponseWriter, r *http.Request, 
 	http.Redirect(w, r, h.bindURL, http.StatusFound)
 }
 
-// ── 用户自助：绑定列表 / 解绑 / 设置密码 ────────────────
+// ── 用户自助：绑定列�?/ 解绑 / 设置密码 ────────────────
 
-// ListIdentities GET /v1/auth/sso/identities（authMW）
+// ListIdentities GET /v1/auth/sso/identities（authMW�?
 func (h *SSOHandler) ListIdentities(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	if claims == nil {
@@ -521,8 +521,8 @@ func (h *SSOHandler) ListIdentities(w http.ResponseWriter, r *http.Request) {
 	OK(w, items)
 }
 
-// DeleteIdentity DELETE /v1/auth/sso/identities/{id}（authMW）
-// 守卫：用户无可口令密码（password_set=false）且这是最后一个三方身份 → 403。
+// DeleteIdentity DELETE /v1/auth/sso/identities/{id}（authMW�?
+// 守卫：用户无可口令密码（password_set=false）且这是最后一个三方身�?�?403�?
 func (h *SSOHandler) DeleteIdentity(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	if claims == nil {
@@ -536,7 +536,7 @@ func (h *SSOHandler) DeleteIdentity(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 
-	// 守卫：确保解绑后至少保留一种登录方式
+	// 守卫：确保解绑后至少保留一种登录方�?
 	var passwordSet bool
 	var count int
 	err := h.db.QueryRow(ctx,
@@ -552,7 +552,7 @@ func (h *SSOHandler) DeleteIdentity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 目标身份属于本人？
+	// 目标身份属于本人�?
 	var subject string
 	err = h.db.QueryRow(ctx,
 		`SELECT subject FROM ent_user_identities WHERE id = $1 AND user_id = $2`,
@@ -567,7 +567,7 @@ func (h *SSOHandler) DeleteIdentity(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !passwordSet && count <= 1 {
-		Forbidden(w, "无法解绑：请先设置密码，保证至少保留一种登录方式")
+		Forbidden(w, "无法解绑：请先设置密码，保证至少保留一种登录方�?)
 		return
 	}
 
@@ -591,8 +591,8 @@ type setPasswordRequest struct {
 	NewPassword     string `json:"new_password"`
 }
 
-// SetPassword POST /v1/auth/password（authMW）
-// SSO 建号用户（password_set=false）首设密码免旧密码；已设置者必须校验旧密码。
+// SetPassword POST /v1/auth/password（authMW�?
+// SSO 建号用户（password_set=false）首设密码免旧密码；已设置者必须校验旧密码�?
 func (h *SSOHandler) SetPassword(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	if claims == nil {
@@ -699,11 +699,11 @@ type createProviderRequest struct {
 	Extra        map[string]string `json:"extra"`
 }
 
-// normalizeProviderInput 校验并补齐 provider 协议字段（模板端点自动填充）。
-// 返回规范化的 issuer/protocol/providerType/authURL/tokenURL/userinfoURL/scopes。
+// normalizeProviderInput 校验并补�?provider 协议字段（模板端点自动填充）�?
+// 返回规范化的 issuer/protocol/providerType/authURL/tokenURL/userinfoURL/scopes�?
 func normalizeProviderInput(protocol, providerType, issuer, authURL, tokenURL, userinfoURL string, scopes []string) (
 	string, string, string, string, string, string, []string, error) {
-	// protocol 未显式指定时按 provider_type 模板推断（github/wechat 等原生 OAuth2）
+	// protocol 未显式指定时�?provider_type 模板推断（github/wechat 等原�?OAuth2�?
 	if protocol == "" {
 		if profile, ok := auth.GetProviderProfile(providerType); ok {
 			protocol = profile.Protocol
@@ -733,7 +733,7 @@ func defaultStr(s, def string) string {
 }
 
 // CreateProvider POST /v1/ent/sso/providers
-// client_secret 以 AES-GCM 加密入库；密钥未配置时返回 503。
+// client_secret �?AES-GCM 加密入库；密钥未配置时返�?503�?
 func (h *SSOHandler) CreateProvider(w http.ResponseWriter, r *http.Request) {
 	var req createProviderRequest
 	if err := DecodeJSON(w, r, &req); err != nil {
@@ -870,7 +870,7 @@ type updateProviderRequest struct {
 }
 
 // UpdateProvider PUT /v1/ent/sso/providers/{id}
-// client_secret 为空串或脱敏占位符时保留原密文；提供新值时重新加密（需密钥）。
+// client_secret 为空串或脱敏占位符时保留原密文；提供新值时重新加密（需密钥）�?
 func (h *SSOHandler) UpdateProvider(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if !isValidUUID(id) {
@@ -916,7 +916,7 @@ func (h *SSOHandler) UpdateProvider(w http.ResponseWriter, r *http.Request) {
 	if req.ProviderType != nil {
 		providerType = *req.ProviderType
 	}
-	// 协议/模板变更后重新解析端点（显式覆盖优先）
+	// 协议/模板变更后重新解析端点（显式覆盖优先�?
 	if req.Protocol != nil || req.ProviderType != nil || req.Issuer != nil ||
 		req.AuthURL != nil || req.TokenURL != nil || req.UserinfoURL != nil {
 		var iss, au, tu, uu string
@@ -932,7 +932,7 @@ func (h *SSOHandler) UpdateProvider(w http.ResponseWriter, r *http.Request) {
 		if req.UserinfoURL != nil {
 			uu = *req.UserinfoURL
 		}
-		// 未显式覆盖的字段沿用既有值（可能已是管理员自定义端点）
+		// 未显式覆盖的字段沿用既有值（可能已是管理员自定义端点�?
 		if iss == "" {
 			iss = issuer
 		}
@@ -1082,13 +1082,13 @@ func (h *SSOHandler) getEnabledProvider(ctx context.Context, id string) (*ssoPro
 		`SELECT `+ssoProviderColumns+` FROM ent_oidc_providers WHERE id = $1 AND enabled = TRUE`, id))
 }
 
-// exchangerFor 按 provider 协议选择交换器并构造完整配置（含模板端点解析）。
+// exchangerFor �?provider 协议选择交换器并构造完整配置（含模板端点解析）�?
 func (h *SSOHandler) exchangerFor(p *ssoProvider, clientSecret string) (auth.OIDCExchanger, *auth.OIDCProviderConfig, error) {
 	protocol := p.Protocol
 	if protocol == "" {
 		protocol = auth.ProtocolOIDC
 	}
-	// 模板端点补齐：显式覆盖（DB 列非空）优先，其次 provider 模板缺省值
+	// 模板端点补齐：显式覆盖（DB 列非空）优先，其�?provider 模板缺省�?
 	issuer, authURL, tokenURL, userinfoURL := auth.ResolveEndpoints(
 		p.ProviderType, p.Issuer, p.AuthURL, p.TokenURL, p.UserinfoURL)
 	scopes := p.Scopes
@@ -1125,7 +1125,7 @@ func (h *SSOHandler) exchangerFor(p *ssoProvider, clientSecret string) (auth.OID
 	return h.exchanger, cfg, nil
 }
 
-// findIdentityUser 按 (provider_id, subject) 查绑定用户；未绑定返回 pgx.ErrNoRows。
+// findIdentityUser �?(provider_id, subject) 查绑定用户；未绑定返�?pgx.ErrNoRows�?
 func (h *SSOHandler) findIdentityUser(ctx context.Context, providerID, subject string) (*ssoUser, error) {
 	var user ssoUser
 	err := h.db.QueryRow(ctx,
@@ -1139,10 +1139,10 @@ func (h *SSOHandler) findIdentityUser(ctx context.Context, providerID, subject s
 	return &user, nil
 }
 
-// provisionAndBind 自动建号并写入外部身份绑定。
-// 租户取 provider 配置；email 取身份信息（缺失时以 subject 兜底）；
-// password_hash 写入随机不可碰撞 bcrypt 且 password_set=FALSE（不可口令登录）；
-// role 按 role_mapping 匹配、缺省 "user"；携带手机号时回填 users.phone。
+// provisionAndBind 自动建号并写入外部身份绑定�?
+// 租户�?provider 配置；email 取身份信息（缺失时以 subject 兜底）；
+// password_hash 写入随机不可碰撞 bcrypt �?password_set=FALSE（不可口令登录）�?
+// role �?role_mapping 匹配、缺�?"user"；携带手机号时回�?users.phone�?
 func (h *SSOHandler) provisionAndBind(r *http.Request, provider *ssoProvider, idToken *auth.IDTokenResult) (*ssoUser, error) {
 	ctx := r.Context()
 
@@ -1156,7 +1156,7 @@ func (h *SSOHandler) provisionAndBind(r *http.Request, provider *ssoProvider, id
 	}
 	role := resolveRole(provider.RoleMapping, idToken.Roles)
 
-	// 随机 32 字节密码 → bcrypt；SSO 建号用户不可用口令登录，直到主动设置密码
+	// 随机 32 字节密码 �?bcrypt；SSO 建号用户不可用口令登录，直到主动设置密码
 	randomPassword := make([]byte, 32)
 	if _, err := rand.Read(randomPassword); err != nil {
 		return nil, err
@@ -1211,8 +1211,8 @@ func (h *SSOHandler) provisionAndBind(r *http.Request, provider *ssoProvider, id
 	return &user, nil
 }
 
-// resolveRole 按 provider.role_mapping 将 IdP "roles" claim 映射为本地角色；
-// 无命中时缺省 "user"。纯函数，便于单元测试。
+// resolveRole �?provider.role_mapping �?IdP "roles" claim 映射为本地角色；
+// 无命中时缺省 "user"。纯函数，便于单元测试�?
 func resolveRole(mapping map[string]string, idpRoles []string) string {
 	for _, r := range idpRoles {
 		if mapped, ok := mapping[r]; ok && mapped != "" {

@@ -18,66 +18,66 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// ── state / nonce 编解码 ─────────────────────────────────
+// ── state / nonce 编解�?─────────────────────────────────
 //
-// state 令牌格式: base64url(JSON payload) + "." + base64url(HMAC-SHA256(payload))。
-// payload 携带 provider_id / nonce / 过期时间，防 CSRF（HMAC 不可伪造）与重放（短 TTL）。
+// state 令牌格式: base64url(JSON payload) + "." + base64url(HMAC-SHA256(payload))�?
+// payload 携带 provider_id / nonce / 过期时间，防 CSRF（HMAC 不可伪造）与重放（�?TTL）�?
 
 var (
-	// ErrStateInvalid 表示 state 结构非法或 HMAC 校验失败（含篡改）。
+	// ErrStateInvalid 表示 state 结构非法�?HMAC 校验失败（含篡改）�?
 	ErrStateInvalid = errors.New("invalid sso state")
-	// ErrStateExpired 表示 state 已过期。
+	// ErrStateExpired 表示 state 已过期�?
 	ErrStateExpired = errors.New("sso state expired")
 )
 
-// StatePayload 是 state 令牌承载的数据。
+// StatePayload �?state 令牌承载的数据�?
 type StatePayload struct {
 	ProviderID string `json:"p"`
 	Nonce      string `json:"n"`
-	ExpiresAt  int64  `json:"e"` // unix 秒
+	ExpiresAt  int64  `json:"e"` // unix �?
 	// Mode: "login"（默认，兼容旧令牌的空值）| "bind"（绑定已有账号）
 	Mode string `json:"m,omitempty"`
-	// UID 仅 bind 模式携带：发起绑定的已登录用户（state 由 authMW 保护的路由签发）
+	// UID �?bind 模式携带：发起绑定的已登录用户（state �?authMW 保护的路由签发）
 	UID string `json:"u,omitempty"`
 }
 
-// State 双模式常量。
+// State 双模式常量�?
 const (
 	StateModeLogin = "login"
 	StateModeBind  = "bind"
 )
 
-// StateCodec 签发/校验 HMAC 签名的 SSO state 令牌。
+// StateCodec 签发/校验 HMAC 签名�?SSO state 令牌�?
 type StateCodec struct {
 	key []byte
 	ttl time.Duration
-	// now 可被测试替换，用于过期分支验证
+	// now 可被测试替换，用于过期分支验�?
 	now func() time.Time
 }
 
-// NewStateCodec 构造 StateCodec。key 为签名密钥（≥1 字节），ttl 为有效期。
+// NewStateCodec 构�?StateCodec。key 为签名密钥（�? 字节），ttl 为有效期�?
 func NewStateCodec(key []byte, ttl time.Duration) *StateCodec {
 	return NewStateCodecWithClock(key, ttl, time.Now)
 }
 
-// NewStateCodecWithClock 允许注入时钟（供测试验证过期分支）。
+// NewStateCodecWithClock 允许注入时钟（供测试验证过期分支）�?
 func NewStateCodecWithClock(key []byte, ttl time.Duration, now func() time.Time) *StateCodec {
 	return &StateCodec{key: key, ttl: ttl, now: now}
 }
 
-// Issue 签发 state 令牌（payload JSON → base64url，附 HMAC-SHA256 签名）。
+// Issue 签发 state 令牌（payload JSON �?base64url，附 HMAC-SHA256 签名）�?
 func (c *StateCodec) Issue(providerID, nonce string) (string, error) {
 	return c.IssueMode(providerID, nonce, StateModeLogin, "")
 }
 
-// IssueMode 签发指定模式的 state（bind 模式须携带 uid）。
+// IssueMode 签发指定模式�?state（bind 模式须携�?uid）�?
 func (c *StateCodec) IssueMode(providerID, nonce, mode, uid string) (string, error) {
 	if providerID == "" || nonce == "" {
 		return "", errors.New("state codec: providerID and nonce are required")
 	}
 	switch mode {
 	case StateModeLogin:
-		uid = "" // login 模式不携带 uid
+		uid = "" // login 模式不携�?uid
 	case StateModeBind:
 		if uid == "" {
 			return "", errors.New("state codec: bind mode requires uid")
@@ -100,8 +100,8 @@ func (c *StateCodec) IssueMode(providerID, nonce, mode, uid string) (string, err
 	return body + "." + c.sign(body), nil
 }
 
-// Verify 校验 state 令牌并返回 payload。
-// 结构非法/HMAC 不匹配 → ErrStateInvalid；超过有效期 → ErrStateExpired。
+// Verify 校验 state 令牌并返�?payload�?
+// 结构非法/HMAC 不匹�?�?ErrStateInvalid；超过有效期 �?ErrStateExpired�?
 func (c *StateCodec) Verify(state string) (*StatePayload, error) {
 	body, sig, found := cutState(state)
 	if !found {
@@ -142,7 +142,7 @@ func (c *StateCodec) sign(body string) string {
 	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
-// RandomNonce 生成 16 字节随机十六进制 nonce。
+// RandomNonce 生成 16 字节随机十六进制 nonce�?
 func RandomNonce() (string, error) {
 	buf := make([]byte, 16)
 	if _, err := rand.Read(buf); err != nil {
@@ -153,8 +153,8 @@ func RandomNonce() (string, error) {
 
 // ── OIDC IdP 交互 ────────────────────────────────────────
 
-// OIDCProviderConfig 是发起 OIDC 流程所需的 provider 配置（secret 已解密）。
-// protocol=oauth2 时 Issuer 可为空，改用 AuthURL/TokenURL/UserinfoURL。
+// OIDCProviderConfig 是发�?OIDC 流程所需�?provider 配置（secret 已解密）�?
+// protocol=oauth2 �?Issuer 可为空，改用 AuthURL/TokenURL/UserinfoURL�?
 type OIDCProviderConfig struct {
 	Issuer       string
 	ClientID     string
@@ -171,29 +171,29 @@ type OIDCProviderConfig struct {
 	Extra        map[string]string // provider 特有项（微信 mode=open|mp 等）
 }
 
-// IDTokenResult 是授权码换 token + 身份校验后的结果
-//（OIDC 来自 id_token claims；OAuth2 来自 userinfo 接口）。
+// IDTokenResult 是授权码�?token + 身份校验后的结果
+//（OIDC 来自 id_token claims；OAuth2 来自 userinfo 接口）�?
 type IDTokenResult struct {
 	Subject string
 	Email   string
-	// Roles 来自 IdP 的可选 "roles" claim（字符串或字符串数组），用于 role_mapping 匹配
+	// Roles 来自 IdP 的可�?"roles" claim（字符串或字符串数组），用于 role_mapping 匹配
 	Roles []string
-	// Name / AvatarURL / Phone 为 userinfo 可选字段（OAuth2 家族填充）
+	// Name / AvatarURL / Phone �?userinfo 可选字段（OAuth2 家族填充�?
 	Name      string
 	AvatarURL string
 	Phone     string
 }
 
-// OIDCExchanger 抽象与 IdP 的交互（发现/授权 URL/授权码交换/id_token 校验），
-// 测试中可替换为 fake，无需真实网络。
+// OIDCExchanger 抽象�?IdP 的交互（发现/授权 URL/授权码交�?id_token 校验），
+// 测试中可替换�?fake，无需真实网络�?
 type OIDCExchanger interface {
-	// AuthURL 构造 IdP 授权页 URL（携带 state 与 nonce）。
+	// AuthURL 构�?IdP 授权�?URL（携�?state �?nonce）�?
 	AuthURL(ctx context.Context, p *OIDCProviderConfig, state, nonce string) (string, error)
-	// ExchangeAndVerify 用授权码换 token 并校验 id_token（aud/iss/exp + nonce）。
+	// ExchangeAndVerify 用授权码�?token 并校�?id_token（aud/iss/exp + nonce）�?
 	ExchangeAndVerify(ctx context.Context, p *OIDCProviderConfig, code, expectedNonce string) (*IDTokenResult, error)
 }
 
-// RemoteOIDCExchanger 是基于 go-oidc 的真实实现，按 issuer 缓存发现结果。
+// RemoteOIDCExchanger 是基�?go-oidc 的真实实现，�?issuer 缓存发现结果�?
 type RemoteOIDCExchanger struct {
 	mu        sync.Mutex
 	providers map[string]*gooidc.Provider
@@ -256,7 +256,7 @@ func (e *RemoteOIDCExchanger) ExchangeAndVerify(ctx context.Context, p *OIDCProv
 	if err != nil {
 		return nil, fmt.Errorf("oidc verify id_token: %w", err)
 	}
-	// go-oidc 不自动校验 nonce，这里手动恒等比较（防重放）
+	// go-oidc 不自动校�?nonce，这里手动恒等比较（防重放）
 	if idToken.Nonce != expectedNonce {
 		return nil, errors.New("oidc: id_token nonce mismatch")
 	}
@@ -274,8 +274,8 @@ func (e *RemoteOIDCExchanger) ExchangeAndVerify(ctx context.Context, p *OIDCProv
 	return result, nil
 }
 
-// normalizeRolesClaim 将 IdP "roles" claim 归一化为字符串切片。
-// 支持单字符串、字符串数组两种常见形态；其他形态返回空切片。
+// normalizeRolesClaim �?IdP "roles" claim 归一化为字符串切片�?
+// 支持单字符串、字符串数组两种常见形态；其他形态返回空切片�?
 func normalizeRolesClaim(v any) []string {
 	switch val := v.(type) {
 	case string:

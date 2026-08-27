@@ -16,8 +16,8 @@ import (
 	"github.com/wechatpay-apiv3/wechatpay-go/utils"
 )
 
-// WechatClient 对接微信支付 APIv3（Native 扫码）。
-// 使用官方 SDK：自动完成平台证书下载/更新、请求签名与回调验签/AES-GCM 解密。
+// WechatClient 对接微信支付 APIv3（Native 扫码）�?
+// 使用官方 SDK：自动完成平台证书下�?更新、请求签名与回调验签/AES-GCM 解密�?
 type WechatClient struct {
 	mchID   string
 	appID   string
@@ -26,8 +26,8 @@ type WechatClient struct {
 	handler *notify.Handler
 }
 
-// NewWechatClient 构造微信支付客户端。
-// mchPrivateKeyPEM 为商户 API 证书私钥（PEM）。
+// NewWechatClient 构造微信支付客户端�?
+// mchPrivateKeyPEM 为商�?API 证书私钥（PEM）�?
 func NewWechatClient(mchID, appID, apiV3Key, mchCertSerialNo, mchPrivateKeyPEM string) (*WechatClient, error) {
 	mchPrivateKey, err := utils.LoadPrivateKey(mchPrivateKeyPEM)
 	if err != nil {
@@ -42,7 +42,7 @@ func NewWechatClient(mchID, appID, apiV3Key, mchCertSerialNo, mchPrivateKeyPEM s
 		return nil, fmt.Errorf("new wechat client: %w", err)
 	}
 
-	// 回调处理器：平台证书验签 + AES-GCM 解密（AutoAuth 已将证书下载器注册到单例）
+	// 回调处理器：平台证书验签 + AES-GCM 解密（AutoAuth 已将证书下载器注册到单例�?
 	handler, err := notify.NewRSANotifyHandler(apiV3Key, verifiers.NewSHA256WithRSAVerifier(
 		downloader.MgrInstance().GetCertificateVisitor(mchID)))
 	if err != nil {
@@ -58,7 +58,7 @@ func NewWechatClient(mchID, appID, apiV3Key, mchCertSerialNo, mchPrivateKeyPEM s
 	}, nil
 }
 
-// Precreate 微信 Native 预下单，返回二维码内容（code_url）。
+// Precreate 微信 Native 预下单，返回二维码内容（code_url）�?
 func (c *WechatClient) Precreate(ctx context.Context, outTradeNo string, amountCents int64, description, notifyURL string) (string, error) {
 	resp, result, err := c.svc.Prepay(ctx, native.PrepayRequest{
 		Appid:       core.String(c.appID),
@@ -84,9 +84,9 @@ func (c *WechatClient) Precreate(ctx context.Context, outTradeNo string, amountC
 	return *resp.CodeUrl, nil
 }
 
-// ParseCallback 解析并验签微信支付回调。
-// 返回 (outTradeNo, transactionId, paid, amountCents, err)；amountCents 为回调订单金额（分），
-// 由调用方与内部订单比对（防篡改）。
+// ParseCallback 解析并验签微信支付回调�?
+// 返回 (outTradeNo, transactionId, paid, amountCents, err)；amountCents 为回调订单金额（分）�?
+// 由调用方与内部订单比对（防篡改）�?
 func (c *WechatClient) ParseCallback(r *http.Request) (string, string, bool, *int64, error) {
 	var tx payments.Transaction
 	if _, err := c.handler.ParseNotifyRequest(r.Context(), r, &tx); err != nil {
@@ -107,7 +107,7 @@ func (c *WechatClient) ParseCallback(r *http.Request) (string, string, bool, *in
 	return *tx.OutTradeNo, tradeNo, paid, amount, nil
 }
 
-// Query 按商户订单号查询支付状态，返回 (tradeNo, paid, err)。
+// Query 按商户订单号查询支付状态，返回 (tradeNo, paid, err)�?
 func (c *WechatClient) Query(ctx context.Context, outTradeNo string) (string, bool, error) {
 	resp, _, err := c.svc.QueryOrderByOutTradeNo(ctx, native.QueryOrderByOutTradeNoRequest{
 		OutTradeNo: core.String(outTradeNo),

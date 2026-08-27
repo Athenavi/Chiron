@@ -16,10 +16,10 @@ import (
 )
 
 // ─────────────────────────────────────────────────────────────
-// 定时自动化：cron_jobs 执行器
-// - 调度器每 60s 重载启用的 cron_jobs 并注册到 robfig/cron
-// - 任务 task 字段为 JSON：{"type":"agent","agent_id":..,"prompt":..}
-//                        或 {"type":"quick","user_input":..,"mode":"auto"}
+// 定时自动化：cron_jobs 执行�?
+// - 调度器每 60s 重载启用�?cron_jobs 并注册到 robfig/cron
+// - 任务 task 字段�?JSON：{"type":"agent","agent_id":..,"prompt":..}
+//                        �?{"type":"quick","user_input":..,"mode":"auto"}
 // - 执行结果写回 last_run_at / last_status
 // ─────────────────────────────────────────────────────────────
 
@@ -35,7 +35,7 @@ type CronScheduler struct {
 	python  *engine.PythonClient
 }
 
-// cronSchedulerPython 供 Webhook/手动触发复用执行器（StartCronScheduler 时注入）。
+// cronSchedulerPython �?Webhook/手动触发复用执行器（StartCronScheduler 时注入）�?
 var cronSchedulerPython *engine.PythonClient
 
 type jobRow struct {
@@ -47,7 +47,7 @@ type jobRow struct {
 	UserID   string
 }
 
-// StartCronScheduler 启动调度器（goroutine 内运行）。
+// StartCronScheduler 启动调度器（goroutine 内运行）�?
 func StartCronScheduler(ctx context.Context, python *engine.PythonClient) {
 	s := &CronScheduler{
 		cron:    cron.New(),
@@ -78,7 +78,7 @@ func (s *CronScheduler) syncLoop(ctx context.Context) {
 func (s *CronScheduler) sync() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	rows, err := db.ReadPool().Query(ctx,
+	rows, err := db.GlobalDBManager.Query(ctx,
 		`SELECT id::text, name, schedule, task,
 		        COALESCE(tenant_id::text, ''), COALESCE(user_id::text, '')
 		 FROM cron_jobs WHERE enabled = true`)
@@ -98,14 +98,14 @@ func (s *CronScheduler) sync() {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	// 移除已停用/删除/改 schedule 的 job
+	// 移除已停�?删除/�?schedule �?job
 	for id, e := range s.entries {
 		if j, ok := jobs[id]; !ok || j.Schedule != e.schedule {
 			s.cron.Remove(e.eid)
 			delete(s.entries, id)
 		}
 	}
-	// 注册新 job / 更新 schedule
+	// 注册�?job / 更新 schedule
 	for id, j := range jobs {
 		if e, ok := s.entries[id]; ok && e.schedule == j.Schedule {
 			continue
@@ -158,7 +158,7 @@ func (s *CronScheduler) execute(ctx context.Context, j jobRow) {
 			}
 		}
 	}
-	_, _ = db.Pool.Exec(execCtx,
+	_, _ = db.GlobalDBManager.Exec(execCtx,
 		`UPDATE cron_jobs SET last_run_at = NOW(), last_status = $1 WHERE id = $2`,
 		status, j.ID)
 	if status != "success" {
@@ -169,7 +169,7 @@ func (s *CronScheduler) execute(ctx context.Context, j jobRow) {
 func (s *CronScheduler) runAgent(ctx context.Context, tenantID, userID, agentID, prompt string) error {
 	var name, systemPrompt, tools, llmConfig string
 	var maxTurns, timeout int
-	if err := db.ReadPool().QueryRow(ctx,
+	if err := db.GlobalDBManager.QueryRow(ctx,
 		`SELECT name, COALESCE(system_prompt,''), COALESCE(tools,'[]'::jsonb)::text,
 		        COALESCE(llm_config,'{}'::jsonb)::text, max_turns, timeout_seconds
 		 FROM agents WHERE id = $1 AND tenant_id = $2 AND user_id = $3`,
@@ -217,7 +217,7 @@ func HandleCronWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 	var enabled bool
 	var storedToken string
-	if err := db.ReadPool().QueryRow(r.Context(),
+	if err := db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT enabled, webhook_token FROM cron_jobs WHERE id = $1`, jobID).Scan(&enabled, &storedToken); err != nil {
 		NotFound(w, "job not found")
 		return
@@ -226,7 +226,7 @@ func HandleCronWebhook(w http.ResponseWriter, r *http.Request) {
 		Forbidden(w, "invalid token or job disabled")
 		return
 	}
-	// 异步执行（webhook 尽快返回）
+	// 异步执行（webhook 尽快返回�?
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -236,7 +236,7 @@ func HandleCronWebhook(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
 		s := &CronScheduler{python: cronSchedulerPython}
-		rows, err := db.ReadPool().Query(ctx,
+		rows, err := db.GlobalDBManager.Query(ctx,
 			`SELECT id::text, name, schedule, task, COALESCE(tenant_id::text,''), COALESCE(user_id::text,'')
 			 FROM cron_jobs WHERE id = $1`, jobID)
 		if err == nil && rows.Next() {
@@ -256,13 +256,13 @@ func HandleCronWebhook(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) HandleCronTrigger(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var tenantID, userID string
-	if err := db.ReadPool().QueryRow(r.Context(),
+	if err := db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT COALESCE(tenant_id::text,''), COALESCE(user_id::text,'') FROM cron_jobs WHERE id = $1`, id).Scan(&tenantID, &userID); err != nil {
 		NotFound(w, "job not found")
 		return
 	}
 	var j jobRow
-	if err := db.ReadPool().QueryRow(r.Context(),
+	if err := db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT id::text, name, schedule, task, COALESCE(tenant_id::text,''), COALESCE(user_id::text,'')
 		 FROM cron_jobs WHERE id = $1`, id).Scan(&j.ID, &j.Name, &j.Schedule, &j.Task, &j.TenantID, &j.UserID); err != nil {
 		NotFound(w, "job not found")

@@ -1,4 +1,4 @@
-ï»¿package api
+package api
 
 import (
 	"context"
@@ -10,18 +10,18 @@ import (
 	"github.com/athenavi/chiron/internal/db"
 )
 
-// DistributedRateLimiter åŸºäº Redis çš„åˆ†å¸ƒå¼é™æµå™¨
-// æ”¯æŒå¤šçº§é™æµï¼šå…¨å±€ã€ç§Ÿæˆ·ã€ç”¨æˆ·
+// DistributedRateLimiter »ùÓÚ Redis µÄ·Ö²¼Ê½ÏŞÁ÷Æ÷
+// Ö§³Ö¶à¼¶ÏŞÁ÷£ºÈ«¾Ö¡¢×â»§¡¢ÓÃ»§
 type DistributedRateLimiter struct {
 	rdb db.RedisClient
 
-	// é™æµé…ç½®
-	globalLimit  int // å…¨å±€æ¯åˆ†é’Ÿè¯·æ±‚æ•°
-	tenantLimit  int // æ¯ç§Ÿæˆ·æ¯åˆ†é’Ÿè¯·æ±‚æ•°
-	userLimit    int // æ¯ç”¨æˆ·æ¯åˆ†é’Ÿè¯·æ±‚æ•°
+	// ÏŞÁ÷ÅäÖÃ
+	globalLimit  int // È«¾ÖÃ¿·ÖÖÓÇëÇóÊı
+	tenantLimit  int // Ã¿×â»§Ã¿·ÖÖÓÇëÇóÊı
+	userLimit    int // Ã¿ÓÃ»§Ã¿·ÖÖÓÇëÇóÊı
 }
 
-// NewDistributedRateLimiter åˆ›å»ºåˆ†å¸ƒå¼é™æµå™¨
+// NewDistributedRateLimiter ´´½¨·Ö²¼Ê½ÏŞÁ÷Æ÷
 func NewDistributedRateLimiter(rdb db.RedisClient, globalLimit, tenantLimit, userLimit int) *DistributedRateLimiter {
 	if globalLimit <= 0 {
 		globalLimit = 1000
@@ -41,8 +41,8 @@ func NewDistributedRateLimiter(rdb db.RedisClient, globalLimit, tenantLimit, use
 	}
 }
 
-// Configure è¿è¡Œæ—¶çƒ­æ›´æ–°ä¸‰çº§é™æµé˜ˆå€¼ï¼ˆé˜ˆå€¼ â‰¤0 è¡¨ç¤ºä¸ç”Ÿæ•ˆ/è·³è¿‡ï¼‰ã€‚
-// Allow æ¯æ¬¡è¯»å–å­—æ®µï¼Œå› æ­¤æ”¹å®Œå³åˆ»ç”Ÿæ•ˆï¼Œä¾›åå°ã€Œç³»ç»Ÿè®¾ç½®ã€è°ƒç”¨ã€‚
+// Configure ÔËĞĞÊ±ÈÈ¸üĞÂÈı¼¶ÏŞÁ÷ãĞÖµ£¨ãĞÖµ ¡Ü0 ±íÊ¾²»ÉúĞ§/Ìø¹ı£©¡£
+// Allow Ã¿´Î¶ÁÈ¡×Ö¶Î£¬Òò´Ë¸ÄÍê¼´¿ÌÉúĞ§£¬¹©ºóÌ¨¡¸ÏµÍ³ÉèÖÃ¡¹µ÷ÓÃ¡£
 func (l *DistributedRateLimiter) Configure(globalLimit, tenantLimit, userLimit int) {
 	if globalLimit > 0 {
 		l.globalLimit = globalLimit
@@ -55,12 +55,12 @@ func (l *DistributedRateLimiter) Configure(globalLimit, tenantLimit, userLimit i
 	}
 }
 
-// rateLimitLua ä¸‰çº§é™æµåŸå­è„šæœ¬ â€” é¢„æ£€æŸ¥å…¨éƒ¨ä¸‰çº§åç»Ÿä¸€é€’å¢ï¼Œé˜²æ­¢é…é¢æ³„æ¼
+// rateLimitLua Èı¼¶ÏŞÁ÷Ô­×Ó½Å±¾ ¡ª Ô¤¼ì²éÈ«²¿Èı¼¶ºóÍ³Ò»µİÔö£¬·ÀÖ¹Åä¶îĞ¹Â©
 //
-// KEYS[1]  å…¨å±€ key     KEYS[2] ç§Ÿæˆ· keyï¼ˆç©ºä¸²åˆ™è·³è¿‡ï¼‰  KEYS[3] ç”¨æˆ· keyï¼ˆç©ºä¸²åˆ™è·³è¿‡ï¼‰
-// ARGV[1]  å…¨å±€ä¸Šé™     ARGV[2] ç§Ÿæˆ·ä¸Šé™               ARGV[3] ç”¨æˆ·ä¸Šé™
-// ARGV[4]  çª—å£ç§’æ•°
-// è¿”å› "ok" / "global" / "tenant" / "user"
+// KEYS[1]  È«¾Ö key     KEYS[2] ×â»§ key£¨¿Õ´®ÔòÌø¹ı£©  KEYS[3] ÓÃ»§ key£¨¿Õ´®ÔòÌø¹ı£©
+// ARGV[1]  È«¾ÖÉÏÏŞ     ARGV[2] ×â»§ÉÏÏŞ               ARGV[3] ÓÃ»§ÉÏÏŞ
+// ARGV[4]  ´°¿ÚÃëÊı
+// ·µ»Ø "ok" / "global" / "tenant" / "user"
 const rateLimitLua = `
 local function check(key, limit_str)
     if key == "" or limit_str == "" then return true end
@@ -78,15 +78,15 @@ if KEYS[3] ~= "" then redis.call("INCR", KEYS[3]); redis.call("EXPIRE", KEYS[3],
 return "ok"
 `
 
-// Allow æ£€æŸ¥æ˜¯å¦å…è®¸è¯·æ±‚ â€” å•æ¬¡åŸå­ eval å®Œæˆä¸‰çº§æ£€æŸ¥
-// fail-close ç­–ç•¥ï¼šRedis ä¸å¯ç”¨æˆ– Eval é”™è¯¯æ—¶æ‹’ç»è¯·æ±‚ï¼ˆç”Ÿäº§å®‰å…¨ä¼˜å…ˆï¼‰
+// Allow ¼ì²éÊÇ·ñÔÊĞíÇëÇó ¡ª µ¥´ÎÔ­×Ó eval Íê³ÉÈı¼¶¼ì²é
+// fail-close ²ßÂÔ£ºRedis ²»¿ÉÓÃ»ò Eval ´íÎóÊ±¾Ü¾øÇëÇó£¨Éú²ú°²È«ÓÅÏÈ£©
 func (l *DistributedRateLimiter) Allow(ctx context.Context, tenantID, userID string) (bool, error) {
 	if l.rdb == nil {
-		return false, fmt.Errorf("é™æµ Redis ä¸å¯ç”¨ï¼ŒæŒ‰ fail-close æ‹’ç»è¯·æ±‚")
+		return false, fmt.Errorf("ÏŞÁ÷ Redis ²»¿ÉÓÃ£¬°´ fail-close ¾Ü¾øÇëÇó")
 	}
 	if tenantID == "" {
-		// æœªè®¤è¯å…¬å¼€ç«¯ç‚¹ï¼ˆinstall/login/register/health ç­‰ï¼‰å…±ç”¨ public æ¡¶é™æµï¼Œ
-		// é˜²æ­¢å•ä¸€æ¥æºæ»¥ç”¨ï¼Œä½†ä¸æ‹’ç»ï¼ˆå¦åˆ™ install é¦–æ¬¡éƒ¨ç½²æ— æ³•å®Œæˆï¼‰
+		// Î´ÈÏÖ¤¹«¿ª¶Ëµã£¨install/login/register/health µÈ£©¹²ÓÃ public Í°ÏŞÁ÷£¬
+		// ·ÀÖ¹µ¥Ò»À´Ô´ÀÄÓÃ£¬µ«²»¾Ü¾ø£¨·ñÔò install Ê×´Î²¿ÊğÎŞ·¨Íê³É£©
 		tenantID = "public"
 	}
 
@@ -97,7 +97,7 @@ func (l *DistributedRateLimiter) Allow(ctx context.Context, tenantID, userID str
 		userKey = fmt.Sprintf("ratelimit:user:%s:minute", userID)
 	}
 
-	// é™æµå¤±æ•ˆçš„å‚æ•°ï¼ˆlimitâ‰¤0ï¼‰ç›´æ¥è·³è¿‡
+	// ÏŞÁ÷Ê§Ğ§µÄ²ÎÊı£¨limit¡Ü0£©Ö±½ÓÌø¹ı
 	tenantLim := l.tenantLimit
 	userLim := l.userLimit
 	if userKey == "" {
@@ -108,27 +108,27 @@ func (l *DistributedRateLimiter) Allow(ctx context.Context, tenantID, userID str
 		[]string{globalKey, tenantKey, userKey},
 		l.globalLimit, tenantLim, userLim, 60).Text()
 	if err != nil {
-		slog.Error("é™æµæ£€æŸ¥å¤±è´¥ï¼ˆfail-closeï¼‰", "error", err, "tenant", tenantID)
-		return false, fmt.Errorf("é™æµæœåŠ¡æš‚æ—¶ä¸å¯ç”¨: %w", err)
+		slog.Error("ÏŞÁ÷¼ì²éÊ§°Ü£¨fail-close£©", "error", err, "tenant", tenantID)
+		return false, fmt.Errorf("ÏŞÁ÷·şÎñÔİÊ±²»¿ÉÓÃ: %w", err)
 	}
 
 	switch result {
 	case "global":
-		return false, fmt.Errorf("å…¨å±€è¯·æ±‚é¢‘ç‡è¶…é™")
+		return false, fmt.Errorf("È«¾ÖÇëÇóÆµÂÊ³¬ÏŞ")
 	case "tenant":
-		return false, fmt.Errorf("ç§Ÿæˆ· %s è¯·æ±‚é¢‘ç‡è¶…é™", tenantID)
+		return false, fmt.Errorf("×â»§ %s ÇëÇóÆµÂÊ³¬ÏŞ", tenantID)
 	case "user":
-		return false, fmt.Errorf("ç”¨æˆ· %s è¯·æ±‚é¢‘ç‡è¶…é™", userID)
+		return false, fmt.Errorf("ÓÃ»§ %s ÇëÇóÆµÂÊ³¬ÏŞ", userID)
 	default:
 		return true, nil
 	}
 }
 
-// DistributedRateLimitMiddleware åˆ†å¸ƒå¼é™æµä¸­é—´ä»¶
+// DistributedRateLimitMiddleware ·Ö²¼Ê½ÏŞÁ÷ÖĞ¼ä¼ş
 func DistributedRateLimitMiddleware(limiter *DistributedRateLimiter) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// æå– tenant_id ä¸ user_idï¼ˆå¤šç§Ÿæˆ·éš”ç¦»é”®ï¼‰
+			// ÌáÈ¡ tenant_id Óë user_id£¨¶à×â»§¸ôÀë¼ü£©
 		var tenantID, userID string
 		claims := auth.GetClaims(r.Context())
 		if claims != nil {
@@ -138,7 +138,7 @@ func DistributedRateLimitMiddleware(limiter *DistributedRateLimiter) func(http.H
 
 		allowed, err := limiter.Allow(r.Context(), tenantID, userID)
 			if err != nil {
-				slog.Warn("é™æµè§¦å‘",
+				slog.Warn("ÏŞÁ÷´¥·¢",
 					"error", err,
 					"user", userID,
 					"path", r.URL.Path,

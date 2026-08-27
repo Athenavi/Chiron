@@ -38,8 +38,8 @@ func (s *LocalAuthService) GetUser(ctx context.Context, userID string) (*User, e
 	return &user, nil
 }
 
-// GetUserByEmail 多租户查询：email+tenant_id 双键定位，防止跨租户登录。
-// tenantID 为空时回退 DefaultTenantID（单租户兼容，未来收紧）。
+// GetUserByEmail 多租户查询：email+tenant_id 双键定位，防止跨租户登录�?
+// tenantID 为空时回退 DefaultTenantID（单租户兼容，未来收紧）�?
 func (s *LocalAuthService) GetUserByEmail(ctx context.Context, email, tenantID string) (*User, error) {
 	if s.db == nil {
 		return nil, fmt.Errorf("database not available")
@@ -119,7 +119,7 @@ func (s *LocalAuthService) DeleteUser(ctx context.Context, userID string) error 
 	return nil
 }
 
-// ListUsers 多租户隔离：仅返回指定租户的用户。
+// ListUsers 多租户隔离：仅返回指定租户的用户�?
 func (s *LocalAuthService) ListUsers(ctx context.Context, tenantID string) ([]User, error) {
 	if s.db == nil {
 		return nil, fmt.Errorf("database not available")
