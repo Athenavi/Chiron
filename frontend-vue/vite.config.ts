@@ -4,6 +4,9 @@ import { fileViewerRenderers } from '@file-viewer/vite-plugin'
 import Components from 'unplugin-vue-components/vite'
 import { AntDesignVueResolver } from 'unplugin-vue-components/resolvers'
 import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __dirname = import.meta.dirname ?? path.dirname(fileURLToPath(import.meta.url))
 
 // https://vite.dev/config/
 export default defineConfig({

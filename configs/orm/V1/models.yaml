@@ -443,12 +443,12 @@ models:
         db_type: bigint
         default: 0
       created_at:
-        type: string
+        type: datetime
         format: date-time
         description: 创建时间
         default: now()
       updated_at:
-        type: string
+        type: datetime
         format: date-time
         description: 更新时间
         default: now()

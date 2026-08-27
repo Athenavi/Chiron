@@ -59,7 +59,6 @@ _LAZY_IMPORTS = {
     'Message': '.message',
     'Okr': '.okr',
     'Payment': '.payment',
-    'SchemaMigration': '.schema_migration',
     'Session': '.session',
     'StripePayment': '.stripe_payment',
     'SupportTicket': '.support_ticket',
