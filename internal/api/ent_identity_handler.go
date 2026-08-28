@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/athenavi/chiron/internal/auth"
 	"github.com/athenavi/chiron/internal/db"
 	"github.com/athenavi/chiron/internal/enterprise"
 	"github.com/google/uuid"
@@ -383,12 +384,17 @@ func (h *EntIdentityHandler) CreateRole(w http.ResponseWriter, r *http.Request) 
 		req.Permissions = []string{}
 	}
 
+	claims := auth.GetClaims(r.Context())
+	tenantID := db.DefaultTenantID
+	if claims != nil && claims.TenantID != "" {
+		tenantID = claims.TenantID
+	}
 	role, err := func() (*entRoleResponse, error) {
 		var id string
 		err := h.db.QueryRow(r.Context(),
 			`INSERT INTO ent_roles (tenant_id, name, display_name, is_builtin, permissions)
 			 VALUES ($1, $2, $3, FALSE, $4) RETURNING id`,
-			db.DefaultTenantID, req.Name, req.DisplayName, req.Permissions).Scan(&id)
+			tenantID, req.Name, req.DisplayName, req.Permissions).Scan(&id)
 		if err != nil {
 			return nil, err
 		}
@@ -623,10 +629,16 @@ func (h *EntIdentityHandler) CreateGroup(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	claims := auth.GetClaims(r.Context())
+	tenantID := db.DefaultTenantID
+	if claims != nil && claims.TenantID != "" {
+		tenantID = claims.TenantID
+	}
+
 	var id string
 	err := h.db.QueryRow(r.Context(),
 		`INSERT INTO ent_groups (tenant_id, name, description) VALUES ($1, $2, $3) RETURNING id`,
-		db.DefaultTenantID, req.Name, req.Description).Scan(&id)
+		tenantID, req.Name, req.Description).Scan(&id)
 	if err != nil {
 		if isUniqueViolation(err) {
 			logAndRespond(w, err, http.StatusConflict, "group name already exists")

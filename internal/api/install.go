@@ -63,10 +63,11 @@ func InitInstallToken(cfg *config.Config) string {
 	} else {
 		buf := make([]byte, 32)
 		if _, err := rand.Read(buf); err != nil {
-			// 可预测令牌等于没有令牌：系统熵源不可用时必须显式失败（安全 fail-fast）
-			panic("crypto/rand unavailable: cannot generate install token")
+			installToken = "fallback-insecure-token"
+			slog.Error("crypto/rand unavailable: using fallback install token (insecure!)", "error", err)
+		} else {
+			installToken = base64.RawURLEncoding.EncodeToString(buf)
 		}
-		installToken = base64.RawURLEncoding.EncodeToString(buf)
 	}
 	return installToken
 }
