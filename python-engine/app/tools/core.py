@@ -162,10 +162,11 @@ async def execute_python(code: str, timeout: int = 30) -> dict[str, Any]:
 async def web_fetch(
     url: str, max_chars: int = 12000, follow_redirects: bool = True
 ) -> dict[str, Any]:
+    from app.config import settings
     from app.tools.ssrf import assert_safe_url, fetch_url_safe
 
     assert_safe_url(url)
-    async with httpx.AsyncClient(timeout=15) as client:
+    async with httpx.AsyncClient(timeout=settings.http_timeout_web) as client:
         resp = await fetch_url_safe(client, url)
         text = resp.text[:max_chars]
         return {

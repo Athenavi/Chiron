@@ -176,8 +176,8 @@ func (h *UserMarketHandler) installAgent(w http.ResponseWriter, r *http.Request,
 	prompt, _ := m["system_prompt"].(string)
 	tools, _ := json.Marshal(m["tools"])
 	llm, _ := json.Marshal(m["llm_config"])
-	maxTurns := intVal(m["max_turns"], 10)
-	timeout := intVal(m["timeout_seconds"], 120)
+	maxTurns := intVal(m["max_turns"], DefaultMaxTurns)
+	timeout := int(intVal(m["timeout_seconds"], int(DefaultAgentTimeout.Seconds())))
 
 	if _, err := db.GlobalDBManager.Exec(r.Context(),
 		`INSERT INTO agents (id, tenant_id, user_id, name, description, system_prompt, tools, llm_config, max_turns, timeout_seconds, enabled)

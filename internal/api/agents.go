@@ -376,7 +376,7 @@ func (h *AgentHandler) Run(w http.ResponseWriter, r *http.Request) {
 
 	timeout := time.Duration(agent.TimeoutSeconds) * time.Second
 	if timeout <= 0 {
-		timeout = 120 * time.Second
+		timeout = DefaultAgentTimeout
 	}
 	// P1 修复：执行前获取并发信号量，防止无上限并发打爆引擎
 	if h.sem != nil {

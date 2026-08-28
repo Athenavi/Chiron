@@ -71,9 +71,11 @@ async def image_generate(
 
     import httpx
 
+    from app.config import settings
+
     try:
         headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
-        async with httpx.AsyncClient(timeout=120) as client:
+        async with httpx.AsyncClient(timeout=settings.http_timeout_long) as client:
             resp = await client.post(
                 api_url,
                 json={"prompt": prompt, "width": width, "height": height},

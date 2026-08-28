@@ -124,18 +124,34 @@ func (m *DBManager) FetchOne(ctx context.Context, sql string, args ...interface{
 		return nil, fmt.Errorf("db manager: %w", err)
 	}
 
-	row := pool.QueryRow(ctx, sql, args...)
-
-	var values []interface{}
-	err = row.Scan(&values)
+	rows, err := pool.Query(ctx, sql, args...)
 	if err != nil {
+		return nil, fmt.Errorf("query failed: %w", err)
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		return nil, nil
+	}
+
+	columns := rows.FieldDescriptions()
+	values := make([]interface{}, len(columns))
+	valuePtrs := make([]interface{}, len(columns))
+	for i := range values {
+		valuePtrs[i] = &values[i]
+	}
+
+	if err := rows.Scan(valuePtrs...); err != nil {
 		return nil, fmt.Errorf("scan failed: %w", err)
 	}
 
-	// 简化实现：返回原始值映射
 	result := make(map[string]interface{})
-	for i, v := range values {
-		result[fmt.Sprintf("col_%d", i)] = v
+	for i, col := range columns {
+		result[col.Name] = values[i]
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows iteration failed: %w", err)
 	}
 
 	return result, nil

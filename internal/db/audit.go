@@ -125,12 +125,13 @@ func (w *auditResponseWriter) WriteHeader(code int) {
 
 // AuditLog 全局审计日志函数（简化接口）
 // 用于 middleware.go 中的快速调用
-func AuditLog(ctx context.Context, userID, action, resource, detail, ip string, meta map[string]interface{}) {
+func AuditLog(ctx context.Context, userID, tenantID, action, resource, detail, ip string, meta map[string]interface{}) {
 	if Redis == nil {
 		return
 	}
 
 	entry := AuditEntry{
+		TenantID:  tenantID,
 		UserID:    userID,
 		Action:    action,
 		Resource:  resource,
@@ -150,10 +151,11 @@ func AuditLog(ctx context.Context, userID, action, resource, detail, ip string, 
 		MaxLen: 100000,
 		Approx: true,
 		Values: map[string]any{
-			"user_id":  userID,
-			"action":   action,
-			"resource": resource,
-			"data":     string(data),
+			"tenant_id": tenantID,
+			"user_id":   userID,
+			"action":    action,
+			"resource":  resource,
+			"data":      string(data),
 		},
 	}).Err(); err != nil {
 		slog.Warn("audit log: XAdd failed", "error", err)

@@ -133,7 +133,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	).Scan(&user.ID, &user.Email, &user.Name, &user.Role, &tenantID, &passwordHash)
 	if err != nil {
 		slog.Warn("login failed", "email", req.Email, "error", err)
-		db.AuditLog(r.Context(), "", "login_failed", "/v1/auth/login", "email="+req.Email, r.RemoteAddr, nil)
+		db.AuditLog(r.Context(), "", "", "login_failed", "/v1/auth/login", "email="+req.Email, r.RemoteAddr, nil)
 		if h.captcha != nil {
 			h.captcha.RecordFailure(r.Context(), r)
 		}
@@ -142,7 +142,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(req.Password)); err != nil {
-		db.AuditLog(r.Context(), "", "login_failed", "/v1/auth/login", "email="+req.Email, r.RemoteAddr, nil)
+		db.AuditLog(r.Context(), "", tenantID == "" ? "" : tenantID, "login_failed", "/v1/auth/login", "email="+req.Email, r.RemoteAddr, nil)
 		if h.captcha != nil {
 			h.captcha.RecordFailure(r.Context(), r)
 		}
@@ -170,7 +170,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	SetTokenCookie(w, token, int(h.cfg.JWTExpiration.Seconds()), h.cfg.CookieSecure)
-	db.AuditLog(r.Context(), user.ID, "login_success", "/v1/auth/login", "email="+req.Email, r.RemoteAddr, nil)
+	db.AuditLog(r.Context(), user.ID, tenantID, "login_success", "/v1/auth/login", "email="+req.Email, r.RemoteAddr, nil)
 	OK(w, map[string]interface{}{
 		"token": token,
 		"user":  user,

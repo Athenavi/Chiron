@@ -438,11 +438,12 @@ async def _resolve_attachments(content: str) -> str:
 
     import httpx
 
+    from app.config import settings
     from app.tools.ssrf import fetch_url_safe
 
     # S 安全修复：禁用自动重定向，改用 ssrf.fetch_url_safe 逐跳校验
     # scheme/端口/DNS/IP（含重定向绕过）后再获取，防止附件 URL 打内网/云元数据。
-    async with httpx.AsyncClient(timeout=15.0, follow_redirects=False) as client:
+    async with httpx.AsyncClient(timeout=settings.http_timeout_web, follow_redirects=False) as client:
         for is_image, name, url in matches:
             try:
                 resp = await fetch_url_safe(client, url)
