@@ -30,9 +30,8 @@ export async function executeQuickCommand(command: string): Promise<QuickCommand
     }
     await router.push({ path: '/chat', query: { task: sessionId, error: response.data?.error || 'execution failed' } })
     return { sessionId, title }
-  } catch (error: any) {
-    console.error('Command execution error:', error)
-    await router.push({ path: '/chat', query: { task: '', error: error?.message || 'request failed' } })
+  } catch {
+    await router.push({ path: '/chat', query: { task: '', error: 'request failed' } })
     throw error
   }
 }

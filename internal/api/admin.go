@@ -374,8 +374,20 @@ func dbNameFromDSN() string {
 // 鈹€鈹€ Backup & Restore 鈹€鈹€
 
 func (h *AdminHandler) CreateBackup(w http.ResponseWriter, r *http.Request) {
-	// P0-P4 修复：pg_dump 输出流式转发，避免整库缓冲入内存导致 OOM
-	cmd := exec.CommandContext(r.Context(), "pg_dump", "--dbname="+extractDSN())
+	// P0 修复：pg_dump 输出流式转发，避免整库缓冲入内存导致 OOM
+	// 使用 PGPASSWORD 环境变量传递密码，避免 DSN 中特殊字符导致参数注入
+	dsn := extractDSN()
+	parsed, err := url.Parse(dsn)
+	if err != nil {
+		logAndRespond(w, err, http.StatusInternalServerError, "backup failed: invalid DSN")
+		return
+	}
+	password, _ := parsed.User.Password()
+	parsed.User = url.User(parsed.User.Username())
+	sanitizedDSN := parsed.String()
+
+	cmd := exec.CommandContext(r.Context(), "pg_dump", sanitizedDSN)
+	cmd.Env = append(os.Environ(), "PGPASSWORD="+password)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "backup failed")
@@ -396,6 +408,7 @@ func (h *AdminHandler) CreateBackup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AdminHandler) RestoreBackup(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 500<<20) // 500MB 上传上限，防止 OOM
 	file, _, err := r.FormFile("file")
 	if err != nil {
 		BadRequest(w, "file is required")

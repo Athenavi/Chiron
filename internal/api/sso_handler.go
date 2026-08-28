@@ -421,7 +421,7 @@ func (h *SSOHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	SetTokenCookie(w, token, int(h.cfg.JWTExpiration.Seconds()), h.cfg.CookieSecure)
-	db.AuditLog(r.Context(), user.ID, "sso_login", "/v1/auth/sso/callback", "provider="+provider.Name, r.RemoteAddr, nil)
+	db.AuditLog(r.Context(), user.ID, provider.TenantID, "sso_login", "/v1/auth/sso/callback", "provider="+provider.Name, r.RemoteAddr, nil)
 	http.Redirect(w, r, h.successURL, http.StatusFound)
 }
 
@@ -437,7 +437,7 @@ func (h *SSOHandler) handleBindCallback(w http.ResponseWriter, r *http.Request, 
 	}
 	if existing != nil {
 		if existing.ID != payload.UID {
-			db.AuditLog(ctx, payload.UID, "sso_bind_conflict", "/v1/auth/sso/callback",
+			db.AuditLog(ctx, payload.UID, provider.TenantID, "sso_bind_conflict", "/v1/auth/sso/callback",
 				"provider="+provider.Name, r.RemoteAddr, nil)
 			JSON(w, http.StatusConflict, APIResponse{
 				Success: false,
@@ -465,7 +465,7 @@ func (h *SSOHandler) handleBindCallback(w http.ResponseWriter, r *http.Request, 
 		logAndRespond(w, err, http.StatusInternalServerError, ErrDBUnavailable)
 		return
 	}
-	db.AuditLog(ctx, payload.UID, "sso_bind", "/v1/auth/sso/callback",
+	db.AuditLog(ctx, payload.UID, provider.TenantID, "sso_bind", "/v1/auth/sso/callback",
 		"provider="+provider.Name, r.RemoteAddr, nil)
 	http.Redirect(w, r, h.bindURL, http.StatusFound)
 }
@@ -581,7 +581,7 @@ func (h *SSOHandler) DeleteIdentity(w http.ResponseWriter, r *http.Request) {
 		NotFound(w, ErrNotFound)
 		return
 	}
-	db.AuditLog(ctx, claims.UserID, "sso_unbind", "/v1/auth/sso/identities/"+id,
+	db.AuditLog(ctx, claims.UserID, claims.TenantID, "sso_unbind", "/v1/auth/sso/identities/"+id,
 		"subject="+subject, r.RemoteAddr, nil)
 	OK(w, map[string]string{"status": "deleted"})
 }
@@ -646,7 +646,7 @@ func (h *SSOHandler) SetPassword(w http.ResponseWriter, r *http.Request) {
 		logAndRespond(w, err, http.StatusInternalServerError, ErrDBUnavailable)
 		return
 	}
-	db.AuditLog(ctx, claims.UserID, "password_set", "/v1/auth/password", "", r.RemoteAddr, nil)
+	db.AuditLog(ctx, claims.UserID, claims.TenantID, "password_set", "/v1/auth/password", "", r.RemoteAddr, nil)
 	OK(w, map[string]string{"status": "updated"})
 }
 
@@ -1206,7 +1206,7 @@ func (h *SSOHandler) provisionAndBind(r *http.Request, provider *ssoProvider, id
 		}
 		return nil, err
 	}
-	db.AuditLog(ctx, user.ID, "sso_provision", "/v1/auth/sso/callback",
+	db.AuditLog(ctx, user.ID, provider.TenantID, "sso_provision", "/v1/auth/sso/callback",
 		"provider="+provider.Name+" email="+email, r.RemoteAddr, nil)
 	return &user, nil
 }

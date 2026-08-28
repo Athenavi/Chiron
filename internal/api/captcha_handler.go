@@ -293,7 +293,7 @@ func (h *CaptchaHandler) Enforce(w http.ResponseWriter, r *http.Request, tok *au
 
 	fails := h.failureCount(r.Context(), ip)
 	if fails >= captchaHardLimit {
-		db.AuditLog(r.Context(), "", "captcha_block", r.URL.Path, "ip="+ip, r.RemoteAddr, nil)
+		db.AuditLog(r.Context(), "", "", "captcha_block", r.URL.Path, "ip="+ip, r.RemoteAddr, nil)
 		TooManyRequests(w)
 		return errCaptchaHandled
 	}
@@ -342,7 +342,7 @@ func (h *CaptchaHandler) Enforce(w http.ResponseWriter, r *http.Request, tok *au
 	}
 	if err := h.verifier.Verify(r.Context(), cfg, tok, ip); err != nil {
 		if errors.Is(err, auth.ErrCaptchaFailed) {
-			db.AuditLog(r.Context(), "", "captcha_failed", r.URL.Path, "ip="+ip, r.RemoteAddr, nil)
+			db.AuditLog(r.Context(), "", "", "captcha_failed", r.URL.Path, "ip="+ip, r.RemoteAddr, nil)
 			Forbidden(w, "captcha verification failed")
 			return errCaptchaHandled
 		}
