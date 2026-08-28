@@ -33,11 +33,8 @@ func main() {
 
 	slog.Info("starting chiron gateway", "version", "0.1.260825.01", "port", cfg.Port)
 
-	// Use defer+os.Exit pattern so deferred cleanups always run
-	exitCode := 0
-	defer func() { os.Exit(exitCode) }()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	// 60s 初始超时：DB 连接 + 迁移可能耗时较长，15s 不足
 	defer cancel()
 
 	// ── 初始化 install.lock 路径（必须在任何安装操作之前调用）──
@@ -167,7 +164,6 @@ func main() {
 		auth.InitJWTAuth()
 		if !config.ValidateJWTSecret(cfg.JWTSecret) {
 			slog.Error("FATAL: JWT_SECRET is weak or not set. Generate a strong secret (32+ chars) and set JWT_SECRET env var")
-			exitCode = 1
 			return
 		}
 		slog.Info("auth initialized", "jwt_secret_set", cfg.JWTSecret != "")
@@ -207,7 +203,6 @@ func main() {
 			pythonClient.SetInternalToken(cfg.InternalToken)
 			if cfg.InternalToken == "" {
 				slog.Error("INTERNAL_TOKEN not set but python engine is configured — refusing to start (set INTERNAL_TOKEN env var or remove PYTHON_ENGINE_ADDRESS)")
-				exitCode = 1
 				return
 			}
 			api.StartCronScheduler(ctx, pythonClient)
@@ -236,7 +231,6 @@ func main() {
 		fileStore, err := storage.NewStore(cfg.StorageBackend, cfg.StorageRoot, cfg.S3Endpoint, cfg.S3Bucket, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3UseSSL)
 		if err != nil {
 			slog.Error("file store init", "error", err)
-			exitCode = 1
 			return
 		}
 		atomicStore := storage.NewAtomicStore(fileStore)
@@ -278,7 +272,6 @@ func main() {
 		slog.Info("server listening", "addr", srv.Addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("server error", "error", err)
-			exitCode = 1
 			done <- syscall.SIGQUIT
 			return
 		}
