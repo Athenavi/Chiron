@@ -40,7 +40,7 @@ class UnifiedDBClient:
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None:
-            self._client = httpx.AsyncClient(timeout=10.0)
+            self._client = httpx.AsyncClient(timeout=settings.http_timeout_default)
         return self._client
 
     async def close(self):
@@ -119,7 +119,7 @@ class UnifiedRedisClient:
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None:
-            self._client = httpx.AsyncClient(timeout=10.0)
+            self._client = httpx.AsyncClient(timeout=settings.http_timeout_default)
         return self._client
 
     async def close(self):

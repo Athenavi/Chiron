@@ -91,8 +91,9 @@ async def skill_install(
 
             assert_safe_url(url)  # S4: SSRF 防护
             import httpx
+            from app.config import settings
 
-            async with httpx.AsyncClient(timeout=20) as client:
+            async with httpx.AsyncClient(timeout=settings.http_timeout_default) as client:
                 resp = await client.get(url)
                 resp.raise_for_status()
                 if len(resp.content) > 1_048_576:
@@ -169,8 +170,9 @@ async def skill_discover(url: str = "") -> dict[str, Any]:
     if url:
         try:
             import httpx
+            from app.config import settings
 
-            async with httpx.AsyncClient(timeout=20) as client:
+            async with httpx.AsyncClient(timeout=settings.http_timeout_default) as client:
                 resp = await client.get(url)
                 resp.raise_for_status()
                 items = resp.json()
@@ -322,6 +324,7 @@ async def _run_shell_skill(skill: SkillDef, params: dict[str, Any]) -> str:
 
 async def _run_http_skill(skill: SkillDef, params: dict[str, Any]) -> str:
     """http 技能：渲染 URL 后经 SSRF 防护抓取内容。"""
+    from app.config import settings
     from app.tools.ssrf import fetch_url_safe
 
     url = _render_template(skill.source, params, skill.parameters).strip()
@@ -329,7 +332,7 @@ async def _run_http_skill(skill: SkillDef, params: dict[str, Any]) -> str:
         return f"error: invalid url: {url}"
     import httpx
 
-    async with httpx.AsyncClient(timeout=20) as client:
+    async with httpx.AsyncClient(timeout=settings.http_timeout_web) as client:
         resp = await fetch_url_safe(client, url)
         text = resp.text[:20000]
     return f"[HTTP {resp.status_code}]\n{text}"

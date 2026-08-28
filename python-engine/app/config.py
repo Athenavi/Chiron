@@ -103,6 +103,13 @@ class Settings(BaseSettings):
     # 与 Go 网关 LLM_GATEWAY_KEY 一致；插件 reload 等内部端点校验 X-API-Key
     llm_gateway_key: str = ""
 
+    # ── HTTP超时配置（统一）─
+    # P0性能修复：集中管理HTTP客户端超时，避免散落各处的魔法数字
+    http_timeout_default: float = 15.0    # 默认超时（普通API调用）
+    http_timeout_long: float = 60.0       # 长任务超时（文件上传/复杂查询）
+    http_timeout_critical: float = 30.0   # 关键操作超时（支付/安全相关）
+    http_timeout_web: float = 15.0        # 网页抓取超时（DuckDuckGo等）
+
     # ── 限流 ──
     rate_limit_rpm: int = 60  # requests per minute per tenant
     rate_limit_rps: int = 10  # requests per second per tenant

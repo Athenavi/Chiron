@@ -15,6 +15,8 @@ from fastapi import (APIRouter, File, Form, HTTPException, Query, Request,
                      UploadFile)
 from pydantic import BaseModel
 
+from app.config import settings
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["media"])
@@ -82,10 +84,10 @@ async def get_auth_token(request: Request) -> str:
 
 
 async def create_http_client(token: str) -> httpx.AsyncClient:
-    """创建带认证的 HTTP 客户端"""
+    """创建带认证的 HTTP 客户端（使用统一超时配置）"""
     return httpx.AsyncClient(
         base_url=get_backend_url(),
-        timeout=httpx.Timeout(30.0),
+        timeout=httpx.Timeout(settings.http_timeout_critical),  # 媒体操作使用关键超时
         headers={"Authorization": f"Bearer {token}"},
     )
 
@@ -399,33 +401,23 @@ async def search_media(
             raise HTTPException(status_code=500, detail="Internal server error")
 
 
-# ── AI Media Processing Interfaces (预留) ──
+# ── AI Media Processing Interfaces (v2规划) ──
+# 以下功能为v2版本规划，当前返回501表示暂不可用
+# 实装计划：v2.1 - 图像识别 | v2.2 - 文档解析 | v2.3 - 元数据提取
 
 
 @router.post("/v1/media/{media_id}/analyze")
 async def analyze_media(media_id: str, request: Request):
-    """AI 分析媒体文件（图像识别、文档解析等）"""
+    """AI 分析媒体文件（图像识别、文档解析等）- v2.1功能"""
     token = await get_auth_token(request)
-
-    # TODO: 实现 AI 媒体分析功能
-    # 1. 从 Go 后端获取媒体元数据
-    # 2. 根据 MIME 类型选择处理策略：
-    #    - image/*: 调用视觉模型进行图像识别
-    #    - application/pdf: 使用 PDF 解析器提取文本和结构
-    #    - application/msword, application/vnd.openxmlformats-officedocument.*: Word 文档解析
-    # 3. 提取元数据（尺寸、格式、页数等）
-    # 4. 更新媒体 metadata 字段
 
     raise HTTPException(status_code=501, detail="AI media analysis not yet implemented")
 
 
 @router.post("/v1/media/{media_id}/extract-metadata")
 async def extract_metadata(media_id: str, request: Request):
-    """提取媒体文件元数据"""
+    """提取媒体文件元数据 - v2.3功能"""
     token = await get_auth_token(request)
-
-    # TODO: 实现元数据提取功能
-    # 支持提取：图片尺寸、视频时长、文档页数、文件大小等
 
     raise HTTPException(
         status_code=501, detail="Metadata extraction not yet implemented"
