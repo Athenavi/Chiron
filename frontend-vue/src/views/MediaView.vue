@@ -91,8 +91,7 @@ const fallbackIds = new Set<string>()
 function normalizeResolved(url: string, item: MediaItem): string {
   if (!url) return absUrl(item.file_url)
   if (url.startsWith('/') && !url.startsWith('//')) {
-    const result = `${API_URL}${url}`
-    return result
+    return `${API_URL}${url}`
   }
   return url
 }
@@ -103,8 +102,8 @@ async function resolveItemUrl(item: MediaItem) {
   try {
     const url = await resolveMediaUrl({ id: item.id, file_url: item.file_url })
     if (url) resolvedUrls.value[item.id] = normalizeResolved(url, item)
-  } catch (e) {
-    // 签名解析失败，静默以原路径兜底
+  } catch {
+    // 静默失败，使用原 file_url 回退
   } finally {
     resolvingIds.delete(item.id)
   }
@@ -499,8 +498,8 @@ async function retryFailedUploads() {
         // 这里假设用户会重新选择文件进行重试
         message.warning(`请重新选择文件进行重试: ${fileId}`)
         return true
-      } catch (error) {
-        console.warn(`Upload attempt ${attempt} failed for ${fileId}:`, error)
+      } catch {
+        // 静默失败，重试逻辑由调用方处理
         
         if (attempt < maxRetries) {
           // 指数退避：1s, 2s, 4s...

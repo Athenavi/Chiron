@@ -108,7 +108,6 @@ func AuditMiddleware(next http.Handler) http.Handler {
 		if len(action) > 64 {
 			action = action[:64]
 		}
-		detail := fmt.Sprintf("status=%d", rw.status)
-		auditMWRecord(userID, tenantID, action, r.URL.Path, detail, r.RemoteAddr)
+		auditMWRecord(userID, tenantID, action, r.URL.Path, fmt.Sprintf("status=%d", rw.status), r.RemoteAddr)
 	})
 }

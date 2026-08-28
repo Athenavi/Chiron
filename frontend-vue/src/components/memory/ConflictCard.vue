@@ -142,8 +142,8 @@ async function resolve(resolution: 'keep_old' | 'use_new' | 'manual', manualValu
   try {
     await resolveConflict(props.conflict.conflict_id, resolution, manualValue)
     emit('resolved', props.conflict.conflict_id)
-  } catch (err) {
-    console.error('Resolve conflict failed:', err)
+  } catch {
+    // 静默失败，UI 保持当前状态
   } finally {
     resolving.value = false
     showManual.value = false
@@ -156,8 +156,8 @@ async function dismiss() {
   try {
     await deleteConflict(props.conflict.conflict_id)
     emit('dismissed', props.conflict.conflict_id)
-  } catch (err) {
-    console.error('Dismiss conflict failed:', err)
+  } catch {
+    // 静默失败，UI 保持当前状态
   } finally {
     resolving.value = false
   }

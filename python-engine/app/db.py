@@ -20,11 +20,11 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 # Configuration: use unified client or direct connection
-USE_UNIFIED = os.getenv("USE_UNIFIED_DB_CLIENT", "true").lower() == "true"
+USE_UNIFIED = os.getenv("USE_UNIFIED_DB_CLIENT", "false").lower() == "true"
 
 _pool: Optional[asyncpg.Pool] = None
 _unified_client = None
-_unified_pool_wrapper = None
+_unified_pool_wrapper = None  # 缓存 _UnifiedPoolWrapper 实例，避免每次 get_pool() 新建
 
 
 def _get_unified_client():
@@ -72,13 +72,13 @@ async def close_pool():
 def get_pool() -> asyncpg.Pool:
     """Get the global connection pool or unified client wrapper."""
     if USE_UNIFIED:
-        global _unified_pool_wrapper
-        if _unified_pool_wrapper is not None:
-            return _unified_pool_wrapper
         client = _get_unified_client()
         if client is None:
             raise RuntimeError("Unified DB client not initialized")
-        _unified_pool_wrapper = _UnifiedPoolWrapper(client)
+        # 返回缓存的包装器实例，委托给 unified client
+        global _unified_pool_wrapper
+        if _unified_pool_wrapper is None:
+            _unified_pool_wrapper = _UnifiedPoolWrapper(client)
         return _unified_pool_wrapper
 
     if _pool is None:

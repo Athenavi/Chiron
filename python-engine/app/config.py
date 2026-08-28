@@ -265,69 +265,10 @@ _db_overrides = _load_gateway_config()
 _allowed = set(Settings.model_fields.keys())
 _merged = {k: v for k, v in _db_overrides.items() if k in _allowed}
 
-# 如果网关配置失败且 postgres_dsn 仍为空，尝试从 install.lock 解密获取
-if not settings.postgres_dsn and settings.app_secret:
-    try:
-        import base64
-        import json
-        from pathlib import Path
-
-        lock_path = (
-            Path(__file__).resolve().parent.parent.parent / "data" / "install.lock"
-        )
-        if lock_path.exists():
-            with open(lock_path, "r") as f:
-                lock_data = json.load(f)
-
-            if lock_data.get("completed") and lock_data.get("dsn"):
-                # 使用与 Go 相同的解密逻辑
-                import hashlib
-                import hmac
-
-                from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-
-                def derive_lock_key(app_secret: str) -> bytes:
-                    h = hmac.new(
-                        app_secret.encode("utf-8"),
-                        b"chiron-install-lock-key",
-                        hashlib.sha256,
-                    )
-                    return h.digest()
-
-                def decrypt_dsn(app_secret: str, enc_dsn: str) -> str:
-                    if not enc_dsn:
-                        return ""
-                    key = derive_lock_key(app_secret)
-                    # Go 使用 base64.RawStdEncoding（无 padding），Python 需要兼容
-                    # 添加 padding 以符合标准 base64 解码要求
-                    missing_padding = len(enc_dsn) % 4
-                    if missing_padding:
-                        enc_dsn += "=" * (4 - missing_padding)
-                    sealed = base64.urlsafe_b64decode(enc_dsn)
-                    nonce_size = 12  # AES-GCM nonce size
-                    nonce = sealed[:nonce_size]
-                    ciphertext = sealed[nonce_size:]
-                    aesgcm = AESGCM(key)
-                    plaintext = aesgcm.decrypt(nonce, ciphertext, None)
-                    return plaintext.decode("utf-8")
-
-                dsn = decrypt_dsn(settings.app_secret, lock_data["dsn"])
-                if dsn:
-                    _merged["postgres_dsn"] = dsn
-                    import logging as _log
-
-                    _log.getLogger(__name__).info(
-                        "loaded postgres_dsn from install.lock"
-                    )
-    except Exception as e:
-        import logging as _log
-
-        _log.getLogger(__name__).warning("failed to load DSN from install.lock: %s", e)
-
 if _merged:
     settings = settings.model_copy(update=_merged)
     import logging as _log
 
     _log.getLogger(__name__).info(
-        "applied %d engine settings from gateway/install.lock", len(_merged)
+        "applied %d engine settings from gateway", len(_merged)
     )

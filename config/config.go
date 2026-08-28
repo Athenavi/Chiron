@@ -1,4 +1,4 @@
-﻿package config
+package config
 
 import (
 	"bufio"
@@ -95,10 +95,11 @@ type Config struct {
 	AgentContextLimit   int // max messages before pruning (default 20)
 	AgentMaxConcurrency int // max concurrent agent runs (default 20)
 
-	// Python AI 寮曟�?	PythonEngineAddress string // HTTP 鍦板潃锛屽 "localhost:8000"
+	// Python AI 引擎
+	PythonEngineAddress string // HTTP 地址，如 "localhost:8000"
 	PythonEngineTimeout time.Duration
 
-	// Temporal / LLMGateway 涓洪仐鐣欐閰嶇疆锛堟湭浣跨敤锛夛紝宸茬Щ�?
+	// Temporal / LLMGateway 为遗留配置（未使用），已移除
 
 	// PayPal
 	PayPalClientID string
@@ -116,7 +117,7 @@ type Config struct {
 func Load() *Config {
 	cfg := loadConfig()
 
-	// APP_SECRET is required锛堥儴缃茬骇涓诲瘑閽ワ級�?
+	// APP_SECRET is required（部署级主密钥）。
 	if !cfg.ValidateAppSecret() {
 		os.Stderr.WriteString("FATAL: APP_SECRET environment variable must be set to a strong, unique value (32+ chars)\n")
 		os.Exit(1)
@@ -133,11 +134,6 @@ func Load() *Config {
 	if !ValidateJWTSecret(cfg.JWTSecret) {
 		os.Stderr.WriteString("FATAL: JWT_SECRET (or its source APP_SECRET) must be set to a strong, unique value\n")
 		os.Exit(1)
-	}
-
-	// CORS production warning
-	if cfg.CORSOrigins == "http://localhost:3000,http://localhost:5173" {
-		os.Stderr.WriteString("WARNING: CORS_ORIGINS is set to development defaults. Set CORS_ORIGINS to your production domain.\n")
 	}
 
 	return cfg
@@ -181,7 +177,7 @@ func loadConfig() *Config {
 		InternalToken:       getEnv("INTERNAL_TOKEN", ""),
 		DisableRegistration: isTruthy(getEnv("DISABLE_REGISTRATION", "")),
 		CookieSecure:        isTruthy(getEnv("COOKIE_SECURE", "")),
-		CORSOrigins:         getEnv("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173"),
+		CORSOrigins:         getEnv("CORS_ORIGINS", ""),
 		StorageBackend:      getEnv("STORAGE_BACKEND", "local"),
 		StorageRoot:         getEnv("STORAGE_ROOT", filepath.Join(GetDefaultDataDir(), "workspace")),
 		S3Endpoint:          getEnv("S3_ENDPOINT", ""),
@@ -196,7 +192,7 @@ func loadConfig() *Config {
 		MetricsToken:        getEnv("METRICS_TOKEN", ""),
 		LogLevel:            getEnv("LOG_LEVEL", "info"),
 
-		// 鏀粯锛堟敮浠樺疂/寰俊锛?
+		// 支付（支付宝/微信）
 		PublicBaseURL:         getEnv("PUBLIC_BASE_URL", ""),
 		FrontendURL:           getEnv("FRONTEND_URL", ""),
 		AlipayAppID:           getEnv("ALIPAY_APP_ID", ""),
@@ -258,7 +254,7 @@ func deriveSubsecret(secret, domain string) string {
 	return base64.RawURLEncoding.EncodeToString(h.Sum(nil))
 }
 
-// DeriveLockKey 派生用于加密 install.lock �?AES 密钥
+// DeriveLockKey 派生用于加密 install.lock 的 AES 密钥
 func DeriveLockKey(appSecret string) []byte {
 	if appSecret == "" {
 		return nil

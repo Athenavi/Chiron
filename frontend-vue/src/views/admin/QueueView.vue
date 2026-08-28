@@ -85,9 +85,8 @@ async function fetchData() {
     if (queueHistory.value.length > 20) {
       queueHistory.value.shift()
     }
-  } catch (err: any) {
-    console.error('Queue fetch error:', err)
-    message.error('获取队列数据失败: ' + (err.message || '未知错误'))
+  } catch {
+    message.error('获取队列数据失败')
   } finally {
     loading.value = false
   }
@@ -99,9 +98,8 @@ async function handleFlushQueue() {
     await flushQueue()
     message.success('队列已清空')
     await fetchData()
-  } catch (err: any) {
-    console.error('Flush queue error:', err)
-    message.error('清空队列失败: ' + (err.message || '未知错误'))
+  } catch {
+    message.error('清空队列失败')
   } finally {
     flushLoading.value = false
   }
@@ -113,9 +111,8 @@ async function handlePauseQueue() {
     await pauseQueue(pause)
     isPaused.value = pause
     message.success(pause ? '已暂停消费' : '已恢复消费')
-  } catch (err: any) {
-    console.error('Pause queue error:', err)
-    message.error('操作失败: ' + (err.message || '未知错误'))
+  } catch {
+    message.error('操作失败')
   }
 }
 

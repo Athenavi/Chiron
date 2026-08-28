@@ -62,13 +62,24 @@ const _extractToken = (): string => {
     const params = new URLSearchParams(window.location.href.slice(hashIdx))
     return params.get('token') || ''
   }
-  // 从 localStorage 读取（用户首次输入后保存）
+  // 不持久化到 localStorage：安装令牌仅存内存（sessionStorage），
+  // 页面刷新后用户需重新输入（XSS 攻击无法窃取长期凭证）
+  const fromSession = sessionStorage.getItem('install_token')
+  if (fromSession) return fromSession
+  
+  // 兼容旧版：迁移 localStorage 中遗留的令牌到 sessionStorage 后清除
   const fromStorage = localStorage.getItem('install_token')
-  if (fromStorage) return fromStorage
+  if (fromStorage) {
+    sessionStorage.setItem('install_token', fromStorage)
+    localStorage.removeItem('install_token')
+    return fromStorage
+  }
   return ''
 }
 
 export function saveInstallToken(token: string): void {
+  // 使用 sessionStorage 而非 localStorage：令牌仅存当前会话内存，
+  // 关闭页面/标签页后自动清除，XSS 攻击无法窃取长期凭证
   sessionStorage.setItem('install_token', token)
 }
 

@@ -131,7 +131,8 @@ async function loadDocuments() {
   try {
     const res = await api.get(`/v1/kb/${kbId}/documents`)
     documents.value = res.data?.data?.documents || []
-  } catch (error) {
+  } catch {
+    // 静默失败
   }
 }
 
@@ -197,9 +198,8 @@ async function importFromMedia() {
       const handle = await createChunkUpload(mediaFile, { purpose: 'kb_doc', parentId: kbId })
       await handle.done
       successCount++
-    } catch (error) {
+    } catch {
       failCount++
-      console.error(`导入失败: ${file.name}`, error)
     }
   }
 

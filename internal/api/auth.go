@@ -142,7 +142,11 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(req.Password)); err != nil {
-		db.AuditLog(r.Context(), "", tenantID == "" ? "" : tenantID, "login_failed", "/v1/auth/login", "email="+req.Email, r.RemoteAddr, nil)
+		auditTenantID := tenantID
+		if auditTenantID == "" {
+			auditTenantID = ""
+		}
+		db.AuditLog(r.Context(), "", auditTenantID, "login_failed", "/v1/auth/login", "email="+req.Email, r.RemoteAddr, nil)
 		if h.captcha != nil {
 			h.captcha.RecordFailure(r.Context(), r)
 		}

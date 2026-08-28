@@ -288,7 +288,7 @@ function startPolling() {
         payStatus.value = order.status
         stopPolling()
       }
-    } catch (error: any) {
+    } catch {
       // 轮询出错静默，等待下一次
     }
   }, PAY_POLL_INTERVAL)

@@ -100,9 +100,8 @@ async function fetchData() {
     if (hitRateHistory.value.length > 20) {
       hitRateHistory.value.shift()
     }
-  } catch (err: any) {
-    console.error('Cache fetch error:', err)
-    message.error('获取缓存数据失败: ' + (err.message || '未知错误'))
+  } catch {
+    message.error('获取缓存数据失败')
   } finally {
     loading.value = false
   }

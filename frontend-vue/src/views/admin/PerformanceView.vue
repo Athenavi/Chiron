@@ -81,9 +81,8 @@ async function fetchData() {
       uptime: py.uptime_seconds ? formatUptime(py.uptime_seconds) : '--',
       version: py.version || '--',
     }
-  } catch (err: any) {
-    console.error('Performance fetch error:', err)
-    message.error('获取性能数据失败: ' + (err.message || '未知错误'))
+  } catch {
+    message.error('获取性能数据失败')
   } finally {
     loading.value = false
   }

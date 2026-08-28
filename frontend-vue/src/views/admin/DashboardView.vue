@@ -180,9 +180,8 @@ async function fetchDashboardData() {
     if (queueRes.status === 'fulfilled') {
       stats.value.queueBacklog = queueRes.value.task_queue_length || 0
     }
-  } catch (err: any) {
-    console.error('Dashboard fetch error:', err)
-    error.value = err?.message || '数据加载失败'
+  } catch {
+    error.value = '数据加载失败'
   } finally {
     loading.value = false
   }

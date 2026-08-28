@@ -230,7 +230,7 @@ func mustJSON(v interface{}) string {
 	return string(b)
 }
 
-func intVal(v interface{}, def int) int {
+func intValAny(v interface{}, def int) int {
 	switch n := v.(type) {
 	case float64:
 		return int(n)

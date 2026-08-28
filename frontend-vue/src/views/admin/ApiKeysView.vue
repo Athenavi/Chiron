@@ -49,8 +49,8 @@ async function fetchApiKeys() {
   try {
     const keys = await listApiKeys()
     apiKeys.value = keys
-  } catch (err: any) {
-    console.error('Failed to fetch API keys:', err)
+  } catch {
+    message.error('获取 API Key 失败')
   } finally {
     loading.value = false
   }
@@ -73,8 +73,8 @@ async function handleAdd() {
     showAddModal.value = false
     formData.value = { provider: 'anthropic', key: '', remark: '' }
     await fetchApiKeys()
-  } catch (err: any) {
-    message.error('添加失败: ' + (err.message || '未知错误'))
+  } catch {
+    message.error('添加失败')
   } finally {
     addLoading.value = false
   }

@@ -52,8 +52,8 @@ async function resolveApproval(a: PendingApproval, approved: boolean) {
       tool_call_id: a.id,
       approved,
     })
-  } catch (e) {
-    console.error('approval submit failed', e)
+  } catch {
+    // 静默失败
   } finally {
     pendingApprovals.value = pendingApprovals.value.filter(p => p.id !== a.id)
   }

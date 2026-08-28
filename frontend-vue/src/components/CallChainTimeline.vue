@@ -119,8 +119,7 @@ watch(() => props.traceId, async (id) => {
     const response = await api.get(`/v1/traces/${encodeURIComponent(id)}`)
     const payload = response.data?.data ?? response.data
     fetchedSpans.value = (payload?.spans || []).map((s: any) => ({ ...s, showDetails: false }))
-  } catch (error) {
-    console.warn('CallChainTimeline: 获取 trace 失败:', error)
+  } catch {
     fetchedSpans.value = []
   } finally {
     fetching.value = false
