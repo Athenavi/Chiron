@@ -63,13 +63,14 @@ func handleCancel(w http.ResponseWriter, r *http.Request) {
 		Unauthorized(w, ErrAuthRequired)
 		return
 	}
-	if v, ok := sessionCancels.Load(sessionID); ok {
+	if v, ok := sessionCancels.LoadAndDelete(sessionID); ok {
 		sc := v.(sessionCancel)
 		if sc.userID != claims.UserID {
+			// 恢复条目——不是当前用户的 session
+			sessionCancels.Store(sessionID, sc)
 			Forbidden(w, "not your session")
 			return
 		}
-		sessionCancels.Delete(sessionID)
 		sc.cancel()
 		slog.Info("session cancelled", "session_id", sessionID)
 		OK(w, map[string]string{"status": "cancelled", "session_id": sessionID})

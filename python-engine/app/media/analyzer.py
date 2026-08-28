@@ -1,6 +1,7 @@
 """AI驱动的媒体内容分析器"""
 
 import logging
+import os
 from datetime import datetime
 from typing import Any
 
@@ -42,7 +43,9 @@ async def analyze_image(image_url: str, prompt: str = None) -> dict[str, Any]:
             }
         ]
 
-        response = await llm.chat(messages, model="gpt-4-vision-preview")
+        # 从环境变量获取模型名，默认使用 gpt-4o（主线模型）
+        model_name = os.getenv("VISION_MODEL", "gpt-4o")
+        response = await llm.chat(messages, model=model_name)
         return {
             "success": True,
             "analysis": (
@@ -79,20 +82,16 @@ async def extract_metadata(media_url: str, media_type: str) -> dict[str, Any]:
     try:
         # 根据类型调用不同的提取逻辑
         if media_type == "image":
-            # TODO: 可以使用PIL或其他库提取EXIF等
             metadata["note"] = "Basic metadata only, EXIF extraction not implemented"
         elif media_type == "video":
-            # TODO: 可以使用ffmpeg-python提取视频信息
             metadata["note"] = (
                 "Basic metadata only, video info extraction not implemented"
             )
         elif media_type == "audio":
-            # TODO: 可以使用mutagen提取音频元数据
             metadata["note"] = (
                 "Basic metadata only, audio metadata extraction not implemented"
             )
         elif media_type == "document":
-            # TODO: 可以使用PyPDF2等提取文档信息
             metadata["note"] = "Basic metadata only, document parsing not implemented"
 
         return metadata

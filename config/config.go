@@ -179,7 +179,7 @@ func loadConfig() *Config {
 		CookieSecure:        isTruthy(getEnv("COOKIE_SECURE", "")),
 		CORSOrigins:         getEnv("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173"),
 		StorageBackend:      getEnv("STORAGE_BACKEND", "local"),
-		StorageRoot:         getEnv("STORAGE_ROOT", filepath.Join(getDataDirDefault(), "workspace")),
+		StorageRoot:         getEnv("STORAGE_ROOT", filepath.Join(GetDefaultDataDir(), "workspace")),
 		S3Endpoint:          getEnv("S3_ENDPOINT", ""),
 		S3Bucket:            getEnv("S3_BUCKET", "chiron"),
 		S3AccessKey:         getEnv("S3_ACCESS_KEY", ""),
@@ -216,9 +216,9 @@ func loadConfig() *Config {
 		PayPalSecret:   getEnv("PAYPAL_SECRET", ""),
 		PayPalSandbox:  isTruthy(getEnv("PAYPAL_SANDBOX", "")),
 
-		PluginsConfigPath: getEnv("PLUGINS_CONFIG_PATH", filepath.Join(getDataDirDefault(), "config", "plugins.json")),
-		PluginDataDir:     getEnv("PLUGIN_DATA_DIR", filepath.Join(getDataDirDefault(), "plugins")),
-		DataDir:           getEnv("CHIRON_DATA_DIR", getDataDirDefault()),
+		PluginsConfigPath: getEnv("PLUGINS_CONFIG_PATH", filepath.Join(GetDefaultDataDir(), "config", "plugins.json")),
+		PluginDataDir:     getEnv("PLUGIN_DATA_DIR", filepath.Join(GetDefaultDataDir(), "plugins")),
+		DataDir:           getEnv("CHIRON_DATA_DIR", GetDefaultDataDir()),
 	}
 
 	return cfg
@@ -239,11 +239,6 @@ func GetDefaultDataDir() string {
 		return filepath.Join(home, ".chiron")
 	}
 	return "data"
-}
-
-// getDataDirDefault is deprecated; use GetDefaultDataDir instead.
-func getDataDirDefault() string {
-	return GetDefaultDataDir()
 }
 
 func (c *Config) ValidateAppSecret() bool {

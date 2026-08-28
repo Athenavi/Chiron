@@ -44,6 +44,9 @@ const maxKBDocSize int64 = 64 << 20 // 64MB
 // 仅允许字母数字、中文等常规字符、点、下划线、连字符、空格。
 var validUploadNameRe = regexp.MustCompile(`^[^\x00-\x1f/\\]+$`)
 
+// uuidRe 验证标准 UUID 格式（xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx），防止路径穿越。
+var uuidRe = regexp.MustCompile(`^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$`)
+
 // sanitizeUploadName 净化上传文件名（P0-S3 路径穿越修复）：
 // 拒绝包含路径分隔符或空白的名字；剥离潜在遍历；限制长度。
 func sanitizeUploadName(name string) string {
@@ -66,7 +69,12 @@ func sanitizeUploadName(name string) string {
 }
 
 // chunkDir 返回 upload_id 的临时分片目录（自动创建）。
+// 验证 uploadID 为 UUID 格式，防止路径穿越。
 func (h *UploadHandler) chunkDir(uploadID string) (string, error) {
+	// 只允许标准 UUID 格式（十六进制+连字符），拒绝 ../ 等路径穿越
+	if !uuidRe.MatchString(uploadID) {
+		return "", fmt.Errorf("invalid upload ID: %q", uploadID)
+	}
 	dir := filepath.Join(h.storageRoot, "uploads", uploadID)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
@@ -215,6 +223,13 @@ func (h *UploadHandler) PutChunk(w http.ResponseWriter, r *http.Request) {
 	out, err := os.Create(dst)
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "create chunk failed")
+		return
+	}
+	// P0-安全：分片文件仅允许当前进程读写，防止多租户服务器上其他进程读取
+	if err := os.Chmod(dst, 0o600); err != nil {
+		out.Close()
+		os.Remove(dst)
+		logAndRespond(w, err, http.StatusInternalServerError, "set chunk permission failed")
 		return
 	}
 	defer out.Close()

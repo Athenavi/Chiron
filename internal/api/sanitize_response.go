@@ -17,6 +17,11 @@ var SensitiveFields = []string{
 // SanitizeResponseMiddleware 脱敏响应中间件
 func SanitizeResponseMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// P0-性能：流式响应（SSE/text/event-stream）跳过缓冲，直接透传
+		if strings.Contains(r.Header.Get("Accept"), "text/event-stream") {
+			next.ServeHTTP(w, r)
+			return
+		}
 		// 只对JSON响应进行脱敏
 		if !strings.Contains(r.Header.Get("Accept"), "application/json") &&
 			!strings.Contains(r.Header.Get("Content-Type"), "application/json") {

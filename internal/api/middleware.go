@@ -194,19 +194,18 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 			"ip", r.RemoteAddr,
 		)
 
-		// Write audit log for non-GET requests
+		// Write audit log for non-GET requests (P0-性能: 异步写入，不阻塞响应返回)
 		if r.Method != "GET" && r.Method != "OPTIONS" && rw.status < 500 {
-			auditUserID := ""
-			auditTenantID := ""
-			if claims := auth.GetClaims(r.Context()); claims != nil {
-				auditUserID = claims.UserID
-				auditTenantID = claims.TenantID
+			claims := auth.GetClaims(r.Context())
+			if claims != nil {
+				auditUserID := claims.UserID
+				auditTenantID := claims.TenantID
+				go db.AuditLog(r.Context(), auditUserID, auditTenantID, r.Method, r.URL.Path, "", r.RemoteAddr, map[string]interface{}{
+					"status": rw.status,
+					"method": r.Method,
+					"path":   r.URL.Path,
+				})
 			}
-			db.AuditLog(r.Context(), auditUserID, auditTenantID, r.Method, r.URL.Path, "", r.RemoteAddr, map[string]interface{}{
-				"status": rw.status,
-				"method": r.Method,
-				"path":   r.URL.Path,
-			})
 		}
 	})
 }
