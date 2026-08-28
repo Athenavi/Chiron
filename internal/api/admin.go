@@ -25,6 +25,7 @@ var validDBName = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
 // AdminHandler provides admin-only management endpoints.
 type AdminHandler struct {
+	cfg           *config.Config
 	authenticator *auth.Authenticator
 	store         *storage.AtomicStore
 	redis         *db.AtomicRedis
@@ -34,8 +35,8 @@ type AdminHandler struct {
 	settingsStore *settings.Store
 }
 
-func NewAdminHandler(a *auth.Authenticator, store *storage.AtomicStore, redis *db.AtomicRedis, pythonClient *engine.PythonClient) *AdminHandler {
-	return &AdminHandler{authenticator: a, store: store, redis: redis, pythonClient: pythonClient}
+func NewAdminHandler(cfg *config.Config, a *auth.Authenticator, store *storage.AtomicStore, redis *db.AtomicRedis, pythonClient *engine.PythonClient) *AdminHandler {
+	return &AdminHandler{cfg: cfg, authenticator: a, store: store, redis: redis, pythonClient: pythonClient}
 }
 
 // RegisterRoutes adds admin endpoints to the given router under /v1/admin.
@@ -85,10 +86,12 @@ func (h *AdminHandler) RegisterRoutes(r *http.ServeMux) {
 func (h *AdminHandler) Metrics(w http.ResponseWriter, r *http.Request) {
 	snap := monitor.Snapshot()
 	// Map internal metric names to dashboard-expected field names
-	snap["concurrent_connections"] = snap["requests_active"]
-	snap["queue_backlog"] = snap["requests_total"]
-	snap["cache_hit_rate"] = 0
-	snap["api_latency_p99"] = 0
+	if v, ok := snap["requests_active"]; ok {
+		snap["concurrent_connections"] = v
+	}
+	if v, ok := snap["requests_total"]; ok {
+		snap["queue_backlog"] = v
+	}
 	OK(w, snap)
 }
 
@@ -377,7 +380,12 @@ func dbNameFromDSN() string {
 func (h *AdminHandler) CreateBackup(w http.ResponseWriter, r *http.Request) {
 	// P0-P4 修复：pg_dump 输出流式转发，避免整库缓冲入内存导致 OOM
 	// 参数拆分传入防止 DSN 含特殊字符被解析为额外参数
-	cmd := exec.CommandContext(r.Context(), "pg_dump", "--dbname", extractDSN())
+	dsn := extractDSN()
+	if dsn == "" {
+		InternalError(w, "POSTGRES_DSN not configured")
+		return
+	}
+	cmd := exec.CommandContext(r.Context(), "pg_dump", "--dbname", dsn)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "backup failed")
@@ -408,7 +416,11 @@ func (h *AdminHandler) RestoreBackup(w http.ResponseWriter, r *http.Request) {
 
 	// P0-P4 防护：流式写入临时文件后以 psql 恢复，避免 OOM
 	const maxSize int64 = 512 << 20 // 512MB
-	tmpFile, err := os.CreateTemp("", "chiron_restore_*.sql")
+	tmpDir := h.cfg.DataDir
+	if tmpDir == "" {
+		tmpDir = config.GetDefaultDataDir()
+	}
+	tmpFile, err := os.CreateTemp(tmpDir, "chiron_restore_*.sql")
 	if err != nil {
 		InternalError(w, "cannot create temp file")
 		return
@@ -432,7 +444,12 @@ func (h *AdminHandler) RestoreBackup(w http.ResponseWriter, r *http.Request) {
 	// 使用 psql 执行恢复（参数拆分传入防止注入）
 	restoreCtx, cancel := context.WithTimeout(r.Context(), 30*time.Minute)
 	defer cancel()
-	cmd := exec.CommandContext(restoreCtx, "psql", "--dbname", extractDSN(), "-f", tmpPath, "-v", "ON_ERROR_STOP=1")
+	psqlDSN := extractDSN()
+	if psqlDSN == "" {
+		InternalError(w, "POSTGRES_DSN not configured")
+		return
+	}
+	cmd := exec.CommandContext(restoreCtx, "psql", "--dbname", psqlDSN, "-f", tmpPath, "-v", "ON_ERROR_STOP=1")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		slog.Error("restore failed", "error", err, "output", string(output))

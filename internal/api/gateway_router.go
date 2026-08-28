@@ -336,7 +336,7 @@ func NewGatewayRouter(
 	kbRateMW := kbRateLimiter.Middleware
 
 	// Admin handler
-	adminHandler := NewAdminHandler(authenticator, fileStore, atomicRedis, pythonClient)
+	adminHandler := NewAdminHandler(cfg, authenticator, fileStore, atomicRedis, pythonClient)
 	adminHandler.rateLimiter = distLimiter
 	adminHandler.appSecret = cfg.AppSecret
 

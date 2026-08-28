@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/athenavi/chiron/config"
 )
 
 // versionLock represents the data/version.lock file
@@ -14,9 +16,14 @@ type versionLock struct {
 	DB string `json:"db"`
 }
 
-// getExpectedRevision reads the expected db revision from data/version.lock
+// versionLockPath returns the path to version.lock under the data directory.
+func versionLockPath() string {
+	return filepath.Join(config.GetDefaultDataDir(), "version.lock")
+}
+
+// getExpectedRevision reads the expected db revision from version.lock
 func getExpectedRevision() (string, error) {
-	data, err := os.ReadFile("data/version.lock")
+	data, err := os.ReadFile(versionLockPath())
 	if err != nil {
 		return "", err
 	}
@@ -44,14 +51,14 @@ func getCurrentRevision(python string) (string, error) {
 	return parts[0], nil
 }
 
-// updateVersionLockDB updates data/version.lock with the given revision
+// updateVersionLockDB updates version.lock with the given revision
 func updateVersionLockDB(revision string) error {
 	lock := versionLock{DB: revision}
 	data, err := json.MarshalIndent(lock, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile("data/version.lock", data, 0o644)
+	return os.WriteFile(versionLockPath(), data, 0o644)
 }
 
 // listMigrationFiles returns a list of migration file names in the given directory

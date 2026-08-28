@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -847,12 +848,36 @@ func (h *AdminHandler) DeleteCronJob(w http.ResponseWriter, r *http.Request) {
 
 // ── 工具 ──
 
-// runPGDump 落盘 pg_dump（复用 extractDSN）。参数拆分传入防止注入。
+// runPGDump 流式落盘 pg_dump（复用 extractDSN）。参数拆分传入防止注入。
+// 使用 stdout pipe 流式写入文件，避免整库缓冲入内存导致 OOM。
 func runPGDump(ctx context.Context, target string) error {
-	cmd := exec.CommandContext(ctx, "pg_dump", "--dbname", extractDSN())
-	out, err := cmd.Output()
-	if err != nil {
-		return err
+	dsn := extractDSN()
+	if dsn == "" {
+		return fmt.Errorf("POSTGRES_DSN not configured")
 	}
-	return os.WriteFile(target, out, 0o644)
+	cmd := exec.CommandContext(ctx, "pg_dump", "--dbname", dsn)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("stdout pipe: %w", err)
+	}
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("pg_dump start: %w", err)
+	}
+	outFile, err := os.Create(target)
+	if err != nil {
+		cmd.Process.Kill()
+		cmd.Wait()
+		return fmt.Errorf("create target file: %w", err)
+	}
+	if _, err := io.Copy(outFile, stdout); err != nil {
+		outFile.Close()
+		cmd.Process.Kill()
+		cmd.Wait()
+		return fmt.Errorf("write dump: %w", err)
+	}
+	outFile.Close()
+	if err := cmd.Wait(); err != nil {
+		return fmt.Errorf("pg_dump failed: %w", err)
+	}
+	return nil
 }
