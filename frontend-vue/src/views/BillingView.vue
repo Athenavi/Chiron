@@ -290,7 +290,6 @@ function startPolling() {
       }
     } catch (error: any) {
       // 轮询出错静默，等待下一次
-      console.error('payment poll error:', error)
     }
   }, PAY_POLL_INTERVAL)
 }

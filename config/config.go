@@ -1,4 +1,4 @@
-package config
+﻿package config
 
 import (
 	"bufio"
@@ -95,11 +95,10 @@ type Config struct {
 	AgentContextLimit   int // max messages before pruning (default 20)
 	AgentMaxConcurrency int // max concurrent agent runs (default 20)
 
-	// Python AI 寮曟搸
-	PythonEngineAddress string // HTTP 鍦板潃锛屽 "localhost:8000"
+	// Python AI 寮曟�?	PythonEngineAddress string // HTTP 鍦板潃锛屽 "localhost:8000"
 	PythonEngineTimeout time.Duration
 
-	// Temporal / LLMGateway 涓洪仐鐣欐閰嶇疆锛堟湭浣跨敤锛夛紝宸茬Щ闄?
+	// Temporal / LLMGateway 涓洪仐鐣欐閰嶇疆锛堟湭浣跨敤锛夛紝宸茬Щ�?
 
 	// PayPal
 	PayPalClientID string
@@ -117,7 +116,7 @@ type Config struct {
 func Load() *Config {
 	cfg := loadConfig()
 
-	// APP_SECRET is required锛堥儴缃茬骇涓诲瘑閽ワ級銆?
+	// APP_SECRET is required锛堥儴缃茬骇涓诲瘑閽ワ級�?
 	if !cfg.ValidateAppSecret() {
 		os.Stderr.WriteString("FATAL: APP_SECRET environment variable must be set to a strong, unique value (32+ chars)\n")
 		os.Exit(1)
@@ -134,6 +133,11 @@ func Load() *Config {
 	if !ValidateJWTSecret(cfg.JWTSecret) {
 		os.Stderr.WriteString("FATAL: JWT_SECRET (or its source APP_SECRET) must be set to a strong, unique value\n")
 		os.Exit(1)
+	}
+
+	// CORS production warning
+	if cfg.CORSOrigins == "http://localhost:3000,http://localhost:5173" {
+		os.Stderr.WriteString("WARNING: CORS_ORIGINS is set to development defaults. Set CORS_ORIGINS to your production domain.\n")
 	}
 
 	return cfg
@@ -254,7 +258,7 @@ func deriveSubsecret(secret, domain string) string {
 	return base64.RawURLEncoding.EncodeToString(h.Sum(nil))
 }
 
-// DeriveLockKey 派生用于加密 install.lock 的 AES 密钥
+// DeriveLockKey 派生用于加密 install.lock �?AES 密钥
 func DeriveLockKey(appSecret string) []byte {
 	if appSecret == "" {
 		return nil

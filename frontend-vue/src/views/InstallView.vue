@@ -132,7 +132,6 @@ async function submitToken() {
 
 // ── Step 1：提交 APP_SECRET（或 APP_SECRET 已配置时直接跳转到数据库配置） ──
 async function skipStep1() {
-  console.log('[Install] skipStep1 called, appSecretSet:', appSecretSet.value, 'dbForm.app_secret:', dbForm.value.app_secret)
   // 如果 APP_SECRET 已通过环境变量配置，直接跳转到数据库配置页
   if (appSecretSet.value) {
     wizard.value = 'db'
@@ -150,13 +149,11 @@ async function skipStep1() {
   // 将 APP_SECRET 保留在 dbForm 中，提交 Step 2 时一并发送
   appSecretSet.value = true
   wizard.value = 'db'
-  console.log('[Install] skipStep1 done, wizard now:', wizard.value)
   message.success('APP_SECRET 已设置，请继续配置数据库')
 }
 
 // ── 三步骤向导提交 ──
 async function submitStep2() {
-  console.log('[Install] submitStep2 called', dbForm.value)
   
   // 验证 APP_SECRET 长度（至少32字符）
   const appSecret = dbForm.value.app_secret?.trim()
@@ -171,7 +168,6 @@ async function submitStep2() {
   }
   submitting.value = true
   try {
-    console.log('[Install] calling postInstallStep2...')
     const result = await postInstallStep2({
       app_secret: appSecret || undefined,
       postgres_dsn: dbForm.value.postgres_dsn.trim(),
@@ -179,12 +175,10 @@ async function submitStep2() {
       redis_password: dbForm.value.redis_password || undefined,
       redis_db: dbForm.value.redis_db || undefined,
     })
-    console.log('[Install] postInstallStep2 success', result)
     step2Done.value = true
     wizard.value = 'admin'
     message.success('数据库配置已保存并验证通过')
   } catch (e: any) {
-    console.error('[Install] postInstallStep2 error', e)
     message.error(e?.response?.data?.error || '数据库配置失败')
   } finally {
     submitting.value = false
@@ -192,7 +186,6 @@ async function submitStep2() {
 }
 
 async function submitStep3() {
-  console.log('[Install] submitStep3 called', adminForm.value)
   if (!adminForm.value.email || !adminForm.value.name || !adminForm.value.password) {
     message.warning('邮箱、姓名、密码均必填')
     return
@@ -207,17 +200,14 @@ async function submitStep3() {
   }
   submitting.value = true
   try {
-    console.log('[Install] calling postInstallStep3...')
     await postInstallStep3({
       email: adminForm.value.email,
       password: adminForm.value.password,
       name: adminForm.value.name,
     })
-    console.log('[Install] postInstallStep3 success')
     wizard.value = 'done'
     message.success('安装完成')
   } catch (e: any) {
-    console.error('[Install] postInstallStep3 error', e)
     const errMsg = e?.response?.data?.error || ''
     if (errMsg.includes('数据库连接已失效') || errMsg.includes('请重新完成数据库配置')) {
       message.warning('安装中断后数据库连接已失效，请重新配置数据库')

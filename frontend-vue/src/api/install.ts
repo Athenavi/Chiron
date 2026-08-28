@@ -69,7 +69,7 @@ const _extractToken = (): string => {
 }
 
 export function saveInstallToken(token: string): void {
-  localStorage.setItem('install_token', token)
+  sessionStorage.setItem('install_token', token)
 }
 
 /** 动态获取当前安装令牌（每次调用都重新提取，确保手动输入后立即生效） */

@@ -163,7 +163,12 @@ func SaveInstallLock(lk *InstallLock) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	// 直接 rename 覆盖，不先删除旧文件（Windows 兼容性更好）
+	// Windows 上 Rename 无法覆盖被占用的文件,需要先删除旧文件
+	if _, err := os.Stat(absPath); err == nil {
+		if err := os.Remove(absPath); err != nil {
+			return fmt.Errorf("remove old install.lock: %w", err)
+		}
+	}
 	return os.Rename(tmpName, absPath)
 }
 

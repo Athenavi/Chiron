@@ -89,28 +89,22 @@ const fallbackIds = new Set<string>()
 
 /** resolveMediaUrl 结果归一化：相对路径补 API_URL 前缀；失败回退原 file_url */
 function normalizeResolved(url: string, item: MediaItem): string {
-  console.log('[normalizeResolved] input url:', url, 'for', item.id)
   if (!url) return absUrl(item.file_url)
   if (url.startsWith('/') && !url.startsWith('//')) {
     const result = `${API_URL}${url}`
-    console.log('[normalizeResolved] prepended API_URL:', result)
     return result
   }
-  console.log('[normalizeResolved] returning as-is:', url)
   return url
 }
 
 async function resolveItemUrl(item: MediaItem) {
   if (resolvingIds.has(item.id)) return
   resolvingIds.add(item.id)
-  console.log('[resolveItemUrl] start resolving for', item.id, 'file_url:', item.file_url)
   try {
     const url = await resolveMediaUrl({ id: item.id, file_url: item.file_url })
-    console.log('[resolveItemUrl] got URL:', url, 'for', item.id)
     if (url) resolvedUrls.value[item.id] = normalizeResolved(url, item)
-    console.log('[resolveItemUrl] normalized URL:', resolvedUrls.value[item.id], 'for', item.id)
   } catch (e) {
-    console.error('[resolveItemUrl] error:', e, 'for', item.id)
+    // 签名解析失败，静默以原路径兜底
   } finally {
     resolvingIds.delete(item.id)
   }
@@ -127,14 +121,10 @@ function resolveAllUrls() {
 function itemUrl(item: MediaItem): string {
   const r = resolvedUrls.value[item.id]
   if (r) {
-    console.log('[itemUrl] using resolved URL for', item.id, ':', r)
     return r
   }
   if (!fallbackIds.has(item.id) && (item.file_url || '').startsWith('/media/')) {
-    console.log('[itemUrl] triggering resolve for', item.id, 'file_url:', item.file_url)
     void resolveItemUrl(item)
-  } else {
-    console.log('[itemUrl] using raw file_url for', item.id, ':', item.file_url)
   }
   // 如果还没有解析完成，暂时返回原 file_url（会在解析完成后重新渲染）
   return absUrl(item.file_url)

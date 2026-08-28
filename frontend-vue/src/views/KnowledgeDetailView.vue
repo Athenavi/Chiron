@@ -132,7 +132,6 @@ async function loadDocuments() {
     const res = await api.get(`/v1/kb/${kbId}/documents`)
     documents.value = res.data?.data?.documents || []
   } catch (error) {
-    console.error('加载文档失败:', error)
   }
 }
 
