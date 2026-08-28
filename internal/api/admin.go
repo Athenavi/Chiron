@@ -375,7 +375,8 @@ func dbNameFromDSN() string {
 
 func (h *AdminHandler) CreateBackup(w http.ResponseWriter, r *http.Request) {
 	// P0-P4 修复：pg_dump 输出流式转发，避免整库缓冲入内存导致 OOM
-	cmd := exec.CommandContext(r.Context(), "pg_dump", "--dbname="+extractDSN())
+	// 参数拆分传入防止 DSN 含特殊字符被解析为额外参数
+	cmd := exec.CommandContext(r.Context(), "pg_dump", "--dbname", extractDSN())
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "backup failed")
@@ -396,34 +397,45 @@ func (h *AdminHandler) CreateBackup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AdminHandler) RestoreBackup(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 500<<20) // 500MB 上传上限，防止 OOM
 	file, _, err := r.FormFile("file")
 	if err != nil {
 		BadRequest(w, "file is required")
 		return
 	}
 	defer file.Close()
-	// P0-P4 防护：限制恢复文件大小，避免整文件读入内存
-	sqlData, err := io.ReadAll(io.LimitReader(file, 512<<20))
+
+	// P0-P4 防护：流式写入临时文件后以 psql 恢复，避免 OOM
+	const maxSize int64 = 512 << 20 // 512MB
+	tmpFile, err := os.CreateTemp("", "chiron_restore_*.sql")
 	if err != nil {
-		logAndRespond(w, err, http.StatusInternalServerError, "read file failed")
+		InternalError(w, "cannot create temp file")
 		return
 	}
-	if len(sqlData) >= 512<<20 {
+	tmpPath := tmpFile.Name()
+	defer os.Remove(tmpPath)
+
+	written, err := io.Copy(tmpFile, io.LimitReader(file, maxSize))
+	if err != nil {
+		tmpFile.Close()
+		logAndRespond(w, err, http.StatusInternalServerError, "write temp file failed")
+		return
+	}
+	tmpFile.Close()
+	if written >= maxSize {
+		// 已读满限流器，可能有更多数据被截断
 		BadRequest(w, "backup file too large (max 512MB)")
 		return
 	}
-	tx, err := db.GlobalDBManager.Begin(r.Context())
+
+	// 使用 psql 执行恢复（参数拆分传入防止注入）
+	restoreCtx, cancel := context.WithTimeout(r.Context(), 30*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(restoreCtx, "psql", "--dbname", extractDSN(), "-f", tmpPath, "-v", "ON_ERROR_STOP=1")
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		logAndRespond(w, err, http.StatusInternalServerError, "begin tx failed")
-		return
-	}
-	defer tx.Rollback(r.Context())
-	if _, err := tx.Exec(r.Context(), string(sqlData)); err != nil {
-		logAndRespond(w, err, http.StatusInternalServerError, "restore failed")
-		return
-	}
-	if err := tx.Commit(r.Context()); err != nil {
-		logAndRespond(w, err, http.StatusInternalServerError, "commit failed")
+		slog.Error("restore failed", "error", err, "output", string(output))
+		logAndRespond(w, fmt.Errorf("restore failed: %s", string(output)), http.StatusInternalServerError, "restore failed")
 		return
 	}
 	OK(w, map[string]string{"message": "Database restored successfully"})

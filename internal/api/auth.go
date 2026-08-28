@@ -133,7 +133,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	).Scan(&user.ID, &user.Email, &user.Name, &user.Role, &tenantID, &passwordHash)
 	if err != nil {
 		slog.Warn("login failed", "email", req.Email, "error", err)
-		db.AuditLog(r.Context(), "", "", "login_failed", "/v1/auth/login", "email="+req.Email, r.RemoteAddr, nil)
+		db.AuditLog(r.Context(), "", DefaultTenantID, "login_failed", "/v1/auth/login", "email="+req.Email, r.RemoteAddr, nil)
 		if h.captcha != nil {
 			h.captcha.RecordFailure(r.Context(), r)
 		}

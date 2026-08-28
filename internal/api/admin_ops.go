@@ -847,9 +847,9 @@ func (h *AdminHandler) DeleteCronJob(w http.ResponseWriter, r *http.Request) {
 
 // ── 工具 ──
 
-// runPGDump 落盘 pg_dump（复用 extractDSN）。
+// runPGDump 落盘 pg_dump（复用 extractDSN）。参数拆分传入防止注入。
 func runPGDump(ctx context.Context, target string) error {
-	cmd := exec.CommandContext(ctx, "pg_dump", "--dbname="+extractDSN())
+	cmd := exec.CommandContext(ctx, "pg_dump", "--dbname", extractDSN())
 	out, err := cmd.Output()
 	if err != nil {
 		return err
