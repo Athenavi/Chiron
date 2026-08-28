@@ -94,7 +94,7 @@ func (h *SkillHandler) proxy(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimSuffix(r.URL.Path, "/")
 		err = h.python.GetJSON(r.Context(), path, &result)
 		if err == nil && strings.HasSuffix(path, "/discover") {
-			filterDiscoverByMarket(r.Context(), result, skillTenantID(r))
+			filterDiscoverByMarket(r.Context(), result, ResolveTenantID(r))
 		}
 	case "POST", "PUT":
 		var body map[string]interface{}
@@ -103,7 +103,7 @@ func (h *SkillHandler) proxy(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// 身份注入（网关为唯一可信边界）：引擎无鉴权，必须由网关注入租户/用户身份。
-		if tid := skillTenantID(r); tid != "" {
+		if tid := ResolveTenantID(r); tid != "" {
 			body["tenant_id"] = tid
 		}
 		if uid := auth.GetClaims(r.Context()); uid != nil && uid.UserID != "" {
@@ -149,14 +149,6 @@ func (h *SkillHandler) proxyDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	OK(w, result)
-}
-
-// skillTenantID 取当前租户 ID：claims 优先，缺省回退默认租户。
-func skillTenantID(r *http.Request) string {
-	if claims := auth.GetClaims(r.Context()); claims != nil && claims.TenantID != "" {
-		return claims.TenantID
-	}
-	return DefaultTenantID
 }
 
 // filterDiscoverByMarket 对 discover 代理响应做市场白名单过滤：

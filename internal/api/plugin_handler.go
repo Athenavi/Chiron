@@ -134,15 +134,6 @@ func (h *PluginHandler) resolveUser(r *http.Request) string {
 	return ""
 }
 
-// resolveTenant 取当前租户 ID：claims 优先，缺省回退默认租户（市场门控用）。
-func (h *PluginHandler) resolveTenant(r *http.Request) string {
-	claims := auth.GetClaims(r.Context())
-	if claims != nil && claims.TenantID != "" {
-		return claims.TenantID
-	}
-	return DefaultTenantID
-}
-
 // ── List ──
 
 func (h *PluginHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -176,7 +167,7 @@ func (h *PluginHandler) List(w http.ResponseWriter, r *http.Request) {
 
 // overlayMarketPlugins 将租户已安装且启用的市场插件追加到列表（去重）。
 func (h *PluginHandler) overlayMarketPlugins(r *http.Request, plugins []MCPPlugin) []MCPPlugin {
-	items, err := ListEnabledMarketItems(r.Context(), "plugin", h.resolveTenant(r))
+	items, err := ListEnabledMarketItems(r.Context(), "plugin", ResolveTenantID(r))
 	if err != nil {
 		slog.Debug("plugin list: market overlay skipped", "error", err)
 		return plugins
@@ -230,7 +221,7 @@ func (h *PluginHandler) Install(w http.ResponseWriter, r *http.Request) {
 
 	// 企业市场门控：市场存在同名 published 条目且租户未启用时禁止安装
 	// （查询失败 / 未上架能力由 IsItemEnabledForTenant 内部 fail-open 放行）
-	if enabled, _ := IsItemEnabledForTenant(r.Context(), "plugin", name, h.resolveTenant(r)); !enabled {
+	if enabled, _ := IsItemEnabledForTenant(r.Context(), "plugin", name, ResolveTenantID(r)); !enabled {
 		Forbidden(w, "plugin is not enabled for this tenant by market policy")
 		return
 	}

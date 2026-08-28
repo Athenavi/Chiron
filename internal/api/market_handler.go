@@ -179,14 +179,6 @@ func scanMarketItem(row interface{ Scan(...any) error }) (*MarketItem, error) {
 	return &it, nil
 }
 
-// marketTenantID 与策略 handler 一致的租户解析（claims 优先，回退默认租户）。
-func marketTenantID(claims *auth.Claims) string {
-	if claims != nil && claims.TenantID != "" {
-		return claims.TenantID
-	}
-	return DefaultTenantID
-}
-
 // ── 目录条目 CRUD ────────────────────────────────────────────────────────
 
 // ListItems GET /v1/ent/market/items?type=&status=

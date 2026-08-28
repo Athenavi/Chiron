@@ -868,10 +868,15 @@ func (h *InstallHandler) Setup(w http.ResponseWriter, r *http.Request) {
 // saveAppSecretToEnv 将 APP_SECRET 写入 .env 文件，
 // 供 Python 端（Alembic 迁移脚本）读取并解密 install.lock 中的 DSN。
 // 保留文件中已有的其他配置项（如 DATABASE_DSN）。
+// .env 路径可通过 DOT_ENV_PATH 环境变量覆盖。
 func saveAppSecretToEnv(appSecret string) error {
+	envPath := ".env"
+	if v := os.Getenv("DOT_ENV_PATH"); v != "" {
+		envPath = v
+	}
 	// 读取现有的 .env 文件内容（如果存在）
 	var existingLines []string
-	if data, err := os.ReadFile(".env"); err == nil {
+	if data, err := os.ReadFile(envPath); err == nil {
 		lines := strings.Split(string(data), "\n")
 		for _, line := range lines {
 			// 跳过旧的 APP_SECRET 行和注释头
@@ -894,8 +899,8 @@ func saveAppSecretToEnv(appSecret string) error {
 		content.WriteString(line + "\n")
 	}
 
-	if err := os.WriteFile(".env", []byte(content.String()), 0o600); err != nil {
-		return fmt.Errorf("write .env: %w", err)
+	if err := os.WriteFile(envPath, []byte(content.String()), 0o600); err != nil {
+		return fmt.Errorf("write %s: %w", envPath, err)
 	}
 	slog.Info("saved APP_SECRET to .env for Alembic migration")
 	return nil

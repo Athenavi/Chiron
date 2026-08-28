@@ -21,6 +21,24 @@ func versionLockPath() string {
 	return filepath.Join(config.GetDefaultDataDir(), "version.lock")
 }
 
+// alembicConfigPath returns the path to alembic.ini.
+// Can be overridden via ALEMBIC_CONFIG env var; defaults to project root.
+func alembicConfigPath() string {
+	if v := os.Getenv("ALEMBIC_CONFIG"); v != "" {
+		return v
+	}
+	return "alembic.ini"
+}
+
+// dotEnvPath returns the path to .env file in the project root.
+// Can be overridden via DOT_ENV_PATH env var.
+func dotEnvPath() string {
+	if v := os.Getenv("DOT_ENV_PATH"); v != "" {
+		return v
+	}
+	return ".env"
+}
+
 // getExpectedRevision reads the expected db revision from version.lock
 func getExpectedRevision() (string, error) {
 	data, err := os.ReadFile(versionLockPath())
@@ -36,7 +54,7 @@ func getExpectedRevision() (string, error) {
 
 // getCurrentRevision runs "alembic current" to get the database's actual revision
 func getCurrentRevision(python string) (string, error) {
-	cmd := exec.Command(python, "-m", "alembic", "--config", "alembic.ini", "current")
+	cmd := exec.Command(python, "-m", "alembic", "--config", alembicConfigPath(), "current")
 	cmd.Dir = "."
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -122,7 +140,7 @@ func RunMigrations(dsn string) error {
 	// Preserve other configuration entries (e.g., DATABASE_DSN) in the file.
 	if appSecret := os.Getenv("APP_SECRET"); appSecret != "" {
 		var existingLines []string
-		if data, err := os.ReadFile(".env"); err == nil {
+		if data, err := os.ReadFile(dotEnvPath()); err == nil {
 			lines := strings.Split(string(data), "\n")
 			for _, line := range lines {
 				// Skip old APP_SECRET line and comment header
@@ -145,7 +163,7 @@ func RunMigrations(dsn string) error {
 			content.WriteString(line + "\n")
 		}
 
-		if err := os.WriteFile(".env", []byte(content.String()), 0o600); err != nil {
+		if err := os.WriteFile(dotEnvPath(), []byte(content.String()), 0o600); err != nil {
 			return fmt.Errorf("failed to write .env: %w", err)
 		}
 	}
@@ -184,7 +202,7 @@ func RunMigrations(dsn string) error {
 	if expected != "" {
 		revisionMsg = fmt.Sprintf("db_%s", expected)
 	}
-	revisionCmd := exec.Command(python, "-m", "alembic", "--config", "alembic.ini",
+	revisionCmd := exec.Command(python, "-m", "alembic", "--config", alembicConfigPath(),
 		"revision", "--autogenerate", "-m", revisionMsg)
 	revisionCmd.Dir = "."
 	revisionCmd.Stdout = os.Stdout
@@ -234,7 +252,7 @@ func RunMigrations(dsn string) error {
 
 	// Step 3: Apply the generated migration
 	fmt.Printf("Applying new migration: %s\n", newFile)
-	upgradeCmd := exec.Command(python, "-m", "alembic", "--config", "alembic.ini", "upgrade", "head")
+	upgradeCmd := exec.Command(python, "-m", "alembic", "--config", alembicConfigPath(), "upgrade", "head")
 	upgradeCmd.Dir = "."
 	upgradeCmd.Stdout = os.Stdout
 	upgradeCmd.Stderr = os.Stderr

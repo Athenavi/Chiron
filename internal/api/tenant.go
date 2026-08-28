@@ -68,3 +68,14 @@ func GetTenantID(r *http.Request) string {
 	tenantID, _ := r.Context().Value(CtxKeyTenantID).(string)
 	return tenantID
 }
+
+// ResolveTenantID 返回当前请求的租户 ID：claims 优先，回退默认租户。
+// 用在不需要强制租户隔离的上下文（如市场门控），其中 GetTenantID 通过
+// TenantMiddleware 注入，但某些路径未经过该中间件。
+func ResolveTenantID(r *http.Request) string {
+	claims := auth.GetClaims(r.Context())
+	if claims != nil && claims.TenantID != "" {
+		return claims.TenantID
+	}
+	return DefaultTenantID
+}
