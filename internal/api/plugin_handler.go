@@ -501,10 +501,7 @@ func (h *PluginHandler) Test(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	defer func() {
-		_ = cmd.Process.Kill()
-		_ = cmd.Wait() // 等待子进程退出，防止僵尸进程
-	}()
+	defer func() { _ = cmd.Process.Kill() }()
 
 	req := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"chiron","version":"1.0"}}}`
 	if _, err := stdin.Write([]byte(req + "\n")); err != nil {
