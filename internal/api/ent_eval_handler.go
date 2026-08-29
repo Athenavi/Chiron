@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"encoding/json"
@@ -102,18 +102,20 @@ func (h *EntEvalHandler) CreateDataset(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *EntEvalHandler) GetDataset(w http.ResponseWriter, r *http.Request) {
+	claims := auth.GetClaims(r.Context())
+	tenantID := evalTenantID(claims)
 	id := r.PathValue("id")
 	if id == "" {
 		BadRequest(w, "id is required")
 		return
 	}
-	var name, description, tenantID string
+	var name, description string
 	var exampleCount int
 	var examples []byte
 	var createdAt, updatedAt time.Time
 	err := db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT id, tenant_id, name, description, examples, example_count, created_at, updated_at
-		 FROM ent_eval_datasets WHERE id = $1`, id).
+		 FROM ent_eval_datasets WHERE id = $1 AND tenant_id = $2`, id, tenantID).
 		Scan(&id, &tenantID, &name, &description, &examples, &exampleCount, &createdAt, &updatedAt)
 	if err != nil {
 		NotFound(w, "dataset not found")
@@ -129,12 +131,14 @@ func (h *EntEvalHandler) GetDataset(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *EntEvalHandler) DeleteDataset(w http.ResponseWriter, r *http.Request) {
+	claims := auth.GetClaims(r.Context())
+	tenantID := evalTenantID(claims)
 	id := r.PathValue("id")
 	if id == "" {
 		BadRequest(w, "id is required")
 		return
 	}
-	tag, err := db.GlobalDBManager.Exec(r.Context(), `DELETE FROM ent_eval_datasets WHERE id = $1`, id)
+	tag, err := db.GlobalDBManager.Exec(r.Context(), `DELETE FROM ent_eval_datasets WHERE id = $1 AND tenant_id = $2`, id, tenantID)
 	if err != nil {
 		InternalError(w, "failed to delete dataset")
 		return
@@ -183,17 +187,19 @@ func (h *EntEvalHandler) ListRuns(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *EntEvalHandler) GetRun(w http.ResponseWriter, r *http.Request) {
+	claims := auth.GetClaims(r.Context())
+	tenantID := evalTenantID(claims)
 	id := r.PathValue("id")
 	if id == "" {
 		BadRequest(w, "id is required")
 		return
 	}
-	var tenantID, datasetName, datasetID, status string
+	var datasetName, datasetID, status string
 	var results, summary []byte
 	var createdAt time.Time
 	err := db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT id, tenant_id, dataset_name, dataset_id, results, summary, status, created_at
-		 FROM ent_eval_runs WHERE id = $1`, id).
+		 FROM ent_eval_runs WHERE id = $1 AND tenant_id = $2`, id, tenantID).
 		Scan(&id, &tenantID, &datasetName, &datasetID, &results, &summary, &status, &createdAt)
 	if err != nil {
 		NotFound(w, "run not found")
@@ -209,12 +215,14 @@ func (h *EntEvalHandler) GetRun(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *EntEvalHandler) DeleteRun(w http.ResponseWriter, r *http.Request) {
+	claims := auth.GetClaims(r.Context())
+	tenantID := evalTenantID(claims)
 	id := r.PathValue("id")
 	if id == "" {
 		BadRequest(w, "id is required")
 		return
 	}
-	tag, err := db.GlobalDBManager.Exec(r.Context(), `DELETE FROM ent_eval_runs WHERE id = $1`, id)
+	tag, err := db.GlobalDBManager.Exec(r.Context(), `DELETE FROM ent_eval_runs WHERE id = $1 AND tenant_id = $2`, id, tenantID)
 	if err != nil {
 		InternalError(w, "failed to delete run")
 		return

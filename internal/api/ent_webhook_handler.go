@@ -1,16 +1,20 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/athenavi/chiron/internal/auth"
@@ -21,16 +25,32 @@ import (
 
 // EntWebhookHandler 提供企业 Webhook 注册 API 和事件投递能力。
 type EntWebhookHandler struct {
-	deliveryCh chan WebhookEvent
+	deliveryCh  chan WebhookEvent
+	secretKey   []byte // AES-256 key derived from APP_SECRET
 }
 
 // NewEntWebhookHandler 创建 Webhook handler，启动异步投递协程。
 func NewEntWebhookHandler() *EntWebhookHandler {
+	// P0-S4: 从 APP_SECRET 派生 webhook 加密密钥，避免 secret 明文存储
+	key := deriveWebhookKey()
 	h := &EntWebhookHandler{
 		deliveryCh: make(chan WebhookEvent, 1000),
+		secretKey:  key,
 	}
 	go h.deliveryLoop()
 	return h
+}
+
+// deriveWebhookKey 从 APP_SECRET 派生 32-byte AES-256 key。
+func deriveWebhookKey() []byte {
+	secret := os.Getenv("APP_SECRET")
+	length := 32
+	if len(secret) >= length {
+		return []byte(secret)[:length]
+	}
+	mac := hmac.New(sha256.New, []byte("chiron-webhook-encryption"))
+	mac.Write([]byte(secret))
+	return mac.Sum(nil)
 }
 
 // RegisterRoutes 挂载 Webhook 管理路由（authMW + RequireEntPerm("webhook:manage")）。
@@ -168,7 +188,7 @@ func (h *EntWebhookHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	encrypted, err := encryptWebhookSecret(body.Secret, "")
+	encrypted, err := encryptWebhookSecret(body.Secret, string(h.secretKey))
 	if err != nil {
 		InternalError(w, "secret encryption failed")
 		return
@@ -254,7 +274,7 @@ func (h *EntWebhookHandler) Update(w http.ResponseWriter, r *http.Request) {
 		idx++
 	}
 	if body.Secret != nil {
-		encrypted, err := encryptWebhookSecret(*body.Secret, "")
+		encrypted, err := encryptWebhookSecret(*body.Secret, string(h.secretKey))
 		if err != nil {
 			InternalError(w, "secret encryption failed")
 			return
@@ -359,7 +379,7 @@ func (h *EntWebhookHandler) deliver(evt WebhookEvent) {
 			continue
 		}
 		secret := wh["secret"].(string)
-		decrypted, _ := decryptWebhookSecret(secret, "")
+		decrypted, _ := decryptWebhookSecret(secret, string(h.secretKey))
 		h.postWebhook(ctx, evt, wh["url"].(string), decrypted, wh["id"].(string))
 	}
 }

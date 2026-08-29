@@ -480,7 +480,17 @@ func (h *PluginHandler) Test(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cmd := exec.CommandContext(ctx, plugin.Command, plugin.Args...)
-	cmd.Env = os.Environ()
+	// P0 安全：仅传递安全的环境变量到插件子进程，避免泄露宿主密钥
+	cmd.Env = []string{
+		"PATH=" + os.Getenv("PATH"),
+		"HOME=" + os.Getenv("HOME"),
+		"LANG=" + os.Getenv("LANG"),
+		"TERM=" + os.Getenv("TERM"),
+	}
+	// 如果 PATH 为空，设置合理默认值
+	if cmd.Env[0] == "PATH=" {
+		cmd.Env[0] = "PATH=/usr/local/bin:/usr/bin:/bin"
+	}
 	for k, v := range plugin.Env {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}
