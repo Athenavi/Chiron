@@ -210,6 +210,12 @@ const routes = [
         meta: { title: '模型策略管控' },
       },
       {
+        path: 'model-router',
+        name: 'AdminModelRouter',
+        component: () => import('../views/admin/ModelRouterView.vue'),
+        meta: { title: '模型路由管控' },
+      },
+      {
         path: 'market',
         name: 'AdminMarket',
         component: () => import('../views/admin/MarketView.vue'),

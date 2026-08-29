@@ -95,6 +95,7 @@ const menuGroups = computed(() => [
       { key: '/admin/oauth-providers', label: '三方登录与人机验证', icon: () => h(SafetyOutlined) },
       { key: '/admin/privacy', label: '隐私模式管控', icon: () => h(SafetyOutlined) },
       { key: '/admin/model-policy', label: '模型策略管控', icon: () => h(ControlOutlined) },
+      { key: '/admin/model-router', label: '模型路由管控', icon: () => h(ClusterOutlined) },
     ],
   },
   {

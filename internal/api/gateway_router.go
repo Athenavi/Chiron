@@ -433,6 +433,9 @@ func NewGatewayRouter(
 	// Enterprise model router（authMW + RequireEntPerm("model:route")）：租户模型路由配置
 	NewEntModelRouterHandler().RegisterRoutes(mux, authMW)
 
+	// Enterprise webhook（authMW + RequireEntPerm("webhook:manage")）：事件通知
+	NewEntWebhookHandler().RegisterRoutes(mux, authMW)
+
 	// Mode (auth + rate limited)
 	mux.Handle("GET /v1/mode", authMW(rlMW(http.HandlerFunc(modeHandler.GetMode))))
 	mux.Handle("POST /v1/mode", authMW(rlMW(http.HandlerFunc(modeHandler.SetMode))))

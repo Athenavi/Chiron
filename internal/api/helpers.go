@@ -1,6 +1,17 @@
 package api
 
-import "time"
+import (
+	"bytes"
+	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"io"
+	"net/http"
+	"time"
+
+	"github.com/google/uuid"
+)
 
 // P0性能优化：集中管理超时常量，避免散落各处的魔法数字
 const (
@@ -24,4 +35,36 @@ func intVal(m map[string]interface{}, key string, fallback int) int {
 		}
 	}
 	return fallback
+}
+
+// newUUID generates a new UUID string.
+func newUUID() string {
+	return uuid.New().String()
+}
+
+// signHMACSHA256 signs body with secret using HMAC-SHA256.
+func signHMACSHA256(body []byte, secret string) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(body)
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// bytesReader wraps []byte into io.Reader.
+func bytesReader(b []byte) io.Reader {
+	return bytes.NewReader(b)
+}
+
+// httpClient is the default HTTP client for outgoing webhook requests.
+var httpClient = &http.Client{
+	Timeout: 10 * time.Second,
+	Transport: &http.Transport{
+		MaxIdleConns:        100,
+		IdleConnTimeout:     90 * time.Second,
+		DisableCompression:  false,
+	},
+}
+
+// contextWithTimeout returns a context with timeout.
+func contextWithTimeout(d time.Duration) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), d)
 }
