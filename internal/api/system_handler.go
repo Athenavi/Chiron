@@ -90,6 +90,17 @@ func (h *SystemHandler) PrometheusMetrics(w http.ResponseWriter, r *http.Request
 		{"llm_errors", "Total LLM API errors"},
 		{"tool_calls", "Total tool executions"},
 		{"tool_errors", "Total tool execution errors"},
+		{"rate_limit_blocked", "Total rate-limited requests"},
+		{"rate_limit_errors", "Total rate limiter errors"},
+		{"quota_exceeded", "Total quota exceeded events"},
+		{"audit_log_writes", "Total audit log writes"},
+		{"audit_log_errors", "Total audit log errors"},
+		{"payment_attempts", "Total payment attempts"},
+		{"payment_successes", "Total successful payments"},
+		{"payment_failures", "Total failed payments"},
+		{"sso_login_attempts", "Total SSO login attempts"},
+		{"sso_login_successes", "Total successful SSO logins"},
+		{"sso_login_failures", "Total failed SSO logins"},
 	}
 	for _, c := range counters {
 		fmt.Fprintf(w, "# HELP chiron_%s %s\n# TYPE chiron_%s counter\nchiron_%s %v\n", c[0], c[1], c[0], c[0], s[c[0]])
@@ -97,7 +108,12 @@ func (h *SystemHandler) PrometheusMetrics(w http.ResponseWriter, r *http.Request
 	// gauge 类型指标
 	gauges := [][2]string{
 		{"requests_active", "Active HTTP requests"},
+		{"websocket_conns", "Active WebSocket connections"},
 		{"uptime_seconds", "Process uptime in seconds"},
+		{"go_goroutines", "Number of goroutines"},
+		{"go_memory_alloc_bytes", "Allocated heap memory in bytes"},
+		{"go_memory_sys_bytes", "Total OS memory in bytes"},
+		{"go_gc_runs", "Number of completed GC cycles"},
 	}
 	for _, g := range gauges {
 		fmt.Fprintf(w, "# HELP chiron_%s %s\n# TYPE chiron_%s gauge\nchiron_%s %v\n", g[0], g[1], g[0], g[0], s[g[0]])

@@ -77,13 +77,25 @@ var (
 
 // Metrics holds simple counters for monitoring.
 type Metrics struct {
-	RequestsTotal   atomic.Int64
-	RequestsActive  atomic.Int64
-	LLMCallsTotal   atomic.Int64
-	LLMErrorsTotal  atomic.Int64
-	ToolCallsTotal  atomic.Int64
-	ToolErrorsTotal atomic.Int64
-	StartTime       time.Time
+	RequestsTotal      atomic.Int64
+	RequestsActive     atomic.Int64
+	LLMCallsTotal      atomic.Int64
+	LLMErrorsTotal     atomic.Int64
+	ToolCallsTotal     atomic.Int64
+	ToolErrorsTotal    atomic.Int64
+	RateLimitBlocked   atomic.Int64
+	RateLimitErrors    atomic.Int64
+	QuotaExceeded      atomic.Int64
+	AuditLogWrites     atomic.Int64
+	AuditLogErrors     atomic.Int64
+	WebSocketConns     atomic.Int64
+	PaymentAttempts    atomic.Int64
+	PaymentSuccesses   atomic.Int64
+	PaymentFailures    atomic.Int64
+	SSOLoginAttempts   atomic.Int64
+	SSOLoginSuccesses  atomic.Int64
+	SSOLoginFailures   atomic.Int64
+	StartTime          time.Time
 }
 
 var Global = &Metrics{StartTime: time.Now()}
@@ -121,6 +133,58 @@ func IncToolError() {
 	Global.ToolErrorsTotal.Add(1)
 }
 
+func IncRateLimitBlocked() {
+	Global.RateLimitBlocked.Add(1)
+}
+
+func IncRateLimitError() {
+	Global.RateLimitErrors.Add(1)
+}
+
+func IncQuotaExceeded() {
+	Global.QuotaExceeded.Add(1)
+}
+
+func IncAuditLogWrite() {
+	Global.AuditLogWrites.Add(1)
+}
+
+func IncAuditLogError() {
+	Global.AuditLogErrors.Add(1)
+}
+
+func IncWebSocketConn() {
+	Global.WebSocketConns.Add(1)
+}
+
+func DecWebSocketConn() {
+	Global.WebSocketConns.Add(-1)
+}
+
+func IncPaymentAttempt() {
+	Global.PaymentAttempts.Add(1)
+}
+
+func IncPaymentSuccess() {
+	Global.PaymentSuccesses.Add(1)
+}
+
+func IncPaymentFailure() {
+	Global.PaymentFailures.Add(1)
+}
+
+func IncSSOLoginAttempt() {
+	Global.SSOLoginAttempts.Add(1)
+}
+
+func IncSSOLoginSuccess() {
+	Global.SSOLoginSuccesses.Add(1)
+}
+
+func IncSSOLoginFailure() {
+	Global.SSOLoginFailures.Add(1)
+}
+
 var extraStatsMu sync.RWMutex
 var extraStatsFuncs []func() map[string]interface{}
 
@@ -133,14 +197,26 @@ func RegisterExtraStats(fn func() map[string]interface{}) {
 
 func Snapshot() map[string]interface{} {
 	snap := map[string]interface{}{
-		"requests_total":  Global.RequestsTotal.Load(),
-		"requests_active": Global.RequestsActive.Load(),
-		"llm_calls":       Global.LLMCallsTotal.Load(),
-		"llm_errors":      Global.LLMErrorsTotal.Load(),
-		"tool_calls":      Global.ToolCallsTotal.Load(),
-		"tool_errors":     Global.ToolErrorsTotal.Load(),
-		"uptime_seconds":  time.Since(Global.StartTime).Seconds(),
-		"started_at":      Global.StartTime.Format(time.RFC3339),
+		"requests_total":      Global.RequestsTotal.Load(),
+		"requests_active":     Global.RequestsActive.Load(),
+		"llm_calls":           Global.LLMCallsTotal.Load(),
+		"llm_errors":          Global.LLMErrorsTotal.Load(),
+		"tool_calls":          Global.ToolCallsTotal.Load(),
+		"tool_errors":         Global.ToolErrorsTotal.Load(),
+		"rate_limit_blocked":  Global.RateLimitBlocked.Load(),
+		"rate_limit_errors":   Global.RateLimitErrors.Load(),
+		"quota_exceeded":      Global.QuotaExceeded.Load(),
+		"audit_log_writes":    Global.AuditLogWrites.Load(),
+		"audit_log_errors":    Global.AuditLogErrors.Load(),
+		"websocket_conns":     Global.WebSocketConns.Load(),
+		"payment_attempts":    Global.PaymentAttempts.Load(),
+		"payment_successes":   Global.PaymentSuccesses.Load(),
+		"payment_failures":    Global.PaymentFailures.Load(),
+		"sso_login_attempts":  Global.SSOLoginAttempts.Load(),
+		"sso_login_successes": Global.SSOLoginSuccesses.Load(),
+		"sso_login_failures":  Global.SSOLoginFailures.Load(),
+		"uptime_seconds":      time.Since(Global.StartTime).Seconds(),
+		"started_at":          Global.StartTime.Format(time.RFC3339),
 	}
 	
 	// Add Go runtime metrics

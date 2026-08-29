@@ -170,7 +170,9 @@ func NewSetupRouter(cfg *config.Config) http.Handler {
 }
 
 // NewGatewayRouter creates a pure gateway router that proxies all business logic to Python.
+// lifecycleCtx 用于控制内部后台协程（tenantResMgr / modeStore cleanup）的优雅关闭。
 func NewGatewayRouter(
+	lifecycleCtx context.Context,
 	cfg *config.Config,
 	pythonClient *engine.PythonClient,
 	eventHub *broadcast.Hub,
@@ -265,7 +267,7 @@ func NewGatewayRouter(
 
 	// Tenant resource manager — per-tenant concurrency & storage quotas
 	tenantResMgr := NewTenantResourceManager(cfg.AgentMaxConcurrency)
-	tenantResMgr.StartCleanup(context.Background(), 30*time.Minute)
+	tenantResMgr.StartCleanup(lifecycleCtx, 30*time.Minute)
 
 	// Submit handler (proxies to Python)
 	submitHandler := NewSubmitHandler(pythonClient, sessionMgr, eventHub, billingMgr)
@@ -321,6 +323,7 @@ func NewGatewayRouter(
 
 	// Mode + Permission (no Python dependency)
 	modeStore := NewModeStore()
+	modeStore.StartCleanup(lifecycleCtx)
 	permMgr := NewPermissionManager()
 	modeHandler := NewModeHandler(modeStore, permMgr, eventHub)
 
@@ -465,6 +468,9 @@ func registerPublicEndpoints(
 	mux.Handle("GET /ready", rlMW(http.HandlerFunc(handleReadiness)))
 	// 引擎配置下发（X-Internal-Token 保护，Python 引擎启动拉取）
 	mux.Handle("GET /v1/internal/engine-config", rlMW(internalTokenMW(cfg, EngineConfig(cfg))))
+
+		// 模型路由配置同步（X-Internal-Token 保护，Python 引擎启动时拉取）
+	mux.Handle("GET /v1/internal/model-routes", rlMW(internalTokenMW(cfg, http.HandlerFunc(NewEntModelRouterHandler().SyncRoutes))))
 
 	// Python 引擎数据库/Redis 统一访问端点（X-Internal-Token 保护）
 	mux.Handle("POST /v1/internal/db/query", rlMW(internalTokenMW(cfg, http.HandlerFunc(systemHandler.DBQuery))))

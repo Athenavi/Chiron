@@ -256,7 +256,7 @@ func main() {
 			slog.Info("database connection pool auto-tuner started")
 		}
 
-		router = api.NewGatewayRouter(cfg, pythonClient, eventHub, sessionMgr, atomicStore, atomicRedis, rpaHub)
+		router = api.NewGatewayRouter(lifecycleCtx, cfg, pythonClient, eventHub, sessionMgr, atomicStore, atomicRedis, rpaHub)
 	}
 
 	// ── HTTP Server ──

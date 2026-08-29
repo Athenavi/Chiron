@@ -192,6 +192,7 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 			"bytes", rw.bytes,
 			"duration", time.Since(start).String(),
 			"ip", r.RemoteAddr,
+			"trace_id", GetTraceID(r.Context()),
 		)
 
 		// Write audit log for non-GET requests (P0-性能: 异步写入，不阻塞响应返回)
@@ -212,16 +213,32 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 
 // TracingMiddleware creates a span for each HTTP request and attaches it to the context.
 // Must be placed early in the middleware chain so downstream handlers can use monitor.GetSpan.
+// Also injects a trace_id into context for structured log correlation.
 func TracingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx, span := monitor.StartSpan(r.Context(), r.Method+" "+r.URL.Path, "server")
 		span.SetTag("http.method", r.Method)
 		span.SetTag("http.path", r.URL.Path)
 		span.SetTag("http.remote_addr", r.RemoteAddr)
+		// Inject trace_id into context for structured log correlation
+		ctx = context.WithValue(ctx, traceIDKey, span.TraceID.String())
 		defer span.End()
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// traceIDKey is a context key type for trace_id to avoid collisions.
+type traceIDKeyType struct{}
+
+var traceIDKey = traceIDKeyType{}
+
+// GetTraceID extracts the trace_id from context, if present.
+func GetTraceID(ctx context.Context) string {
+	if v, ok := ctx.Value(traceIDKey).(string); ok {
+		return v
+	}
+	return ""
 }
 
 func RecoverMiddleware(next http.Handler) http.Handler {
