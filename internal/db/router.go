@@ -136,18 +136,6 @@ func (r *DatabaseRouter) Read() *pgxpool.Pool {
 	return r.readPools[idx]
 }
 
-// ReadPreferred returns a replica pool using round-robin load balancing.
-// Falls back to primary if no replicas are available.
-// Relies on pgx pool's built-in health check instead of per-request Ping.
-func (r *DatabaseRouter) ReadPreferred() *pgxpool.Pool {
-	if len(r.readPools) == 0 {
-		return r.writePool
-	}
-
-	idx := r.next.Add(1) % uint64(len(r.readPools))
-	return r.readPools[idx]
-}
-
 // Close closes all database pools.
 func (r *DatabaseRouter) Close() {
 	if r.writePool != nil {

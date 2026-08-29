@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -114,13 +115,12 @@ type Config struct {
 	DataDir string
 }
 
-func Load() *Config {
+func Load() (*Config, error) {
 	cfg := loadConfig()
 
 	// APP_SECRET is required（部署级主密钥）。
 	if !cfg.ValidateAppSecret() {
-		os.Stderr.WriteString("FATAL: APP_SECRET environment variable must be set to a strong, unique value (32+ chars)\n")
-		os.Exit(1)
+		return nil, errors.New("APP_SECRET environment variable must be set to a strong, unique value (32+ chars)")
 	}
 
 	if cfg.JWTSecret == "" {
@@ -132,11 +132,10 @@ func Load() *Config {
 
 	// JWT_SECRET is required (derived or explicit).
 	if !ValidateJWTSecret(cfg.JWTSecret) {
-		os.Stderr.WriteString("FATAL: JWT_SECRET (or its source APP_SECRET) must be set to a strong, unique value\n")
-		os.Exit(1)
+		return nil, errors.New("JWT_SECRET (or its source APP_SECRET) must be set to a strong, unique value")
 	}
 
-	return cfg
+	return cfg, nil
 }
 
 func LoadAllowUnconfigured() *Config {

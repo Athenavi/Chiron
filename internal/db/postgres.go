@@ -84,7 +84,7 @@ func ReadPool() *pgxpool.Pool {
 	p := Pool
 	PoolMu.RUnlock()
 	if Router != nil {
-		return Router.ReadPreferred()
+		return Router.Read()
 	}
 	return p
 }

@@ -2,8 +2,6 @@ package db
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // ── AuditSink：Redis Stream → PG audit_logs 批量落库 ─────────────────────
@@ -191,10 +191,11 @@ func auditResourceType(resource string) string {
 	}
 }
 
-// clipVarchar 截断到 varchar(n) 上限，避免落库超长报错。
+// clipVarchar 截断到 varchar(n) 上限（按字符截断，安全处理 UTF-8）。
 func clipVarchar(s string, n int) string {
-	if len(s) > n {
-		return s[:n]
+	runes := []rune(s)
+	if len(runes) > n {
+		return string(runes[:n])
 	}
 	return s
 }
@@ -209,21 +210,5 @@ func nilableIP(ip string) any {
 
 // generateUUID 生成 UUID v4 字符串（36字符，含连字符）。
 func generateUUID() string {
-	uuid := make([]byte, 16)
-	if _, err := rand.Read(uuid); err != nil {
-		// 极端回退：使用随机字节填充
-		for i := range uuid {
-			uuid[i] = byte(i)
-		}
-	}
-	// 设置版本 4 和变体位
-	uuid[6] = (uuid[6] & 0x0f) | 0x40 // version 4
-	uuid[8] = (uuid[8] & 0x3f) | 0x80 // variant RFC 4122
-
-	return fmt.Sprintf("%s-%s-%s-%s-%s",
-		hex.EncodeToString(uuid[0:4]),
-		hex.EncodeToString(uuid[4:6]),
-		hex.EncodeToString(uuid[6:8]),
-		hex.EncodeToString(uuid[8:10]),
-		hex.EncodeToString(uuid[10:16]))
+	return uuid.New().String()
 }
