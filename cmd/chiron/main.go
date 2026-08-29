@@ -33,6 +33,10 @@ func main() {
 
 	slog.Info("starting chiron gateway", "version", "0.1.260825.01", "port", cfg.Port)
 
+	// lifecycleCtx 受 OS signal 控制，用于所有后台协程优雅关闭。
+	lifecycleCtx, lifecycleStop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer lifecycleStop()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	// 60s 初始超时：DB 连接 + 迁移可能耗时较长，15s 不足
 	defer cancel()

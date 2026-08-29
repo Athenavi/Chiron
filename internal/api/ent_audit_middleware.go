@@ -36,23 +36,47 @@ type auditRecord struct {
 }
 
 // auditWorker 串行消费审计写入 channel，避免 goroutine 堆积。
-func auditWorker() {
-	for rec := range auditChan {
-		func() {
-			defer func() {
-				if r := recover(); r != nil {
-					slog.Error("audit middleware: record panic", "panic", r)
+// 传入 lifecycleCtx 以支持优雅关闭（P0 修复：后台协程应可被 shutdown 信号终止）。
+func auditWorker(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			// 处理剩余队列中的审计条目
+			for {
+				select {
+				case rec := <-auditChan:
+					writeAuditRecord(rec)
+				default:
+					return
 				}
-			}()
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			defer cancel()
-			db.AuditLog(ctx, rec.userID, rec.tenantID, rec.action, rec.resource, rec.detail, rec.ip, nil)
-		}()
+			}
+		case rec := <-auditChan:
+			writeAuditRecord(rec)
+		}
 	}
 }
 
+func writeAuditRecord(rec auditRecord) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("audit middleware: record panic", "panic", r)
+		}
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	db.AuditLog(ctx, rec.userID, rec.tenantID, rec.action, rec.resource, rec.detail, rec.ip, nil)
+}
+
 func init() {
-	go auditWorker()
+	// P0: init 中启动默认 worker（context.Background 不影响 shutdown，因为
+	// main.go 可调用 StartAuditWorker(lifecycleCtx) 替换为可取消的 worker）
+	go auditWorker(context.Background())
+}
+
+// StartAuditWorker 启动一个可取消的审计 worker，替换 init 启动的默认 worker。
+// 由 main.go 传入 lifecycleCtx 以支持优雅关闭。
+func StartAuditWorker(ctx context.Context) {
+	go auditWorker(ctx)
 }
 
 // auditMWRecord 审计写入函数，抽成变量便于测试替换（默认 channel 异步 db.AuditLog）。
