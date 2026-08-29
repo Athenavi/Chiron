@@ -28,8 +28,8 @@ clean:
 
 dev:
 	@echo "starting dev server..."
-	@echo "  POSTGRES_DSN=postgres://chiron:chiron@localhost:5432/chiron?sslmode=disable"
-	@echo "  REDIS_ADDR=localhost:6379"
+	@echo "  Ensure .env file exists with POSTGRES_DSN and REDIS_ADDR configured"
+	@echo "  See .env.example for reference"
 	$(MAKE) run
 
 docker-build:
