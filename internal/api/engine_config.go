@@ -1,6 +1,7 @@
 package api
 
 import (
+	"crypto/subtle"
 	"log/slog"
 	"net/http"
 
@@ -11,9 +12,11 @@ import (
 
 // internalTokenMW 校验 X-Internal-Token，供 Go 网关内部端点（引擎配置下发）使用。
 // 缺失/不匹配时返回 401，绝不透出解密后的敏感配置。
+// P0-3: 使用常量时间比较防止时序攻击
 func internalTokenMW(cfg *config.Config, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if cfg.InternalToken == "" || r.Header.Get("X-Internal-Token") != cfg.InternalToken {
+		token := r.Header.Get("X-Internal-Token")
+		if cfg.InternalToken == "" || token == "" || subtle.ConstantTimeCompare([]byte(cfg.InternalToken), []byte(token)) != 1 {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}

@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"encoding/json"
@@ -17,14 +17,30 @@ import (
 
 const tokenCookieName = "chiron_token"
 
-// DefaultTenantID 是默认租户 ID（用于单租户模式），单一来源见 internal/db/seed.go。
-const DefaultTenantID = db.DefaultTenantID
+// P0-4: Email 鑴辨晱鍑芥暟锛屼繚鐣欏墠3瀛楃+@+鍩熷悕棣栧瓧绗︼紝鍏朵綑鐢?**
+func maskEmail(email string) string {
+	at := strings.Index(email, "@")
+	if at < 1 {
+		return "***"
+	}
+	local := email[:at]
+	domain := email[at+1:]
+	dot := strings.Index(domain, ".")
+	if dot < 1 {
+		return "***@" + domain
+	}
+	if len(local) <= 3 {
+		return local[:1] + "***@" + domain[:1] + "***" + domain[dot:]
+	}
+	return local[:3] + "***@" + domain[:1] + "***" + domain[dot:]
+}
+
+// DefaultTenantID 鏄粯璁ょ鎴?ID锛堢敤浜庡崟绉熸埛妯″紡锛夛紝鍗曚竴鏉ユ簮瑙?internal/db/seed.go銆?const DefaultTenantID = db.DefaultTenantID
 
 type AuthHandler struct {
 	auth    *auth.Authenticator
 	cfg     *config.Config
-	captcha *CaptchaHandler // 可选：启用后人机验证 + 失败升级（nil = 跳过，单测用）
-}
+	captcha *CaptchaHandler // 鍙€夛細鍚敤鍚庝汉鏈洪獙璇?+ 澶辫触鍗囩骇锛坣il = 璺宠繃锛屽崟娴嬬敤锛?}
 
 func NewAuthHandler(cfg *config.Config) *AuthHandler {
 	return &AuthHandler{
@@ -33,8 +49,7 @@ func NewAuthHandler(cfg *config.Config) *AuthHandler {
 	}
 }
 
-// SetCaptchaHandler 注入人机验证栅栏（网关装配时调用）。
-func (h *AuthHandler) SetCaptchaHandler(c *CaptchaHandler) {
+// SetCaptchaHandler 娉ㄥ叆浜烘満楠岃瘉鏍呮爮锛堢綉鍏宠閰嶆椂璋冪敤锛夈€?func (h *AuthHandler) SetCaptchaHandler(c *CaptchaHandler) {
 	h.captcha = c
 }
 
@@ -59,8 +74,7 @@ func SetTokenCookie(w http.ResponseWriter, token string, maxAge int, secure bool
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   secure, // 生产 HTTPS（COOKIE_SECURE=true）下防止明文传输（S 安全修复）
-		SameSite: http.SameSiteLaxMode,
+		Secure:   secure, // 鐢熶骇 HTTPS锛圕OOKIE_SECURE=true锛変笅闃叉鏄庢枃浼犺緭锛圫 瀹夊叏淇锛?		SameSite: http.SameSiteLaxMode,
 		MaxAge:   maxAge,
 	})
 }
@@ -96,7 +110,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 人机验证栅栏：启用/失败升级时强制校验；达到硬上限直接 429
+	// 浜烘満楠岃瘉鏍呮爮锛氬惎鐢?澶辫触鍗囩骇鏃跺己鍒舵牎楠岋紱杈惧埌纭笂闄愮洿鎺?429
 	if h.captcha != nil {
 		if err := h.captcha.Enforce(w, r, &auth.CaptchaToken{
 			Token:   req.CaptchaToken,
@@ -106,10 +120,10 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// No dev bypass — always validate against DB
+	// No dev bypass 鈥?always validate against DB
 	ctx := r.Context()
 
-	// 设置租户上下文以绕过 RLS —— 必须在事务中才能让 SET LOCAL 持续生效
+	// 璁剧疆绉熸埛涓婁笅鏂囦互缁曡繃 RLS 鈥斺€?蹇呴』鍦ㄤ簨鍔′腑鎵嶈兘璁?SET LOCAL 鎸佺画鐢熸晥
 	tx, err := db.GlobalDBManager.Begin(ctx)
 	if err != nil {
 		slog.Error("begin tx for tenant context", "error", err)
@@ -133,7 +147,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	).Scan(&user.ID, &user.Email, &user.Name, &user.Role, &tenantID, &passwordHash)
 	if err != nil {
 		slog.Warn("login failed", "email", req.Email, "error", err)
-		db.AuditLog(r.Context(), "", DefaultTenantID, "login_failed", "/v1/auth/login", "email="+req.Email, r.RemoteAddr, nil)
+		db.AuditLog(r.Context(), "", DefaultTenantID, "login_failed", "/v1/auth/login", "email="+maskEmail(req.Email), r.RemoteAddr, nil)
 		if h.captcha != nil {
 			h.captcha.RecordFailure(r.Context(), r)
 		}
@@ -146,7 +160,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		if auditTenantID == "" {
 			auditTenantID = ""
 		}
-		db.AuditLog(r.Context(), "", auditTenantID, "login_failed", "/v1/auth/login", "email="+req.Email, r.RemoteAddr, nil)
+		db.AuditLog(r.Context(), "", auditTenantID, "login_failed", "/v1/auth/login", "email="+maskEmail(req.Email), r.RemoteAddr, nil)
 		if h.captcha != nil {
 			h.captcha.RecordFailure(r.Context(), r)
 		}
@@ -158,11 +172,9 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		h.captcha.ClearFailures(r.Context(), r)
 	}
 
-	// 多租户隔离：将用户记录的 tenant_id 写入 JWT，后续所有 SQL 用 claims.TenantID
-	// P1-5: tenant_id 为空直接拒绝登录，不再回退 DefaultTenantID。
-	// 历史数据中 tenant_id=NULL 的 user 走 DefaultTenantID 会落到默认租户，
-	// 造成跨租户数据访问；多租户部署必须强制每个用户绑定租户。
-	if tenantID == "" {
+	// 澶氱鎴烽殧绂伙細灏嗙敤鎴疯褰曠殑 tenant_id 鍐欏叆 JWT锛屽悗缁墍鏈?SQL 鐢?claims.TenantID
+	// P1-5: tenant_id 涓虹┖鐩存帴鎷掔粷鐧诲綍锛屼笉鍐嶅洖閫€ DefaultTenantID銆?	// 鍘嗗彶鏁版嵁涓?tenant_id=NULL 鐨?user 璧?DefaultTenantID 浼氳惤鍒伴粯璁ょ鎴凤紝
+	// 閫犳垚璺ㄧ鎴锋暟鎹闂紱澶氱鎴烽儴缃插繀椤诲己鍒舵瘡涓敤鎴风粦瀹氱鎴枫€?	if tenantID == "" {
 		slog.Warn("login rejected: user has null tenant_id", "user_id", user.ID)
 		Unauthorized(w, "user has no tenant binding; contact admin")
 		return
@@ -174,7 +186,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	SetTokenCookie(w, token, int(h.cfg.JWTExpiration.Seconds()), h.cfg.CookieSecure)
-	db.AuditLog(r.Context(), user.ID, tenantID, "login_success", "/v1/auth/login", "email="+req.Email, r.RemoteAddr, nil)
+	db.AuditLog(r.Context(), user.ID, tenantID, "login_success", "/v1/auth/login", "email="+maskEmail(req.Email), r.RemoteAddr, nil)
 	OK(w, map[string]interface{}{
 		"token": token,
 		"user":  user,
@@ -201,8 +213,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 注册接口防刷：人机验证栅栏
-	if h.captcha != nil {
+	// 娉ㄥ唽鎺ュ彛闃插埛锛氫汉鏈洪獙璇佹爡鏍?	if h.captcha != nil {
 		if err := h.captcha.Enforce(w, r, &auth.CaptchaToken{
 			Token:   req.CaptchaToken,
 			Randstr: req.CaptchaRandstr,
@@ -230,7 +241,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	// 设置租户上下文以绕过 RLS —— 必须在事务中才能让 SET LOCAL 持续生效
+	// 璁剧疆绉熸埛涓婁笅鏂囦互缁曡繃 RLS 鈥斺€?蹇呴』鍦ㄤ簨鍔′腑鎵嶈兘璁?SET LOCAL 鎸佺画鐢熸晥
 	tx, err := db.GlobalDBManager.Begin(ctx)
 	if err != nil {
 		slog.Error("begin tx for tenant context", "error", err)
@@ -266,7 +277,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 使用 PostgreSQL 的 gen_random_uuid() 生成 UUID
+	// 浣跨敤 PostgreSQL 鐨?gen_random_uuid() 鐢熸垚 UUID
 	var userID string
 	err = tx.QueryRow(ctx,
 		`INSERT INTO users (id, tenant_id, email, name, password_hash, role, created_at, updated_at)
@@ -279,7 +290,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 提交事务
+	// 鎻愪氦浜嬪姟
 	if err := tx.Commit(ctx); err != nil {
 		slog.Error("commit tx", "error", err)
 		InternalError(w, "registration failed")
@@ -300,17 +311,16 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
-	// ── JWT 黑名单：将该 token 加入 Redis 黑名单，TTL 等于剩余有效期 ──
+	// 鈹€鈹€ JWT 榛戝悕鍗曪細灏嗚 token 鍔犲叆 Redis 榛戝悕鍗曪紝TTL 绛変簬鍓╀綑鏈夋晥鏈?鈹€鈹€
 	if claims := auth.GetClaims(r.Context()); claims != nil && claims.ID != "" && db.Redis != nil {
 		remaining := time.Until(claims.ExpiresAt.Time)
 		if remaining > 0 {
 			db.Redis.Set(r.Context(), "jwt:blacklist:"+claims.ID, "1", remaining)
-			// P0-1: 跨实例同步黑名单
+			// P0-1: 璺ㄥ疄渚嬪悓姝ラ粦鍚嶅崟
 			broadcastBlacklistSync(claims.ID)
 		}
 	}
-	// 同步本地正缓存，确保本实例后续请求立即拒绝该 token（P1 优化）
-	if claims := auth.GetClaims(r.Context()); claims != nil {
+	// 鍚屾鏈湴姝ｇ紦瀛橈紝纭繚鏈疄渚嬪悗缁姹傜珛鍗虫嫆缁濊 token锛圥1 浼樺寲锛?	if claims := auth.GetClaims(r.Context()); claims != nil {
 		markJWTBlacklisted(claims.ID)
 	}
 	ClearTokenCookie(w, h.cfg.CookieSecure)
@@ -349,7 +359,7 @@ func (h *AuthHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Email    string                 `json:"email"`
 		Name     string                 `json:"name"`
-		Settings map[string]interface{} `json:"settings"` // 自定义换肤等用户设置（局部合并）
+		Settings map[string]interface{} `json:"settings"` // 鑷畾涔夋崲鑲ょ瓑鐢ㄦ埛璁剧疆锛堝眬閮ㄥ悎骞讹級
 	}
 	if err := DecodeJSON(w, r, &body); err != nil {
 		BadRequest(w, ErrInvalidReq)
@@ -379,8 +389,7 @@ func (h *AuthHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 			InternalError(w, "invalid settings")
 			return
 		}
-		// 局部合并：settings = settings || $n（jsonb 合并保留未提及键）
-		setClauses += fmt.Sprintf("settings = COALESCE(settings::jsonb, '{}'::jsonb) || $%d::jsonb, ", argIdx)
+		// 灞€閮ㄥ悎骞讹細settings = settings || $n锛坖sonb 鍚堝苟淇濈暀鏈彁鍙婇敭锛?		setClauses += fmt.Sprintf("settings = COALESCE(settings::jsonb, '{}'::jsonb) || $%d::jsonb, ", argIdx)
 		args = append(args, string(settingsJSON))
 		argIdx++
 	}
@@ -401,11 +410,7 @@ type RefreshRequest struct {
 	Token string `json:"token"`
 }
 
-// Session GET /v1/auth/session（公开，凭 httpOnly cookie）
-// SSO 回调只设置 JWT cookie；前端登录态基于 localStorage Bearer token。
-// 本端点把 cookie 会话引导为与 login 相同 shape 的 {token, user} 响应，
-// 供 SSO 登录回跳后前端建立本地会话。
-func (h *AuthHandler) Session(w http.ResponseWriter, r *http.Request) {
+// Session GET /v1/auth/session锛堝叕寮€锛屽嚟 httpOnly cookie锛?// SSO 鍥炶皟鍙缃?JWT cookie锛涘墠绔櫥褰曟€佸熀浜?localStorage Bearer token銆?// 鏈鐐规妸 cookie 浼氳瘽寮曞涓轰笌 login 鐩稿悓 shape 鐨?{token, user} 鍝嶅簲锛?// 渚?SSO 鐧诲綍鍥炶烦鍚庡墠绔缓绔嬫湰鍦颁細璇濄€?func (h *AuthHandler) Session(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie(tokenCookieName)
 	if err != nil || cookie.Value == "" {
 		Unauthorized(w, ErrAuthRequired)
@@ -453,8 +458,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1) 校验旧 token 未被加入黑名单（已登出/已撤销）
-	oldClaims, err := h.auth.ValidateToken(cookie.Value)
+	// 1) 鏍￠獙鏃?token 鏈鍔犲叆榛戝悕鍗曪紙宸茬櫥鍑?宸叉挙閿€锛?	oldClaims, err := h.auth.ValidateToken(cookie.Value)
 	if err != nil {
 		Unauthorized(w, "session expired")
 		return
@@ -466,8 +470,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 2) 校验用户仍然存在（防止已删除用户刷 token）
-	var userExists bool
+	// 2) 鏍￠獙鐢ㄦ埛浠嶇劧瀛樺湪锛堥槻姝㈠凡鍒犻櫎鐢ㄦ埛鍒?token锛?	var userExists bool
 	err = db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)`, oldClaims.UserID).Scan(&userExists)
 	if err != nil || !userExists {

@@ -430,13 +430,16 @@ func (h *AdminHandler) RestoreDatabaseBackup(w http.ResponseWriter, r *http.Requ
 		NotFound(w, "backup not found")
 		return
 	}
-	data, err := os.ReadFile(target)
-	if err != nil {
-		InternalError(w, "read backup failed")
+	dsn := extractDSN()
+	if dsn == "" {
+		InternalError(w, "POSTGRES_DSN not configured")
 		return
 	}
-	if _, err := db.GlobalDBManager.Exec(r.Context(), string(data)); err != nil {
-		logAndRespond(w, err, http.StatusInternalServerError, "restore failed")
+	cmd := exec.CommandContext(r.Context(), "psql", "--dbname", dsn, "-f", target)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		slog.Error("restore failed", "error", err, "output", string(output))
+		InternalError(w, "restore failed: "+string(output))
 		return
 	}
 	OK(w, map[string]interface{}{"status": "restored", "backup": name})
@@ -449,6 +452,7 @@ func (h *AdminHandler) DatabaseStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 var selectOnlyRe = regexp.MustCompile(`(?i)^\s*select\b`)
+var dangerousQueryRe = regexp.MustCompile(`(?i)\b(pg_read_file|lo_import|lo_export|lo_unlink|copy\s|pg_write_file|pg_logdir_ls)\b`)
 
 func (h *AdminHandler) DatabaseQuery(w http.ResponseWriter, r *http.Request) {
 	var body struct {
@@ -462,7 +466,7 @@ func (h *AdminHandler) DatabaseQuery(w http.ResponseWriter, r *http.Request) {
 		BadRequest(w, "only SELECT queries are allowed")
 		return
 	}
-	if strings.Contains(strings.ToLower(body.Query), "pg_read_file") || strings.Contains(strings.ToLower(body.Query), "lo_") {
+	if dangerousQueryRe.MatchString(body.Query) {
 		BadRequest(w, "query not allowed")
 		return
 	}
