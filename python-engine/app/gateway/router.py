@@ -119,7 +119,7 @@ class GatewayRouter:
                 yield cached
                 return
 
-        provider = await self._select(model, provider_hint)
+        provider = await self._select(model, provider_hint, tenant_id=tenant_id)
         if not provider:
             yield ChatResponse(
                 content="",
@@ -245,7 +245,7 @@ class GatewayRouter:
                 logger.info("Cache hit for model=%s", model)
                 return cached
 
-        provider = await self._select(model, provider_hint)
+        provider = await self._select(model, provider_hint, tenant_id=tenant_id)
         if not provider:
             return ChatResponse(
                 content="",

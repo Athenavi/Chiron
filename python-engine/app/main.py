@@ -215,7 +215,16 @@ async def lifespan(app: FastAPI):
         providers=providers,
         cache=cache,
         budget=budget,
+        gateway_url=settings.gateway_internal_url,
+        internal_token=settings.internal_token,
     )
+    # 同步租户模型路由配置（不阻断启动）
+    try:
+        routes_count = await _gateway.sync_routes()
+        if routes_count > 0:
+            logger.info("Tenant model routes synced: %d routes", routes_count)
+    except Exception as e:
+        logger.warning("Model route sync failed (non-blocking): %s", e)
     logger.info("LLM Gateway: %s providers", ", ".join(providers.keys()) or "none")
 
     # ── 3.4. 工具/工作流 gateway 注入（六大互通：对话/agent 可调用工作流） ──
