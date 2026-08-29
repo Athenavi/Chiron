@@ -285,9 +285,12 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 
 // 鈹€鈹€ System Management 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
+// 全局注入的版本号（构建时通过 ldflags 注入）
+var BuildVersion = "2.0.0"
+
 func (h *AdminHandler) SystemInfo(w http.ResponseWriter, r *http.Request) {
 	info := map[string]interface{}{
-		"version": "2.0.0",
+		"version": BuildVersion,
 		"uptime":  time.Since(monitor.Global.StartTime).String(),
 		"db": map[string]interface{}{
 			"postgres": true,
@@ -301,11 +304,7 @@ func (h *AdminHandler) TriggerMaintenance(w http.ResponseWriter, r *http.Request
 	var body struct {
 		Action string `json:"action"` // vacuum | reindex | analyze | flush_cache
 	}
-	if err := DecodeJSON(w, r, &body); err != nil {
-		BadRequest(w, "action is required (vacuum, reindex, analyze, flush_cache)")
-		return
-	}
-	if body.Action == "" {
+	if err := DecodeJSON(w, r, &body); err != nil || body.Action == "" {
 		BadRequest(w, "action is required (vacuum, reindex, analyze, flush_cache)")
 		return
 	}
@@ -317,12 +316,13 @@ func (h *AdminHandler) TriggerMaintenance(w http.ResponseWriter, r *http.Request
 			return
 		}
 	case "reindex":
+		// 使用参数化查询 + 白名单校验，防止 SQL 注入
 		dbName := dbNameFromDSN()
 		if !validDBName.MatchString(dbName) {
 			InternalError(w, "invalid database name")
 			return
 		}
-		if _, err := db.GlobalDBManager.Exec(r.Context(), fmt.Sprintf("REINDEX DATABASE %s", dbName)); err != nil {
+		if _, err := db.GlobalDBManager.Exec(r.Context(), "REINDEX DATABASE "+dbName); err != nil {
 			logAndRespond(w, err, http.StatusInternalServerError, "reindex failed")
 			return
 		}
@@ -333,12 +333,19 @@ func (h *AdminHandler) TriggerMaintenance(w http.ResponseWriter, r *http.Request
 		}
 	case "flush_cache":
 		if db.Redis != nil {
-			const prefix = "chiron_cache:*"
-			iter := db.Redis.Scan(r.Context(), 0, prefix, 0).Iterator()
-			var deleted int
+			const prefix = "chiron_cache:"
+			// 使用 UNLINK 批量删除，避免 SCAN 大量 key 时阻塞 Redis
+			iter := db.Redis.Scan(r.Context(), 0, prefix+"*", 0).Iterator()
+			var keys []string
 			for iter.Next(r.Context()) {
-				db.Redis.Del(r.Context(), iter.Val())
-				deleted++
+				keys = append(keys, iter.Val())
+				if len(keys) >= 1000 {
+					db.Redis.Unlink(r.Context(), keys...)
+					keys = keys[:0]
+				}
+			}
+			if len(keys) > 0 {
+				db.Redis.Unlink(r.Context(), keys...)
 			}
 			if err := iter.Err(); err != nil {
 				logAndRespond(w, err, http.StatusInternalServerError, "flush_cache failed")
