@@ -847,3 +847,65 @@ async def query_kb(
         query=body.query,
         top_k=body.top_k,
     )
+
+
+@router.get("/{kb_id}/documents/{doc_id}/preview")
+async def preview_document(
+    kb_id: str,
+    doc_id: str,
+    request: Request,
+    user_id: str = Query("", alias="user_id"),
+):
+    """预览文档内容 — 返回文档元信息及前 N 个分块的内容拼接"""
+    if not user_id:
+        raise HTTPException(status_code=401, detail="user_id required")
+
+    # 验证知识库归属
+    kb_row = await get_pool().fetchrow(
+        "SELECT id, user_id, visibility FROM knowledge_bases WHERE id = $1",
+        kb_id,
+    )
+    if kb_row is None:
+        raise HTTPException(status_code=404, detail="knowledge base not found")
+    if kb_row["user_id"] != user_id and kb_row["visibility"] != "tenant":
+        raise HTTPException(status_code=403, detail="access denied")
+
+    pool = get_pool()
+    doc_row = await pool.fetchrow(
+        """SELECT id, knowledge_base_id, name, file_type, file_size_bytes,
+                  chunk_count, status, error_message, metadata, created_at
+           FROM knowledge_documents
+           WHERE id = $1 AND knowledge_base_id = $2""",
+        doc_id,
+        kb_id,
+    )
+    if doc_row is None:
+        raise HTTPException(status_code=404, detail="document not found")
+
+    doc = dict(doc_row)
+
+    # 尝试从 knowledge_chunks 表获取前 5 个分块作为预览内容
+    content_parts = []
+    try:
+        chunk_rows = await pool.fetch(
+            """SELECT content FROM knowledge_chunks
+               WHERE document_id = $1 AND knowledge_base_id = $2
+               ORDER BY chunk_index ASC
+               LIMIT 5""",
+            doc_id,
+            kb_id,
+        )
+        content_parts = [r["content"] for r in chunk_rows if r["content"]]
+    except Exception:
+        # knowledge_chunks 表可能不存在
+        pass
+
+    doc["content"] = "\n\n".join(content_parts) if content_parts else ""
+    if len(doc["content"]) > 10000:
+        doc["content"] = doc["content"][:10000] + "\n\n…（内容已截断，仅展示前 10000 字符）"
+
+    # 删除 metadata 中可能存在的敏感信息（如 file_url 中的签名）
+    if "metadata" in doc and isinstance(doc["metadata"], dict):
+        doc["metadata"] = {k: v for k, v in doc["metadata"].items() if k not in ("file_url", "signed_url")}
+
+    return {"data": doc}

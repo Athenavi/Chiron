@@ -8,11 +8,12 @@ import {
 import {
   ArrowLeftOutlined, CloudUploadOutlined,
   PlayCircleOutlined, PictureOutlined, SearchOutlined,
-  MessageOutlined,
+  MessageOutlined, EyeOutlined, ReloadOutlined,
 } from '@ant-design/icons-vue'
 import { api, resolveMediaUrl } from '../api'
 import { createChunkUpload } from '../utils/uploader'
 import EmptyState from '../components/common/EmptyState.vue'
+import KBDocumentPreview from '../components/KBDocumentPreview.vue'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 
@@ -64,6 +65,14 @@ const docSearch = ref('')
 const selectedDocIds = ref<string[]>([])
 const deletingDocs = ref(false)
 
+// 文档预览
+const previewDocId = ref<string | null>(null)
+const showPreview = ref(false)
+
+// 批量重新索引
+const reindexingIds = ref<string[]>([])
+const showReindexBtn = ref(false)
+
 const filteredDocs = computed(() => {
   const q = docSearch.value.trim().toLowerCase()
   if (!q) return documents.value
@@ -97,6 +106,30 @@ async function batchDeleteDocs() {
     message.error(e.response?.data?.detail || e.response?.data?.error || '删除失败')
   } finally {
     deletingDocs.value = false
+  }
+}
+
+/** 打开文档预览 */
+function openPreview(docId: string) {
+  previewDocId.value = docId
+  showPreview.value = true
+}
+
+/** 批量重新索引 */
+async function batchReindexDocs() {
+  const ids = [...selectedDocIds.value]
+  if (!ids.length) { message.warning('请先选择文档'); return }
+  reindexingIds.value = ids
+  try {
+    // 调用知识库构建接口（会重新索引所有文档）
+    // 如果只想重新索引选中的文档，需要后台支持部分重新索引
+    // 当前实现：先触发构建（会重新索引知识库所有文档）
+    await api.post(`/v1/kb/${kbId}/build`)
+    message.success('已触发重新索引，请稍后查看状态')
+  } catch (e: any) {
+    message.error(e.response?.data?.detail || e.response?.data?.error || '重新索引失败')
+  } finally {
+    reindexingIds.value = []
   }
 }
 
@@ -302,6 +335,33 @@ function formatSize(bytes: number): string {
   const i = Math.floor(Math.log(bytes) / Math.log(k))
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
 }
+
+/** 搜索关键词高亮 — 将查询文本按关键词分割并标记高亮段 */
+function highlightSegments(text: string): Array<{ text: string; highlight: boolean }> {
+  if (!text || !queryText.value.trim()) {
+    return [{ text: text || '', highlight: false }]
+  }
+  const keywords = queryText.value.trim().split(/\s+/).filter(Boolean)
+  if (keywords.length === 0) {
+    return [{ text, highlight: false }]
+  }
+  // 用正则匹配所有关键词
+  const pattern = new RegExp(`(${keywords.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi')
+  const parts: Array<{ text: string; highlight: boolean }> = []
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({ text: text.slice(lastIndex, match.index), highlight: false })
+    }
+    parts.push({ text: match[0], highlight: true })
+    lastIndex = pattern.lastIndex
+  }
+  if (lastIndex < text.length) {
+    parts.push({ text: text.slice(lastIndex), highlight: false })
+  }
+  return parts.length > 0 ? parts : [{ text, highlight: false }]
+}
 </script>
 
 <template>
@@ -440,6 +500,17 @@ function formatSize(bytes: number): string {
                 批量删除（{{ selectedDocIds.length }}）
               </Button>
               <Button
+                v-if="selectedDocIds.length > 0"
+                size="small"
+                :loading="reindexingIds.length > 0"
+                @click="batchReindexDocs"
+              >
+                <template #icon>
+                  <ReloadOutlined />
+                </template>
+                批量重新索引（{{ selectedDocIds.length }}）
+              </Button>
+              <Button
                 size="small"
                 @click="openMediaModal"
               >
@@ -482,7 +553,13 @@ function formatSize(bytes: number): string {
             row-key="id"
           >
             <template #bodyCell="{ column, text, record }">
-              <template v-if="column.dataIndex === 'file_size_bytes'">
+              <template v-if="column.dataIndex === 'name'">
+                <a
+                  class="doc-name-link"
+                  @click="openPreview(record.id)"
+                >{{ text }}</a>
+              </template>
+              <template v-else-if="column.dataIndex === 'file_size_bytes'">
                 {{ formatSize(text) }}
               </template>
               <template v-else-if="column.dataIndex === 'status'">
@@ -494,21 +571,33 @@ function formatSize(bytes: number): string {
                 {{ text ? new Date(text).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '' }}
               </template>
               <template v-else-if="column.key === 'action'">
-                <Popconfirm
-                  title="确认删除此文档？"
-                  @confirm="deleteDoc(record.id)"
-                >
+                <Space>
                   <Button
                     type="text"
-                    danger
                     size="small"
-                    title="删除文档"
+                    title="预览文档"
+                    @click="openPreview(record.id)"
                   >
                     <template #icon>
-                      <DeleteOutlined />
+                      <EyeOutlined />
                     </template>
                   </Button>
-                </Popconfirm>
+                  <Popconfirm
+                    title="确认删除此文档？"
+                    @confirm="deleteDoc(record.id)"
+                  >
+                    <Button
+                      type="text"
+                      danger
+                      size="small"
+                      title="删除文档"
+                    >
+                      <template #icon>
+                        <DeleteOutlined />
+                      </template>
+                    </Button>
+                  </Popconfirm>
+                </Space>
               </template>
             </template>
           </Table>
@@ -559,7 +648,17 @@ function formatSize(bytes: number): string {
             >📄 {{ result.name || result.document_name }}</span>
           </div>
           <p class="result-content">
-            {{ result.content }}
+            <!-- 高亮显示查询关键词 -->
+            <span
+              v-for="(seg, segIdx) in highlightSegments(result.content || '')"
+              :key="segIdx"
+            >
+              <mark
+                v-if="seg.highlight"
+                class="search-highlight"
+              >{{ seg.text }}</mark>
+              <template v-else>{{ seg.text }}</template>
+            </span>
           </p>
         </div>
       </div>
@@ -643,6 +742,13 @@ function formatSize(bytes: number): string {
         </Button>
       </div>
     </Modal>
+
+    <!-- 文档预览弹窗 -->
+    <KBDocumentPreview
+      v-model:visible="showPreview"
+      :document-id="previewDocId"
+      :kb-id="kbId"
+    />
   </div>
 </template>
 
@@ -663,6 +769,9 @@ function formatSize(bytes: number): string {
 .result-source { font-size: 12px; color: var(--text-tertiary); }
 .result-header { margin-bottom: 8px; }
 .result-content { margin: 0; font-size: 14px; line-height: 1.6; color: var(--text-primary); }
+.search-highlight { background: #fff3cd; color: #856404; padding: 1px 2px; border-radius: 2px; }
+.doc-name-link { color: var(--primary-color, #1890ff); cursor: pointer; font-weight: 500; }
+.doc-name-link:hover { text-decoration: underline; }
 
 .media-search-bar { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; }
 .media-actions { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
