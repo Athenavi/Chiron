@@ -141,6 +141,7 @@ def command_allowed(command: str) -> bool:
     """插件命令白名单（与 Go 网关 PLUGIN_COMMAND_ALLOWLIST 保持一致）：
     仅允许白名单内的可执行文件 basename 被拉起为 MCP 插件进程；
     未配置（空）时禁止所有自定义插件命令（安全默认，防任意命令执行）。
+    路径校验：仅允许绝对路径，拒绝 ../ 和UNC/盘符穿越。
     """
     import os
 
@@ -149,4 +150,13 @@ def command_allowed(command: str) -> bool:
         return False
     allowed = {part.strip() for part in raw.split(",") if part.strip()}
     base = os.path.basename(command)
+
+    # P0修正: 检查路径穿越
+    resolved = os.path.realpath(command)
+    _, resolved_base = os.path.split(resolved)
+
+    # basename 和 resolved basename 必须一致 (防 ../../tmp/evil.py)
+    if resolved_base.lower() != base.lower():
+        return False
+
     return base in allowed

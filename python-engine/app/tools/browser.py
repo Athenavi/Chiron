@@ -72,6 +72,7 @@ class GatewayBrowserHub:
 
         from app.config import settings
 
+        # SSRF: 禁用重定向防止 gateway 重写到内网地址
         resp = httpx.get(
             url,
             headers={
@@ -79,6 +80,7 @@ class GatewayBrowserHub:
                 or os.getenv("INTERNAL_TOKEN", "")
             },
             timeout=10,
+            follow_redirects=False,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -94,6 +96,7 @@ class GatewayBrowserHub:
 
         url = f"{self._base_url}/v1/rpa/exec"
         assert_safe_url(url)
+        # SSRF: 禁用重定向
         resp = httpx.post(
             url,
             json={"client_id": client_id, "method": method, "params": params},
@@ -102,6 +105,7 @@ class GatewayBrowserHub:
                 or os.getenv("INTERNAL_TOKEN", "")
             },
             timeout=60,
+            follow_redirects=False,
         )
         resp.raise_for_status()
         return resp.json()

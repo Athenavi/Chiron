@@ -226,6 +226,7 @@ async def speech_to_text(
 
         # 调用 Whisper API
         whisper_url = f"{base_url.rstrip('/')}/audio/transcriptions"
+        assert_safe_url(whisper_url)
         files = {"file": ("audio.wav", audio_data, resp.headers.get("content-type", "audio/wav"))}
         data = {"model": "whisper-1", "language": language, "response_format": "json"}
         if prompt:
@@ -294,7 +295,9 @@ async def text_to_speech(
         output_format = "mp3"
 
     try:
+        # SSRF 防护：校验 OPENAI_BASE_URL 不指向内网
         tts_url = f"{base_url.rstrip('/')}/audio/speech"
+        assert_safe_url(tts_url)
         async with httpx.AsyncClient(timeout=s.http_timeout_long) as client:
             resp = await client.post(
                 tts_url,
