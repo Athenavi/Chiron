@@ -226,9 +226,13 @@ export async function uploadFile(file: File): Promise<{
 }
 
 // SSE 连接
+// 安全说明：session_id 必须出现在 URL 查询参数中，因为 EventSource API 不支持自定义 header。
+// 风险：
+//   - session_id 会出现在浏览器历史、服务器访问日志、Referer 头中
+//   - 后端有 session 所有权校验（events.go:115）防止越权订阅
+//   - 未来可考虑迁移到 WebSocket（ws.go）以消除 URL 暴露
+// 权衡：当前方案用 withCredentials 携带 httpOnly cookie 鉴权，比 JWT 在 URL 中更安全
 export function createSSEConnection(sessionId: string, onMessage: (data: any) => void, onError?: () => void) {
-  // EventSource 无法设置 header → 用 withCredentials 携带同源 cookie（JWT cookie 由登录接口下发），
-  // 避免 JWT 出现在 URL 查询参数（会被浏览器历史/代理日志/Referer 泄露）
   const url = `${API_URL}/events?session_id=${encodeURIComponent(sessionId)}`
 
   const eventSource = new EventSource(url, { withCredentials: true })

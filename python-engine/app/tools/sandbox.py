@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shlex
 import sys
 from pathlib import Path
@@ -196,10 +197,15 @@ async def run_in_sandbox(command: str, timeout: int = 120) -> dict[str, Any]:
     rest = args[1:]
 
     # Windows: echo/dir/type 等是 cmd.exe 内置命令，无独立可执行文件，
-    # create_subprocess_exec 直执会 WinError 2；用 cmd /c 包裹执行
-    # （argv 已经白名单 + 逃逸拦截，shlex 解析无 shell 元字符，不新增注入面）。
+    # create_subprocess_exec 直执会 WinError 2；用 cmd /c 包裹执行。
+    # 安全措施：在包裹前检测 args 中是否包含 shell 元字符（| & ; ` $ ( ) < > # 等），
+    # 这些字符经 shlex.split 保留后传给 cmd /c 会被解释为 shell 语法，绕过白名单。
+    _SHELL_META = re.compile(r'[|&;`$()<>#\n]')
     exe_name = _normalize_exe(prog)
     if sys.platform == "win32" and exe_name not in ("python", "python3"):
+        for part in args:
+            if _SHELL_META.search(part):
+                return {"error": f"command blocked: shell meta-character in argument: {part!r}"}
         prog, rest = os.environ.get("COMSPEC", "cmd.exe"), ["/d", "/s", "/c", *args]
 
     proc = await asyncio.create_subprocess_exec(

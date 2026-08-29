@@ -500,11 +500,9 @@ class AgentEngine:
                 session.append_message("assistant", None, tool_calls=all_tool_calls)
 
                 for tc, result in zip(tool_calls, results):
-                    from app.agent.guards import OutputGuard
-
                     result_json = json.dumps(result, ensure_ascii=False)
                     # S 安全修复：工具结果进上下文前过输出清洗（宿主路径/secret 替换）
-                    result_json = OutputGuard(max_hits=10_000).sanitize(result_json)
+                    result_json = _output_guard.sanitize(result_json)
                     session.append_tool_result(tc["id"], result_json)
                     yield AgentEvent(
                         type="tool_result",

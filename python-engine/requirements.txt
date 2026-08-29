@@ -48,6 +48,5 @@ opentelemetry-instrumentation-httpx==0.54b0
 
 # Agent Tools & Workflow
 pydantic-ai==2.9.0
-onnx==1.22.0
 
 

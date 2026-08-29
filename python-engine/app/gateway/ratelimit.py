@@ -58,30 +58,39 @@ class TenantRateLimiter:
     async def _check_window(
         self, key: str, now: float, window_seconds: float, max_requests: int
     ) -> bool:
-        """滑动窗口检查 + 计数（原子操作）
+        """滑动窗口检查 + 计数（原子操作，使用 Lua 脚本避免竞态）
 
-        先清理过期记录 → 检查是否超限 → 仅在未超限时添加当前请求。
-        避免 ZADD 后 ZREM 回滚的竞态问题（ZREM 失败会导致计数永久偏大）。
+        将清理、计数、判断、添加全部封装在 Redis Lua 脚本中一次 Eval 执行，
+        杜绝并发请求同时通过 ZCARD 检查导致超限。
         """
-        pipe = self._redis.pipeline(transaction=True)
         window_start = now - window_seconds
-
-        # 清理过期记录
-        pipe.zremrangebyscore(key, "-inf", window_start)
-        # 计数
-        pipe.zcard(key)
-        # 设置 key 过期（兜底清理）
-        pipe.expire(key, int(window_seconds) + 1)
-
-        results = await pipe.execute()
-        count = results[1]  # ZCARD 结果
-
-        if count >= max_requests:
-            return False
-
-        # 未超限才添加当前请求（使用唯一 UUID 作为 member）
         member = f"{now}:{uuid.uuid4().hex[:16]}"
-        await self._redis.zadd(key, {member: now})
+
+        lua = """
+        local key = KEYS[1]
+        local window_start = ARGV[1]
+        local now = ARGV[2]
+        local member = ARGV[3]
+        local max_requests = tonumber(ARGV[4])
+        local window_seconds = tonumber(ARGV[5])
+
+        redis.call('ZREMRANGEBYSCORE', key, '-inf', window_start)
+        local count = redis.call('ZCARD', key)
+        if count >= max_requests then
+            return {0, count}
+        end
+        redis.call('ZADD', key, now, member)
+        redis.call('EXPIRE', key, window_seconds + 1)
+        return {1, count}
+        """
+        ok, count = await self._redis.eval(
+            lua, 1, key, str(window_start), str(now), member, str(max_requests), str(int(window_seconds))
+        )
+        if not ok:
+            logger.warning(
+                "Rate limit exceeded: key=%s (count=%d/%d)", key, count, max_requests
+            )
+            return False
         return True
 
     async def get_remaining(self, tenant_id: str) -> dict:

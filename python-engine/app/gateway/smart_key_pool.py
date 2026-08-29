@@ -133,44 +133,44 @@ class SmartAPIKeyPool:
         Returns:
             API Key，无可用则返回 None
         """
-        async with self._lock:
-            pool = self._pools.get(provider, [])
-            if not pool:
-                return None
+        # 锁外获取 pool 快照（只读操作）
+        pool = self._pools.get(provider, [])
+        if not pool:
+            return None
 
-            # 过滤可用的 Key
-            available = [
-                k
-                for k in pool
-                if not k.circuit_breaker or not k.circuit_breaker.is_open()
-            ]
+        # 锁外过滤可用 Key（只读操作）
+        available = [
+            k
+            for k in pool
+            if not k.circuit_breaker or not k.circuit_breaker.is_open()
+        ]
 
-            if not available:
-                # 全部熔断，计算最短等待时间
-                logger.warning(
-                    "All keys for %s are circuit open, waiting for recovery", provider
-                )
-                wait_time = self._calc_recovery_wait(pool)
-                if wait_time < float("inf"):
-                    # 释放锁后等待，避免死锁
-                    pass
-                else:
-                    return None
+        if not available:
+            # 全部熔断，计算最短等待时间
+            logger.warning(
+                "All keys for %s are circuit open, waiting for recovery", provider
+            )
+            wait_time = self._calc_recovery_wait(pool)
+            if wait_time < float("inf"):
+                # 释放锁后等待，避免死锁
+                pass
             else:
-                # 按权重选择
-                total_weight = sum(k.weight for k in available)
-                r = random.uniform(0, total_weight)
+                return None
+        else:
+            # 按权重选择（锁内保护 last_used 写入）
+            total_weight = sum(k.weight for k in available)
+            r = random.uniform(0, total_weight)
 
-                cumulative = 0
-                for key_info in available:
-                    cumulative += key_info.weight
-                    if r <= cumulative:
-                        key_info.last_used = time.time()
-                        return key_info.key
+            cumulative = 0
+            for key_info in available:
+                cumulative += key_info.weight
+                if r <= cumulative:
+                    key_info.last_used = time.time()
+                    return key_info.key
 
-                # Fallback: 返回第一个
-                available[0].last_used = time.time()
-                return available[0].key
+            # Fallback: 返回第一个
+            available[0].last_used = time.time()
+            return available[0].key
 
         # 在锁外等待恢复，然后重试
         logger.info("Waiting %.1f seconds for key recovery", wait_time)
