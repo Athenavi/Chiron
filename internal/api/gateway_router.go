@@ -450,6 +450,7 @@ func registerPublicEndpoints(
 	cfg *config.Config,
 ) {
 	mux.Handle("GET /search", authMW(rlMW(http.HandlerFunc(searchHandler.Search))))
+	mux.Handle("GET /v1/search", authMW(rlMW(http.HandlerFunc(searchHandler.Search))))
 
 	// Public share view (no auth; revoked shares return 410 Gone)
 	// 修复 P1：移除内层 publicMW 重复包裹（外层 publicMW(mux) 已包含日志/审计/追踪），
@@ -495,7 +496,8 @@ func registerAgentRoutes(
 ) {
 	mux.Handle("POST /v1/agent/approval", authMW(rlMW(http.HandlerFunc(submitHandler.SubmitApproval))))
 
-	mux.Handle("POST /submit", authMW(sanitizeMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// submitHandlerFunc 提取为命名函数，用于 legacy 和 v1 双路由注册
+	submitHandlerFunc := func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Content   string                 `json:"content"`
 			SessionID string                 `json:"session_id"`
@@ -560,12 +562,25 @@ func registerAgentRoutes(
 			defer sessionCancels.Delete(body.SessionID)
 			submitHandler.HandleSubmit(ctx, userID, body.SessionID, body.Content, body.LLMConfig)
 		}()
-	}))))
+	}
+	submitMW := authMW(sanitizeMW(http.HandlerFunc(submitHandlerFunc)))
+	// Legacy 路由：向前兼容旧版前端
+	mux.Handle("POST /submit", submitMW)
+	// 版本化路由：v1 agent submit 入口
+	mux.Handle("POST /v1/agent/submit", submitMW)
 
-	mux.Handle("POST /cancel", authMW(rlMW(http.HandlerFunc(handleCancel))))
+	// cancelHandlerFunc 提取为命名函数，用于 legacy 和 v1 双路由注册
+	cancelHandlerFunc := func(w http.ResponseWriter, r *http.Request) {
+		handleCancel(w, r)
+	}
+	cancelMW := authMW(rlMW(http.HandlerFunc(cancelHandlerFunc)))
+	mux.Handle("POST /cancel", cancelMW)
+	mux.Handle("POST /v1/agent/cancel", cancelMW)
 
 	// SSE + WebSocket
-	mux.Handle("GET /events", authMW(rlMW(SSEHandler(eventHub, sessionMgr))))
+	sseHandler := SSEHandler(eventHub, sessionMgr)
+	mux.Handle("GET /events", authMW(rlMW(sseHandler)))
+	mux.Handle("GET /v1/events", authMW(rlMW(sseHandler)))
 	mux.HandleFunc("GET /ws/{sessionId}", WebSocketHandler(NewWebSocketHub(), eventHub, authenticator, sessionMgr))
 	mux.HandleFunc("GET /ws/rpa", RPAWebSocketHandler(rpaHub, authenticator))
 	// 浏览器 RPA 桥（Python engine → 网关 → 插件；仅共享 internal token 可调）
