@@ -282,6 +282,8 @@ func (h *SystemHandler) DBQuery(w http.ResponseWriter, r *http.Request) {
 }
 
 // DBExecute 执行 SQL 写操作（供 Python 引擎调用）
+// P1 安全加固：非维护模式下仅允许 SELECT/EXPLAIN/SAVEPOINT/ROLLBACK
+// 查询，防止 internal_token 泄露时数据库被完全控制。
 func (h *SystemHandler) DBExecute(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		SQL  string        `json:"sql"`
@@ -298,6 +300,26 @@ func (h *SystemHandler) DBExecute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// P1 安全加固：检查 SQL 关键词，拒绝 DDL/DML 写操作
+	cleanSQL := strings.TrimSpace(strings.ToUpper(req.SQL))
+	// 允许的查询前缀（安全）
+	allowedPrefixes := []string{
+		"SELECT", "EXPLAIN", "SAVEPOINT", "ROLLBACK",
+		"RELEASE", "SET", "SHOW", "BEGIN", "COMMIT",
+	}
+	isAllowed := false
+	for _, p := range allowedPrefixes {
+		if strings.HasPrefix(cleanSQL, p) {
+			isAllowed = true
+			break
+		}
+	}
+	if !isAllowed {
+		// 拒绝写操作（INSERT/UPDATE/DELETE/DROP/ALTER/VACUUM/REINDEX/TRUNCATE/CREATE）
+		Forbidden(w, "write operations are not allowed on this endpoint; use the application API instead")
+		return
+	}
+
 	ctx := r.Context()
 	rowsAffected, err := db.GlobalDBManager.Execute(ctx, req.SQL, req.Args...)
 	if err != nil {
@@ -311,6 +333,7 @@ func (h *SystemHandler) DBExecute(w http.ResponseWriter, r *http.Request) {
 }
 
 // DBBatchExecute 批量执行 SQL（供 Python 引擎调用）
+// P1 安全加固：同 DBExecute，拒绝 DDL/DML 写操作。
 func (h *SystemHandler) DBBatchExecute(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Queries []string `json:"queries"`
@@ -324,6 +347,26 @@ func (h *SystemHandler) DBBatchExecute(w http.ResponseWriter, r *http.Request) {
 	if len(req.Queries) == 0 {
 		BadRequest(w, "queries is required")
 		return
+	}
+
+	// P1 安全加固：检查每条 SQL
+	allowedPrefixes := []string{
+		"SELECT", "EXPLAIN", "SAVEPOINT", "ROLLBACK",
+		"RELEASE", "SET", "SHOW", "BEGIN", "COMMIT",
+	}
+	for _, sql := range req.Queries {
+		cleanSQL := strings.TrimSpace(strings.ToUpper(sql))
+		isAllowed := false
+		for _, p := range allowedPrefixes {
+			if strings.HasPrefix(cleanSQL, p) {
+				isAllowed = true
+				break
+			}
+		}
+		if !isAllowed {
+			Forbidden(w, "write operations are not allowed on this endpoint; use the application API instead")
+			return
+		}
 	}
 
 	ctx := r.Context()

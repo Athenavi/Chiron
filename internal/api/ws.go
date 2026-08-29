@@ -22,26 +22,7 @@ var upgrader = websocket.Upgrader{
 	// CheckOrigin 严格校验：CORS_ORIGINS 未配置则拒绝所有带 Origin 的浏览器请求，
 	// 仅放行无 Origin 的非浏览器（curl/python websockets）客户端。
 	// 生产部署必须显式配置 CORS_ORIGINS 为前端域名白名单。
-	CheckOrigin: func(r *http.Request) bool {
-		origin := r.Header.Get("Origin")
-		if origin == "" {
-			return true // curl / 服务端 ws 客户端无 Origin
-		}
-		allowed := os.Getenv("CORS_ORIGINS")
-		if allowed == "" || allowed == "*" {
-			slog.Warn("websocket origin rejected: CORS_ORIGINS not configured",
-				"origin", origin, "path", r.URL.Path)
-			return false
-		}
-		for _, o := range strings.Split(allowed, ",") {
-			if strings.TrimSpace(o) == origin {
-				return true
-			}
-		}
-		slog.Warn("websocket origin rejected: not in allowlist",
-			"origin", origin, "path", r.URL.Path)
-		return false
-	},
+	CheckOrigin: checkWebSocketOrigin,
 }
 
 // safeConn wraps a websocket.Conn with a write mutex.
@@ -236,4 +217,29 @@ func WebSocketHandler(hub *WebSocketHub, eventHub *broadcast.Hub, authenticator 
 			}
 		}()
 	}
+}
+
+// checkWebSocketOrigin 是 WebSocket CheckOrigin 共享函数，用于 ws.go 和 rpa_ws.go。
+// CORS_ORIGINS 未配置则拒绝所有带 Origin 的浏览器请求，
+// 仅放行无 Origin 的非浏览器（curl/python websockets）客户端。
+// 生产部署必须显式配置 CORS_ORIGINS 为前端域名白名单。
+func checkWebSocketOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true
+	}
+	allowed := os.Getenv("CORS_ORIGINS")
+	if allowed == "" || allowed == "*" {
+		slog.Warn("websocket origin rejected: CORS_ORIGINS not configured",
+			"origin", origin, "path", r.URL.Path)
+		return false
+	}
+	for _, o := range strings.Split(allowed, ",") {
+		if strings.TrimSpace(o) == origin {
+			return true
+		}
+	}
+	slog.Warn("websocket origin rejected: not in allowlist",
+		"origin", origin, "path", r.URL.Path)
+	return false
 }

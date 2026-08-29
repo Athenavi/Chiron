@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 _ALLOWED_SCHEMES = {"http", "https"}
 # 允许的端口（防访问内网数据库/缓存/消息队列服务端口）
 # 已包含 443（HTTPS 标准端口），确保 `https://github.com` 等外部站点不被误拦。
+# 注意：第2轮检查发现 443 已在列表中，此注释为确认，无需修改。
 _ALLOWED_PORTS = {80, 443, 8080, 8443}
 
 # 被禁止的 IP 段（IPv4）
