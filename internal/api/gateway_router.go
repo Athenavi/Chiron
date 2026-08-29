@@ -430,6 +430,9 @@ func NewGatewayRouter(
 	// Enterprise market（authMW + RequireEntPerm("market:manage")）：能力市场 + 租户授权
 	NewMarketHandler().RegisterRoutes(mux, authMW)
 
+	// Enterprise model router（authMW + RequireEntPerm("model:route")）：租户模型路由配置
+	NewEntModelRouterHandler().RegisterRoutes(mux, authMW)
+
 	// Mode (auth + rate limited)
 	mux.Handle("GET /v1/mode", authMW(rlMW(http.HandlerFunc(modeHandler.GetMode))))
 	mux.Handle("POST /v1/mode", authMW(rlMW(http.HandlerFunc(modeHandler.SetMode))))

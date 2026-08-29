@@ -7,6 +7,8 @@ import sys
 import time
 from typing import AsyncIterator, Optional
 
+import aiohttp
+
 from app.gateway.budget import TokenBudget
 from app.gateway.cache import SemanticCache
 from app.gateway.circuit_breaker import CircuitBreaker
@@ -52,6 +54,7 @@ class GatewayRouter:
       3. 过滤已熔断的
       4. 加权随机选择: score = w_cost * (1/price) + w_latency * (1/latency) + w_quality
       5. 全部熔断 → 尝试 fallback provider
+      6. 租户路由配置（从 Go 网关同步）覆盖默认选择
 
     缓存: chat 请求自动走 SemanticCache
     预算: chat 请求自动扣减 TokenBudget
@@ -76,6 +79,8 @@ class GatewayRouter:
         cache: SemanticCache | None = None,
         budget: TokenBudget | None = None,
         weights: dict[str, float] | None = None,
+        gateway_url: str = "",
+        internal_token: str = "",
     ):
         self._providers = providers
         self._breakers = {name: CircuitBreaker() for name in providers}
@@ -86,6 +91,10 @@ class GatewayRouter:
         self._budget = budget
         # 路由权重: cost / latency / quality
         self._weights = weights or {"cost": 0.3, "latency": 0.3, "quality": 0.4}
+        # 租户路由配置（从 Go 网关同步）
+        self._tenant_routes: dict[str, list[dict]] = {}  # tenant_id -> [route, ...]
+        self._gateway_url = gateway_url
+        self._internal_token = internal_token
 
     # ── 公开 API ──
 
@@ -332,12 +341,74 @@ class GatewayRouter:
                 for name in self._providers
             },
             "cache": self._cache.stats() if self._cache else None,
+            "tenant_routes": len(self._tenant_routes),
         }
+
+    # ── 租户路由同步 ──
+
+    async def sync_routes(self) -> int:
+        """从 Go 网关同步租户模型路由配置，启动时调用。
+
+        返回同步的路由条目数，失败返回 0（不阻断启动）。
+        """
+        if not self._gateway_url or not self._internal_token:
+            logger.info("sync_routes skipped: gateway_url or internal_token not set")
+            return 0
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"{self._gateway_url}/v1/internal/model-routes",
+                    headers={"X-Internal-Token": self._internal_token},
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as resp:
+                    if resp.status != 200:
+                        logger.warning("sync_routes HTTP %d from gateway", resp.status)
+                        return 0
+                    data = await resp.json()
+                    routes = data.get("routes", [])
+        except Exception as e:
+            logger.warning("sync_routes failed: %s", e)
+            return 0
+
+        # 按 tenant_id 分组
+        tenant_map: dict[str, list[dict]] = {}
+        for r in routes:
+            tid = r.get("tenant_id", "")
+            if not tid:
+                continue
+            if tid not in tenant_map:
+                tenant_map[tid] = []
+            tenant_map[tid].append(r)
+        self._tenant_routes = tenant_map
+        logger.info("sync_routes loaded %d routes for %d tenants", len(routes), len(tenant_map))
+        return len(routes)
+
+    def _get_tenant_provider(self, model: str, tenant_id: str) -> Optional[str]:
+        """按租户路由配置获取首选 provider 名称。
+
+        返回 None 表示无匹配路由（回退默认加权选择）。
+        """
+        if not tenant_id or tenant_id not in self._tenant_routes:
+            return None
+        for route in self._tenant_routes.get(tenant_id, []):
+            if route.get("model_id") == model and route.get("enabled", True):
+                return route.get("primary_provider")
+        return None
 
     # ── 内部路由 ──
 
-    async def _select(self, model: str, hint: str = "") -> Optional[LLMProvider]:
-        """选择 Provider"""
+    async def _select(self, model: str, hint: str = "", tenant_id: str = "") -> Optional[LLMProvider]:
+        """选择 Provider — 支持租户路由覆盖"""
+        # 租户路由优先
+        if tenant_id:
+            tenant_provider = self._get_tenant_provider(model, tenant_id)
+            if tenant_provider and tenant_provider in self._providers:
+                if self._breakers[tenant_provider].allow():
+                    return self._providers[tenant_provider]
+                logger.warning(
+                    "Tenant route provider %s circuit-open for tenant=%s model=%s, falling back",
+                    tenant_provider, tenant_id, model,
+                )
         if hint and hint in self._providers:
             if self._breakers[hint].allow():
                 return self._providers[hint]
