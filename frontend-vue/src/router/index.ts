@@ -227,6 +227,12 @@ const routes = [
         component: () => import('../views/admin/ApiDocsView.vue'),
         meta: { title: 'API 文档' },
       },
+      {
+        path: 'eval',
+        name: 'AdminEval',
+        component: () => import('../views/admin/EvalView.vue'),
+        meta: { title: 'Agent 评估' },
+      },
     ],
   },
   // 404 兜底：避免未知地址白屏

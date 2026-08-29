@@ -11,6 +11,11 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+import httpx
+
+# MCP protocol version
+MCP_PROTOCOL_VERSION = "2025-03-26"
+
 logger = logging.getLogger(__name__)
 
 
@@ -22,6 +27,8 @@ class ServerDef:
     command: str
     args: list[str] = field(default_factory=list)
     env: dict[str, str] = field(default_factory=dict)
+    transport: str = "stdio"  # "stdio" | "http_sse"
+    url: str = ""  # HTTP SSE endpoint URL (used when transport="http_sse")
 
 
 @dataclass
@@ -33,6 +40,54 @@ class MCPTool:
     input_schema: dict[str, Any]
     server_name: str
     local_name: str  # Original tool name on the server
+
+
+class HTTPSSEConnection:
+    """Connection to an MCP server over HTTP SSE transport."""
+
+    def __init__(self, url: str, name: str):
+        self.url = url.rstrip("/")
+        self.name = name
+        self._req_id = 0
+        self._lock = asyncio.Lock()
+        self._client = httpx.AsyncClient(timeout=30.0)
+        self._session_id: str | None = None
+
+    async def send_jsonrpc(
+        self, method: str, params: Optional[dict] = None
+    ) -> dict[str, Any]:
+        """Send a JSON-RPC request via HTTP POST and read the response."""
+        self._req_id += 1
+        req = {
+            "jsonrpc": "2.0",
+            "id": self._req_id,
+            "method": method,
+            "params": params or {},
+        }
+        headers = {"Content-Type": "application/json"}
+        if self._session_id:
+            headers["Mcp-Session-Id"] = self._session_id
+
+        async with self._lock:
+            resp = await self._client.post(
+                f"{self.url}/messages",
+                json=req,
+                headers=headers,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+            # Extract session ID from SSE response headers
+            session_id = resp.headers.get("Mcp-Session-Id")
+            if session_id:
+                self._session_id = session_id
+
+        if "error" in data and data["error"]:
+            raise RuntimeError(f"MCP error: {data['error'].get('message', 'unknown')}")
+        return data.get("result", {})
+
+    async def close(self):
+        await self._client.aclose()
 
 
 class ServerConnection:
@@ -114,6 +169,38 @@ class MCPClient:
 
     async def _connect_server(self, server: ServerDef):
         """Connect to a single MCP server and discover its tools."""
+        if server.transport == "http_sse":
+            await self._connect_http_sse(server)
+        elif server.transport == "stdio":
+            await self._connect_stdio(server)
+        else:
+            raise ValueError(f"Unsupported MCP transport: {server.transport}")
+
+    async def _connect_http_sse(self, server: ServerDef):
+        """Connect to an MCP server via HTTP SSE."""
+        if not server.url:
+            raise ValueError("HTTP SSE transport requires 'url' in ServerDef")
+        conn = HTTPSSEConnection(server.url, server.name)
+        self._conns[server.name] = conn
+
+        # Initialize
+        result = await conn.send_jsonrpc(
+            "initialize",
+            {
+                "protocolVersion": MCP_PROTOCOL_VERSION,
+                "clientInfo": {"name": "chiron-python", "version": "3.0.0"},
+                "capabilities": {},
+            },
+        )
+
+        # List tools
+        tools_result = await conn.send_jsonrpc("tools/list", None)
+        raw_tools = tools_result.get("tools", [])
+        self._register_tools(server, raw_tools)
+        logger.info("MCP server %s connected (HTTP SSE): %d tools", server.name, len(raw_tools))
+
+    async def _connect_stdio(self, server: ServerDef):
+        """Connect to an MCP server via stdio (subprocess)."""
         # 安全修复（P0-S7）：仅允许 PLUGIN_COMMAND_ALLOWLIST 白名单内的命令被拉起
         from app.tools.ssrf import command_allowed
 
@@ -125,7 +212,6 @@ class MCPClient:
         env = None
         if server.env:
             import os
-
             env = {**os.environ, **server.env}
 
         proc = await asyncio.create_subprocess_exec(
@@ -143,7 +229,7 @@ class MCPClient:
         await conn.send_jsonrpc(
             "initialize",
             {
-                "protocolVersion": "2025-03-26",
+                "protocolVersion": MCP_PROTOCOL_VERSION,
                 "clientInfo": {"name": "chiron-python", "version": "3.0.0"},
             },
         )
@@ -151,7 +237,11 @@ class MCPClient:
         # List tools
         result = await conn.send_jsonrpc("tools/list", None)
         raw_tools = result.get("tools", [])
+        self._register_tools(server, raw_tools)
+        logger.info("MCP server %s connected (stdio): %d tools", server.name, len(raw_tools))
 
+    def _register_tools(self, server: ServerDef, raw_tools: list[dict]):
+        """Register tools from a server response."""
         for i, t in enumerate(raw_tools):
             tool = MCPTool(
                 name=f"{server.name}_{t.get('name', f'unnamed_{i}')}",
@@ -162,8 +252,6 @@ class MCPClient:
             )
             self._tools.append(tool)
             logger.info("MCP tool discovered: %s (%s)", tool.name, server.name)
-
-        logger.info("MCP server %s connected: %d tools", server.name, len(raw_tools))
 
     @property
     def tools(self) -> list[MCPTool]:
@@ -217,6 +305,8 @@ async def load_mcp_config(config_path: str) -> list[ServerDef]:
                 command=s["command"],
                 args=s.get("args", []),
                 env=s.get("env", {}),
+                transport=s.get("transport", "stdio"),
+                url=s.get("url", ""),
             )
         )
     return servers

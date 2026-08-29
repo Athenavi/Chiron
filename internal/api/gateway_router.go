@@ -436,6 +436,9 @@ func NewGatewayRouter(
 	// Enterprise webhook（authMW + RequireEntPerm("webhook:manage")）：事件通知
 	NewEntWebhookHandler().RegisterRoutes(mux, authMW)
 
+	// Enterprise eval（authMW + RequireEntPerm("eval:manage")）：Agent 评估系统
+	NewEntEvalHandler().RegisterRoutes(mux, authMW)
+
 	// Mode (auth + rate limited)
 	mux.Handle("GET /v1/mode", authMW(rlMW(http.HandlerFunc(modeHandler.GetMode))))
 	mux.Handle("POST /v1/mode", authMW(rlMW(http.HandlerFunc(modeHandler.SetMode))))

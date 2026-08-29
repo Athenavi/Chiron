@@ -42,6 +42,7 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   BulbOutlined,
+  AuditOutlined,
 } from '@ant-design/icons-vue'
 
 const router = useRouter()
@@ -114,6 +115,7 @@ const menuGroups = computed(() => [
     children: [
       { key: '/admin/costcenter', label: '成本中心', icon: () => h(WalletOutlined) },
       { key: '/admin/market', label: '企业能力市场', icon: () => h(ShopOutlined) },
+      { key: '/admin/eval', label: 'Agent 评估', icon: () => h(AuditOutlined) },
       { key: '/admin/api-docs', label: 'API 文档', icon: () => h(FileTextOutlined) },
     ],
   },
