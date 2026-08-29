@@ -480,6 +480,8 @@ func registerPublicEndpoints(
 	mux.Handle("POST /v1/internal/db/execute", rlMW(internalTokenMW(cfg, http.HandlerFunc(systemHandler.DBExecute))))
 	mux.Handle("POST /v1/internal/db/batch-execute", rlMW(internalTokenMW(cfg, http.HandlerFunc(systemHandler.DBBatchExecute))))
 	mux.Handle("GET /v1/internal/db/health", rlMW(internalTokenMW(cfg, http.HandlerFunc(systemHandler.DatabaseHealth))))
+	// 计费记录写入（X-Internal-Token 保护，Python 引擎 token 用量归集）
+	mux.Handle("POST /v1/internal/billing/record", rlMW(internalTokenMW(cfg, http.HandlerFunc(systemHandler.BillingRecord))))
 
 	mux.Handle("GET /v1/internal/python/health", rlMW(internalTokenMW(cfg, http.HandlerFunc(systemHandler.PythonEngineHealth))))
 

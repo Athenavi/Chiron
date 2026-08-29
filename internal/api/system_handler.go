@@ -348,6 +348,61 @@ func (h *SystemHandler) DBExecute(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// BillingRecord 记录一次计费记录（供 Python 引擎调用）
+// 与 EnterpriseBillingObserver 的 OnCreditChange 不同，此端点接收 token 粒度明细。
+func (h *SystemHandler) BillingRecord(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		TenantID    string `json:"tenant_id"`
+		UserID      string `json:"user_id"`
+		SessionID   string `json:"session_id,omitempty"`
+		InputTokens int    `json:"input_tokens"`
+		OutputTokens int   `json:"output_tokens"`
+		CostCents   int    `json:"cost_cents"`
+		GroupID     string `json:"group_id,omitempty"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		BadRequest(w, "invalid request body")
+		return
+	}
+
+	if req.TenantID == "" || req.UserID == "" {
+		BadRequest(w, "tenant_id and user_id are required")
+		return
+	}
+
+	ctx := r.Context()
+	var groupID *string
+	if req.GroupID != "" {
+		groupID = &req.GroupID
+	}
+
+	_, err := db.GlobalDBManager.Execute(ctx,
+		`INSERT INTO billing_records
+			(tenant_id, user_id, session_id, input_tokens, output_tokens, cost_cents, group_id)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		req.TenantID, req.UserID, nilIfEmpty(req.SessionID),
+		req.InputTokens, req.OutputTokens, req.CostCents, groupID)
+	if err != nil {
+		slog.Error("billing record insert failed",
+			"tenant_id", req.TenantID, "user_id", req.UserID, "error", err)
+		InternalError(w, "failed to insert billing record")
+		return
+	}
+
+	OK(w, map[string]interface{}{
+		"success": true,
+	})
+}
+
+// nilIfEmpty returns nil for empty strings (for *string sql params).
+func nilIfEmpty(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
 // DBBatchExecute 批量执行 SQL（供 Python 引擎调用）
 // P1 安全加固：同 DBExecute，拒绝 DDL/DML 写操作。
 func (h *SystemHandler) DBBatchExecute(w http.ResponseWriter, r *http.Request) {
