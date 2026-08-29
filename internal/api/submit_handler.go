@@ -68,7 +68,7 @@ func (h *SubmitHandler) SubmitApproval(w http.ResponseWriter, r *http.Request) {
 // HandleSubmit proxies the submit request to Python engine and streams SSE events.
 func (h *SubmitHandler) HandleSubmit(ctx context.Context, userID, sessionID, content string, llmConfig map[string]interface{}) {
 	// P1 修复：与 Python 引擎 5min 客户端超时对齐，避免长任务被 180s 硬超时截断
-	ctx, cancel := context.WithTimeout(ctx, 300*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, DefaultAgentTimeout)
 	defer cancel()
 	if sessionID != "" {
 		sessionCancels.Store(sessionID, sessionCancel{userID: userID, cancel: cancel})
@@ -100,7 +100,7 @@ func (h *SubmitHandler) HandleSubmit(ctx context.Context, userID, sessionID, con
 	}
 
 	// 默认 max_turns，若 llm_config 中有则使用前端指定的值
-	defaultMaxTurns := 5
+	defaultMaxTurns := DefaultMaxTurns
 	if llmConfig != nil {
 		if mt, ok := llmConfig["max_turns"].(float64); ok && mt > 0 {
 			defaultMaxTurns = int(mt)

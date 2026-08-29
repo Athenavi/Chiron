@@ -138,13 +138,13 @@ func DistributedRateLimitMiddleware(limiter *DistributedRateLimiter) func(http.H
 
 			allowed, err := limiter.Allow(r.Context(), tenantID, userID)
 			if err != nil {
-				slog.Warn("限流触发",
+				// 限流服务不可用（Redis 故障或 Eval 错误）→ 503 ServiceUnavailable
+				slog.Error("限流服务不可用（fail-close）",
 					"error", err,
 					"user", userID,
 					"path", r.URL.Path,
 				)
-				w.Header().Set("Retry-After", "60")
-				TooManyRequests(w)
+				ServiceUnavailable(w, "rate limiter unavailable")
 				return
 			}
 

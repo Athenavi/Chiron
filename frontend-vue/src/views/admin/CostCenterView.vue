@@ -4,7 +4,7 @@ import { message, Modal } from 'ant-design-vue'
 import type { TableColumnsType } from 'ant-design-vue'
 import {
   listQuotas, createQuota, updateQuota, deleteQuota,
-  createAllocation, deleteAllocation, getQuotaUsage,
+  createAllocation, deleteAllocation, getQuotaUsage, getQuota,
 } from '../../api/costcenter'
 import type { QuotaPoolWithAllocated, QuotaAllocation, QuotaUsageRow } from '../../api/costcenter'
 
@@ -121,7 +121,6 @@ async function openAllocDrawer(p: QuotaPoolWithAllocated) {
   currentPool.value = p
   allocForm.value = { target_type: 'group', target_id: '', amount: 0 }
   try {
-    const { getQuota } = await import('../../api/costcenter')
     const res = await getQuota(p.id)
     allocations.value = res.allocations
   } catch (e: any) {
@@ -146,7 +145,6 @@ async function addAllocation() {
     })
     message.success('已分配')
     // 刷新分配列表与池的 allocated
-    const { getQuota } = await import('../../api/costcenter')
     const res = await getQuota(currentPool.value.id)
     allocations.value = res.allocations
     fetchPools()

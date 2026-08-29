@@ -3,10 +3,6 @@ package api
 import "time"
 
 // P0性能优化：集中管理超时常量，避免散落各处的魔法数字
-const (
-	DefaultAgentTimeout  = 120 * time.Second // Agent 执行默认超时
-	DefaultMaxTurns      = 10                // Agent 默认最大轮数
-)
 
 // nullableStr returns nil for empty strings, useful for nullable DB columns.
 func nullableStr(s string) *string {

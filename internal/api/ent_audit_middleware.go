@@ -69,17 +69,6 @@ func writeAuditRecord(ctx context.Context, rec auditRecord) {
 	db.AuditLog(writeCtx, rec.userID, rec.tenantID, rec.action, rec.resource, rec.detail, rec.ip, nil)
 }
 
-// writeAuditRecordWithContext 使用传入的 ctx 写入审计日志，避免使用 context.Background()。
-// Deprecated: 请直接使用 writeAuditRecord(ctx, rec)。
-func writeAuditRecordWithContext(ctx context.Context, rec auditRecord) {
-	defer func() {
-		if r := recover(); r != nil {
-			slog.Error("audit middleware: record panic", "panic", r)
-		}
-	}()
-	db.AuditLog(ctx, rec.userID, rec.tenantID, rec.action, rec.resource, rec.detail, rec.ip, nil)
-}
-
 // StartAuditWorker 启动一个可取消的审计 worker。
 // 由 main.go 传入 lifecycleCtx 以支持优雅关闭，替换默认的 context.Background() worker。
 // 注意：init() 中不再默认启动 worker，由 main.go 显式调用，避免无法取消的 goroutine 逃逸。
