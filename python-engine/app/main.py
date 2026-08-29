@@ -609,6 +609,24 @@ def _setup_routes(app: FastAPI) -> None:
             "gateway": _gateway.stats() if _gateway else None,
         }
 
+    @app.get("/healthz/providers")
+    async def healthz_providers():
+        """Provider 健康检查：逐个调用 probe 并返回状态"""
+        if _gateway is None:
+            return JSONResponse(
+                {"status": "not_ready", "reason": "gateway not initialized"},
+                status_code=503,
+            )
+        try:
+            provider_health = await _gateway.health_check()
+            all_ok = all(v["status"] == "ok" for v in provider_health.values())
+            status = "ok" if all_ok else "degraded"
+            return {"status": status, "providers": provider_health}
+        except Exception as e:
+            return JSONResponse(
+                {"status": "error", "message": str(e)}, status_code=500
+            )
+
     # ── Agent 推理（模块级路由函数） ──
     app.post("/v1/agent/run")(agent_run)
     app.post("/v1/agent/submit")(agent_submit)
@@ -617,6 +635,58 @@ def _setup_routes(app: FastAPI) -> None:
     # ── 知识库（模块级路由函数） ──
     app.post("/v1/kb/build")(kb_build)
     app.post("/v1/kb/query")(kb_query)
+
+    # ── 网关管理（模型热切换、熔断器重置） ──
+    @app.post("/v1/gateway/sync-routes")
+    async def gateway_sync_routes():
+        """运行时热同步租户模型路由配置（从 Go 网关拉取）。
+
+        不阻断调用，失败时保留上次同步的配置。
+        """
+        if _gateway is None:
+            return JSONResponse(
+                {"status": "error", "message": "gateway not initialized"},
+                status_code=503,
+            )
+        try:
+            count = await _gateway.sync_routes()
+            return {"status": "ok", "routes_synced": count}
+        except Exception as e:
+            return JSONResponse(
+                {"status": "error", "message": str(e)}, status_code=500
+            )
+
+    @app.post("/v1/gateway/reset-breaker")
+    async def gateway_reset_breaker(request: Request):
+        """重置指定 Provider 的熔断器。
+
+        Request body: {"provider": "openai"}
+        常用于管理端手动恢复因网络抖动而熔断的 Provider。
+        """
+        if _gateway is None:
+            return JSONResponse(
+                {"status": "error", "message": "gateway not initialized"},
+                status_code=503,
+            )
+        try:
+            body = await request.json()
+            provider = body.get("provider", "")
+            if not provider:
+                return JSONResponse(
+                    {"status": "error", "message": "provider is required"},
+                    status_code=400,
+                )
+            ok = await _gateway.reset_breaker(provider)
+            if not ok:
+                return JSONResponse(
+                    {"status": "error", "message": f"provider '{provider}' not found"},
+                    status_code=404,
+                )
+            return {"status": "ok", "provider": provider}
+        except Exception as e:
+            return JSONResponse(
+                {"status": "error", "message": str(e)}, status_code=500
+            )
 
     # ── Tools API（Phase 1） ──
     from app.api import api_router

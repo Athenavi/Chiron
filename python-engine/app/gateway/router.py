@@ -349,6 +349,18 @@ class GatewayRouter:
                 result[name] = {"status": "error", "circuit": state, "message": str(e)}
         return result
 
+    async def reset_breaker(self, provider_name: str) -> bool:
+        """重置指定 provider 的熔断器为 closed 状态。
+
+        返回 True 表示成功，False 表示 provider 不存在。
+        用于管理端手动恢复熔断的 provider。
+        """
+        if provider_name not in self._breakers:
+            return False
+        self._breakers[provider_name] = CircuitBreaker()
+        logger.info("Circuit breaker reset for provider=%s", provider_name)
+        return True
+
     async def close(self) -> None:
         for p in self._providers.values():
             await p.close()
@@ -373,6 +385,8 @@ class GatewayRouter:
         """从 Go 网关同步租户模型路由配置，启动时调用。
 
         返回同步的路由条目数，失败返回 0（不阻断启动）。
+
+        此方法也暴露给 POST /v1/gateway/sync-routes 端点，支持运行时热切换。
         """
         if not self._gateway_url or not self._internal_token:
             logger.info("sync_routes skipped: gateway_url or internal_token not set")
