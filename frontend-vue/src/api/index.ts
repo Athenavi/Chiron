@@ -183,7 +183,6 @@ api.interceptors.response.use(
       // 短延迟让 toast 显示后再跳转
       setTimeout(() => { window.location.href = '/login' }, 500)
     } else if (error.response?.status >= 500) {
-      console.error('Server error:', error.response.status, error.response.data)
       // 触发全局错误事件，App.vue 中的监听器会显示提示
       window.dispatchEvent(new CustomEvent('api:error', {
         detail: { message: `服务器错误 (${error.response.status})，请稍后重试` }
@@ -239,12 +238,11 @@ export function createSSEConnection(sessionId: string, onMessage: (data: any) =>
       const data = JSON.parse(event.data)
       onMessage(data)
     } catch (e) {
-      console.error('SSE parse error:', e)
+      // SSE 解析错误不阻断连接
     }
   }
 
   eventSource.onerror = (error) => {
-    console.error('SSE error:', error)
     onError?.()
     eventSource.close()
   }

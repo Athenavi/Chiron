@@ -171,11 +171,8 @@ const THEME_REGISTRY: Record<ThemeId, ThemePreset> = {
   },
 }
 
-const systemDark = window.matchMedia('(prefers-color-scheme: dark)')
-
 export const useThemeStore = defineStore('theme', () => {
   const activeThemeId = ref<ThemeId>('linear')
-  const mode = ref<ThemeMode>('light')
   const preference = ref<ThemePreference>('system')
 
   const accent = ref<string | null>(null)
@@ -230,9 +227,8 @@ export const useThemeStore = defineStore('theme', () => {
     setMode(isDark.value ? 'light' : 'dark')
   }
 
-  function toggleTheme() {
-    toggleMode()
-  }
+  // toggleTheme 是 toggleMode 的别名，供外部使用
+  const toggleTheme = toggleMode
 
   function setAccent(color: string | null) {
     if (color && /^#[0-9a-fA-F]{6}$/.test(color)) {
@@ -281,7 +277,6 @@ export const useThemeStore = defineStore('theme', () => {
 
   return {
     activeThemeId,
-    mode,
     preference,
     preset,
     isDark,

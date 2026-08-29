@@ -30,7 +30,6 @@ export function useCrudResource<T>(initialData: T, loader: () => Promise<T>) {
       data.value = await loader()
     } catch (e) {
       error.value = apiErrorMessage(e, '加载失败')
-      console.error('Failed to load resource:', e)
     } finally {
       loading.value = false
     }
