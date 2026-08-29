@@ -326,6 +326,29 @@ class GatewayRouter:
             logger.error("Provider %s embed failed: %s", provider.name, e)
             return EmbeddingResponse()
 
+    async def health_check(self) -> dict:
+        """返回各 Provider 健康状态"""
+        result = {}
+        for name, provider in self._providers.items():
+            state = self._breakers[name].state.value
+            try:
+                # 尝试廉价模型调用 probe
+                resp = await provider.chat(
+                    [ChatMessage(role="user", content="ping")],
+                    model="gpt-3.5-turbo" if name == "openai" else "claude-3-haiku-20240307" if name == "anthropic" else "deepseek-chat",
+                    max_tokens=1,
+                    temperature=0,
+                )
+                if resp.finish_reason != "error":
+                    self._breakers[name].record_success()
+                    result[name] = {"status": "ok", "circuit": state}
+                else:
+                    result[name] = {"status": "error", "circuit": state, "message": "probe failed"}
+            except Exception as e:
+                self._breakers[name].record_failure()
+                result[name] = {"status": "error", "circuit": state, "message": str(e)}
+        return result
+
     async def close(self) -> None:
         for p in self._providers.values():
             await p.close()
