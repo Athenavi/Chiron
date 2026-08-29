@@ -14,6 +14,21 @@ import (
 	"github.com/athenavi/chiron/internal/db"
 )
 
+// ── 双限流器说明 ──────────────────────────────────────────────────────
+//
+// 系统同时存在两个限流器，各有独立用途，非冗余：
+//
+// 1. TenantRateLimiter（本文件）— 令牌桶算法，QPS 级限流
+//    用于知识库（KB）等对 QPS 敏感的场景（每租户 QPS=50, Burst=100）。
+//    通过 Redis Lua 脚本实现分布式令牌桶，支持精确的秒级速率控制。
+//
+// 2. DistributedRateLimiter（distributed_ratelimit.go）— 固定窗口算法，RPM 级限流
+//    用于通用 API 限流（全局/租户/用户三级 RPM），基于 Redis INCR + TTL
+//    实现固定窗口计数，适合粗粒度每分钟限流。
+//
+// 二者算法不同、粒度不同、适用场景不同，不可合并。
+// ─────────────────────────────────────────────────────────────────────
+
 const tenantBucketLua = `
 local key = KEYS[1]
 local capacity = tonumber(ARGV[1])

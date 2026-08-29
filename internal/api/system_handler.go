@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -9,14 +10,21 @@ import (
 	"time"
 
 	"github.com/athenavi/chiron/internal/db"
+	"github.com/athenavi/chiron/internal/engine"
 	"github.com/athenavi/chiron/internal/monitor"
 )
 
 // SystemHandler provides health, metrics, and trace endpoints.
-type SystemHandler struct{}
+type SystemHandler struct {
+	pythonClient *engine.PythonClient
+}
 
 func NewSystemHandler() *SystemHandler {
 	return &SystemHandler{}
+}
+
+func NewSystemHandlerWithEngine(pyClient *engine.PythonClient) *SystemHandler {
+	return &SystemHandler{pythonClient: pyClient}
 }
 
 // HealthScores returns calculated health scores based on live metrics.
@@ -218,6 +226,21 @@ func systemScore(m map[string]interface{}) int {
 func (h *SystemHandler) DatabaseHealth(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	result := db.GlobalDBManager.HealthCheck(ctx)
+	OK(w, result)
+}
+
+// PythonEngineHealth Python 引擎健康检查端点
+func (h *SystemHandler) PythonEngineHealth(w http.ResponseWriter, r *http.Request) {
+	if h.pythonClient == nil {
+		OK(w, map[string]interface{}{
+			"healthy": false,
+			"error":   "python engine not configured",
+		})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	result := h.pythonClient.HealthCheck(ctx)
 	OK(w, result)
 }
 

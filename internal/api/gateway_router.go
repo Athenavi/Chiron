@@ -260,8 +260,12 @@ func NewGatewayRouter(
 	// P0-P1 修复：余额已由 Deduct/AddCredits 同步写库（PG 原子 UPDATE），
 	// 移除 BalanceSyncer 异步落库订阅，避免多副本 split-brain 与重复扣费。
 
-	// Agent execution semaphore
+	// Agent execution semaphore — global concurrency limit
 	agentSem := make(chan struct{}, cfg.AgentMaxConcurrency)
+
+	// Tenant resource manager — per-tenant concurrency & storage quotas
+	tenantResMgr := NewTenantResourceManager(cfg.AgentMaxConcurrency)
+	tenantResMgr.StartCleanup(context.Background(), 30*time.Minute)
 
 	// Submit handler (proxies to Python)
 	submitHandler := NewSubmitHandler(pythonClient, sessionMgr, eventHub, billingMgr)
@@ -286,7 +290,7 @@ func NewGatewayRouter(
 	toolHandler := NewToolHandler(pythonClient, authenticator)
 
 	// System
-	systemHandler := NewSystemHandler()
+	systemHandler := NewSystemHandlerWithEngine(pythonClient)
 
 	// Media
 	mediaHandler := NewMediaHandler(fileStore, authenticator)
@@ -466,6 +470,8 @@ func registerPublicEndpoints(
 	mux.Handle("POST /v1/internal/db/execute", rlMW(internalTokenMW(cfg, http.HandlerFunc(systemHandler.DBExecute))))
 	mux.Handle("POST /v1/internal/db/batch-execute", rlMW(internalTokenMW(cfg, http.HandlerFunc(systemHandler.DBBatchExecute))))
 	mux.Handle("GET /v1/internal/db/health", rlMW(internalTokenMW(cfg, http.HandlerFunc(systemHandler.DatabaseHealth))))
+
+	mux.Handle("GET /v1/internal/python/health", rlMW(internalTokenMW(cfg, http.HandlerFunc(systemHandler.PythonEngineHealth))))
 
 	mux.Handle("POST /v1/internal/redis/get", rlMW(internalTokenMW(cfg, http.HandlerFunc(systemHandler.RedisGet))))
 	mux.Handle("POST /v1/internal/redis/set", rlMW(internalTokenMW(cfg, http.HandlerFunc(systemHandler.RedisSet))))

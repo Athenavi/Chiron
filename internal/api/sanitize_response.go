@@ -14,17 +14,40 @@ var SensitiveFields = []string{
 	"access_key", "secret_key", "private_key", "api_key",
 }
 
-// SanitizeResponseMiddleware 脱敏响应中间件
+// sanitizeSensitivePaths 需要脱敏的路径前缀白名单。
+// 只有匹配这些前缀的响应才会被全量缓冲和脱敏，其他路径零开销透传。
+var sanitizeSensitivePaths = []string{
+	"/v1/admin/", "/admin/",           // 管理后台（含租户/用户敏感配置）
+	"/v1/ent/", "/ent/",               // 企业 SSO/策略配置
+	"/v1/install/",                    // 安装向导（含 DSN/密钥配置）
+	"/v1/auth/register",               // 注册（密码传输）
+	"/v1/auth/login",                  // 登录（密码传输）
+	"/v1/auth/sso/",                   // SSO OIDC 配置
+}
+
+// sanitizePathAllowed 判断路径是否需要脱敏缓冲。
+func sanitizePathAllowed(path string) bool {
+	for _, prefix := range sanitizeSensitivePaths {
+		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// SanitizeResponseMiddleware 脱敏响应中间件 — 路径白名单模式。
+// 只有匹配 sanitizeSensitivePaths 前缀的路径才进行全量缓冲+脱敏，
+// 其他路径零开销直接透传，避免大 JSON 响应（如对话列表）的额外内存分配和延迟。
 func SanitizeResponseMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// P0-性能：流式响应（SSE/text/event-stream）跳过缓冲，直接透传
-		if strings.Contains(r.Header.Get("Accept"), "text/event-stream") {
+		// 非敏感路径零开销直通
+		if !sanitizePathAllowed(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
-		// 只对JSON响应进行脱敏
-		if !strings.Contains(r.Header.Get("Accept"), "application/json") &&
-			!strings.Contains(r.Header.Get("Content-Type"), "application/json") {
+
+		// P0-性能：流式响应（SSE/text/event-stream）跳过缓冲，直接透传
+		if strings.Contains(r.Header.Get("Accept"), "text/event-stream") {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -43,10 +66,11 @@ func SanitizeResponseMiddleware(next http.Handler) http.Handler {
 			var data interface{}
 			if err := json.Unmarshal(buf.Bytes(), &data); err == nil {
 				sanitizeMap(data)
-				sanitized, _ := json.Marshal(data)
-				w.Header().Set("Content-Length", strconv.Itoa(len(sanitized)))
-				w.Write(sanitized)
-				return
+				if sanitized, err := json.Marshal(data); err == nil {
+					w.Header().Set("Content-Length", strconv.Itoa(len(sanitized)))
+					w.Write(sanitized)
+					return
+				}
 			}
 		}
 

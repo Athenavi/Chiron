@@ -78,6 +78,59 @@ func NewPythonClient(addresses ...string) *PythonClient {
 	}
 }
 
+// HealthCheck 对 Python 引擎执行健康检查（GET /health），
+// 返回状态和地址级信息。超时 5 秒，不触发重试逻辑。
+func (c *PythonClient) HealthCheck(ctx context.Context) map[string]interface{} {
+	result := make(map[string]interface{})
+	allUp := true
+	type addrStatus struct {
+		Status    string `json:"status"`
+		LatencyMs int64  `json:"latency_ms,omitempty"`
+		Error     string `json:"error,omitempty"`
+	}
+	addrs := make(map[string]addrStatus, len(c.addresses))
+
+	for _, addr := range c.addresses {
+		status := addrStatus{Status: "down"}
+		start := time.Now()
+		req, err := http.NewRequestWithContext(ctx, "GET", addr+"/health", nil)
+		if err != nil {
+			status.Error = err.Error()
+			allUp = false
+			addrs[addr] = status
+			continue
+		}
+		resp, err := c.client.Do(req)
+		latency := time.Since(start).Milliseconds()
+		status.LatencyMs = latency
+		if err != nil {
+			status.Error = err.Error()
+			allUp = false
+			c.markFailure(addr)
+		} else {
+			resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				status.Status = "up"
+				c.markSuccess(addr)
+			} else {
+				status.Error = fmt.Sprintf("HTTP %d", resp.StatusCode)
+				allUp = false
+				c.markFailure(addr)
+			}
+		}
+		addrs[addr] = status
+	}
+
+	result["addresses"] = addrs
+	result["healthy"] = allUp
+	result["total_addresses"] = len(c.addresses)
+	if len(c.addresses) == 0 {
+		result["healthy"] = false
+		result["error"] = "no addresses configured"
+	}
+	return result
+}
+
 // SetInternalToken 配置 Go↔Python 共享内部 token。
 // 转发到 Python 的请求会自动注入 X-Internal-Token header，
 // Python 侧据此校验 ?tenant_id= 透传身份的合法性（P0-3 防伪造）。

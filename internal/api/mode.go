@@ -1,7 +1,9 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -20,37 +22,115 @@ const (
 var validModes = map[string]bool{ModeAsk: true, ModeAuto: true, ModeYOLO: true}
 
 // ── ModeStore ──
+//
+// 内存泄漏防护：使用 sync.Map 替代纯 map + sync.RWMutex，
+// 启动后台定期清理（默认 30 分钟），删除超过 1 小时未更新的 session 记录。
+// 清理间隔和 session TTL 可通过 SetCleanupInterval / SetSessionTTL 调整。
 
 type ModeStore struct {
-	mu    sync.RWMutex
-	modes map[string]string // session_id → mode
+	modes          sync.Map   // session_id → modeEntry
+	cleanupTick    time.Duration
+	sessionTTL     time.Duration
+	stopCleanup    chan struct{}
+	cleanupStarted bool
+	cleanupMu      sync.Mutex
+}
+
+type modeEntry struct {
+	mode string
+	ts   time.Time
 }
 
 func NewModeStore() *ModeStore {
-	return &ModeStore{modes: make(map[string]string)}
+	return &ModeStore{
+		cleanupTick:    30 * time.Minute,
+		sessionTTL:     1 * time.Hour,
+		stopCleanup:    make(chan struct{}),
+		cleanupStarted: false,
+	}
+}
+
+// SetCleanupInterval 设置后台清理间隔（默认 30 分钟）。
+// 必须在 StartCleanup 之前调用才有效。
+func (s *ModeStore) SetCleanupInterval(d time.Duration) {
+	s.cleanupMu.Lock()
+	defer s.cleanupMu.Unlock()
+	if !s.cleanupStarted {
+		s.cleanupTick = d
+	}
+}
+
+// SetSessionTTL 设置 session 记录的 TTL（默认 1 小时），超时未更新将被清理。
+// 必须在 StartCleanup 之前调用才有效。
+func (s *ModeStore) SetSessionTTL(d time.Duration) {
+	s.cleanupMu.Lock()
+	defer s.cleanupMu.Unlock()
+	if !s.cleanupStarted {
+		s.sessionTTL = d
+	}
+}
+
+// StartCleanup 启动后台定期清理过期 session 的协程。
+// 由 main.go 传入 lifecycleCtx 以支持优雅关闭。
+func (s *ModeStore) StartCleanup(ctx context.Context) {
+	s.cleanupMu.Lock()
+	if s.cleanupStarted {
+		s.cleanupMu.Unlock()
+		return
+	}
+	s.cleanupStarted = true
+	s.cleanupMu.Unlock()
+
+	go func() {
+		ticker := time.NewTicker(s.cleanupTick)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				s.cleanup()
+			}
+		}
+	}()
+}
+
+// cleanup 删除超出 TTL 的过期 session。
+func (s *ModeStore) cleanup() {
+	now := time.Now()
+	threshold := now.Add(-s.sessionTTL)
+	var expired []string
+	s.modes.Range(func(key, value interface{}) bool {
+		entry, ok := value.(modeEntry)
+		if ok && entry.ts.Before(threshold) {
+			expired = append(expired, key.(string))
+		}
+		return true
+	})
+	for _, id := range expired {
+		s.modes.Delete(id)
+	}
+	if len(expired) > 0 {
+		slog.Info("mode store: cleaned expired sessions", "count", len(expired))
+	}
 }
 
 func (s *ModeStore) Get(sessionID string) string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	mode, ok := s.modes[sessionID]
-	if !ok {
-		return ModeAuto // default
+	if v, ok := s.modes.Load(sessionID); ok {
+		if entry, ok := v.(modeEntry); ok {
+			return entry.mode
+		}
 	}
-	return mode
+	return ModeAuto // default
 }
 
 func (s *ModeStore) Set(sessionID, mode string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.modes[sessionID] = mode
+	s.modes.Store(sessionID, modeEntry{mode: mode, ts: time.Now()})
 }
 
 // Delete removes a session's mode setting to prevent memory leaks
 func (s *ModeStore) Delete(sessionID string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.modes, sessionID)
+	s.modes.Delete(sessionID)
 }
 
 // ── Permission Manager ──

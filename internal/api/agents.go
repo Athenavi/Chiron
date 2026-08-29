@@ -132,8 +132,16 @@ func (h *AgentHandler) seedPresetAgents() {
 			slog.Warn("seed preset agent: generate id", "name", p.Name, "error", err)
 			continue
 		}
-		toolsJSON, _ := json.Marshal(p.Tools)
-		llmJSON, _ := json.Marshal(p.LLM)
+		toolsJSON, err := json.Marshal(p.Tools)
+		if err != nil {
+			slog.Warn("seed preset agent: marshal tools", "name", p.Name, "error", err)
+			continue
+		}
+		llmJSON, err := json.Marshal(p.LLM)
+		if err != nil {
+			slog.Warn("seed preset agent: marshal llm", "name", p.Name, "error", err)
+			continue
+		}
 		if _, err := db.GlobalDBManager.Exec(ctx,
 			`INSERT INTO agents (id, tenant_id, user_id, name, description, system_prompt, tools, llm_config, max_turns, timeout_seconds, enabled)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true)`,
