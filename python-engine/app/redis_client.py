@@ -113,18 +113,24 @@ class _UnifiedRedisWrapper:
 
     async def exists(self, *keys: str) -> int:
         """Check if keys exist."""
-        # Not implemented in unified client yet
-        return 0
+        raise NotImplementedError(
+            "exists() is not available in unified mode. "
+            "Use fallback direct Redis connection or set USE_UNIFIED_REDIS_CLIENT=false"
+        )
 
     async def expire(self, key: str, seconds: int) -> bool:
         """Set expiration on key."""
-        # Not implemented in unified client yet
-        return False
+        raise NotImplementedError(
+            "expire() is not available in unified mode. "
+            "Use fallback direct Redis connection or set USE_UNIFIED_REDIS_CLIENT=false"
+        )
 
     async def incr(self, key: str) -> int:
         """Increment key value."""
-        # Not implemented in unified client yet
-        return 0
+        raise NotImplementedError(
+            "incr() is not available in unified mode. "
+            "Use fallback direct Redis connection or set USE_UNIFIED_REDIS_CLIENT=false"
+        )
 
     async def ping(self) -> bool:
         """Check connectivity."""

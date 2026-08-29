@@ -22,16 +22,27 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 
-class DBClientError(Exception):
+class GatewayClientError(Exception):
+    """Base error for gateway client calls."""
+
+
+class DBClientError(GatewayClientError):
     """Database client error."""
 
 
-class RedisClientError(Exception):
+class RedisClientError(GatewayClientError):
     """Redis client error."""
 
 
-class UnifiedDBClient:
-    """Unified database client that calls Go gateway API."""
+class _BaseGatewayClient:
+    """Base class for gateway-proxied clients (DB / Redis).
+
+    Shared HTTP transport, authentication, and error handling.
+    Subclasses define ``_error_cls`` and service-specific methods.
+    """
+
+    _error_cls: type[GatewayClientError] = GatewayClientError
+    _health_path: str = ""
 
     def __init__(self, base_url: str | None = None, internal_token: str | None = None):
         self.base_url = (base_url or settings.gateway_internal_url).rstrip("/")
@@ -62,14 +73,35 @@ class UnifiedDBClient:
             resp.raise_for_status()
             result = resp.json()
             if not result.get("success"):
-                raise DBClientError(result.get("error", "unknown error"))
+                raise self._error_cls(result.get("error", "unknown error"))
             return result.get("data", {})
         except httpx.HTTPStatusError as e:
             logger.error(f"HTTP error {e.response.status_code}: {e.response.text}")
-            raise DBClientError(f"HTTP {e.response.status_code}") from e
+            raise self._error_cls(f"HTTP {e.response.status_code}") from e
+        except self._error_cls:
+            raise
         except Exception as e:
             logger.error(f"Request failed: {e}")
-            raise DBClientError(str(e)) from e
+            raise self._error_cls(str(e)) from e
+
+    async def health_check(self) -> dict:
+        """Check service health."""
+        return await self._request("GET", self._health_path)
+
+    async def ping(self) -> bool:
+        """Simple connectivity check."""
+        try:
+            result = await self.health_check()
+            return result.get("available", False) and result.get("ping_ok", False)
+        except Exception:
+            return False
+
+
+class UnifiedDBClient(_BaseGatewayClient):
+    """Unified database client that calls Go gateway API."""
+
+    _error_cls = DBClientError
+    _health_path = "/v1/internal/db/health"
 
     async def fetch_one(self, sql: str, args: list | None = None) -> dict | None:
         """Execute query and return first row."""
@@ -96,59 +128,12 @@ class UnifiedDBClient:
         result = await self._request("POST", "/v1/internal/db/batch-execute", data)
         return result.get("success", False)
 
-    async def health_check(self) -> dict:
-        """Check database health."""
-        return await self._request("GET", "/v1/internal/db/health")
 
-    async def ping(self) -> bool:
-        """Simple connectivity check."""
-        try:
-            result = await self.health_check()
-            return result.get("available", False) and result.get("ping_ok", False)
-        except Exception:
-            return False
-
-
-class UnifiedRedisClient:
+class UnifiedRedisClient(_BaseGatewayClient):
     """Unified Redis client that calls Go gateway API."""
 
-    def __init__(self, base_url: str | None = None, internal_token: str | None = None):
-        self.base_url = (base_url or settings.gateway_internal_url).rstrip("/")
-        self.internal_token = internal_token or settings.internal_token
-        self._client: httpx.AsyncClient | None = None
-
-    async def _get_client(self) -> httpx.AsyncClient:
-        if self._client is None:
-            self._client = httpx.AsyncClient(timeout=settings.http_timeout_default)
-        return self._client
-
-    async def close(self):
-        if self._client:
-            await self._client.aclose()
-            self._client = None
-
-    async def _request(self, method: str, path: str, data: dict | None = None) -> dict:
-        client = await self._get_client()
-        headers = {"X-Internal-Token": self.internal_token}
-        url = f"{self.base_url}{path}"
-
-        try:
-            if method == "GET":
-                resp = await client.get(url, headers=headers)
-            else:
-                resp = await client.post(url, headers=headers, json=data)
-
-            resp.raise_for_status()
-            result = resp.json()
-            if not result.get("success"):
-                raise RedisClientError(result.get("error", "unknown error"))
-            return result.get("data", {})
-        except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error {e.response.status_code}: {e.response.text}")
-            raise RedisClientError(f"HTTP {e.response.status_code}") from e
-        except Exception as e:
-            logger.error(f"Request failed: {e}")
-            raise RedisClientError(str(e)) from e
+    _error_cls = RedisClientError
+    _health_path = "/v1/internal/redis/health"
 
     async def get(self, key: str) -> str | None:
         """Get value by key."""
@@ -169,18 +154,6 @@ class UnifiedRedisClient:
         data = {"keys": list(keys)}
         result = await self._request("POST", "/v1/internal/redis/del", data)
         return result.get("success", False)
-
-    async def health_check(self) -> dict:
-        """Check Redis health."""
-        return await self._request("GET", "/v1/internal/redis/health")
-
-    async def ping(self) -> bool:
-        """Simple connectivity check."""
-        try:
-            result = await self.health_check()
-            return result.get("available", False) and result.get("ping_ok", False)
-        except Exception:
-            return False
 
 
 # Global instances
