@@ -439,6 +439,9 @@ func NewGatewayRouter(
 	// Enterprise eval（authMW + RequireEntPerm("eval:manage")）：Agent 评估系统
 	NewEntEvalHandler().RegisterRoutes(mux, authMW)
 
+	// Enterprise chaos（authMW + RequireEntPerm("chaos:manage")）：混沌工程
+	NewEntChaosHandler().RegisterRoutes(mux, authMW)
+
 	// Mode (auth + rate limited)
 	mux.Handle("GET /v1/mode", authMW(rlMW(http.HandlerFunc(modeHandler.GetMode))))
 	mux.Handle("POST /v1/mode", authMW(rlMW(http.HandlerFunc(modeHandler.SetMode))))
