@@ -171,7 +171,7 @@ func loadConfig() *Config {
 		RedisAddrs:          getStringSlice("REDIS_ADDRS", []string{}),
 		RedisMasterName:     getEnv("REDIS_MASTER_NAME", ""),
 		RedisSentinelAddrs:  getStringSlice("REDIS_SENTINEL_ADDRS", []string{}),
-		RedisPoolSize:       getInt("REDIS_POOL_SIZE", 50),
+		RedisPoolSize:       getInt("REDIS_POOL_SIZE", 100),
 		JWTSecret:           getEnv("JWT_SECRET", ""),
 		JWTExpiration:       getDuration("JWT_EXPIRATION", 24*time.Hour),
 		InternalToken:       getEnv("INTERNAL_TOKEN", ""),

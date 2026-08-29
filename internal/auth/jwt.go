@@ -3,7 +3,6 @@ package auth
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"os"
 	"time"
 
@@ -110,15 +109,14 @@ func generateID() string {
 var jwtAuth *Authenticator
 
 // InitJWTAuth initializes the global JWT authenticator from environment variables.
-func InitJWTAuth() {
+// Returns an error if JWT_SECRET is missing or too short, instead of calling os.Exit.
+func InitJWTAuth() error {
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
-		slog.Error("JWT_SECRET environment variable is required and must be at least 32 characters")
-		os.Exit(1)
+		return fmt.Errorf("JWT_SECRET environment variable is required and must be at least 32 characters")
 	}
 	if len(secret) < 32 {
-		slog.Error("JWT_SECRET must be at least 32 characters long", "length", len(secret))
-		os.Exit(1)
+		return fmt.Errorf("JWT_SECRET must be at least 32 characters long, got %d", len(secret))
 	}
 	expiration := 24 * time.Hour
 	if v := os.Getenv("JWT_EXPIRATION"); v != "" {
@@ -127,6 +125,7 @@ func InitJWTAuth() {
 		}
 	}
 	jwtAuth = NewAuthenticator(secret, expiration)
+	return nil
 }
 
 // ParseJWT is a convenience function that parses and validates a JWT token string.

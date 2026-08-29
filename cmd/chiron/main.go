@@ -257,11 +257,12 @@ func main() {
 
 	// ── HTTP Server ──
 	srv := &http.Server{
-		Addr:         ":" + cfg.Port,
-		Handler:      router,
-		ReadTimeout:  cfg.ReadTimeout,
-		WriteTimeout: cfg.WriteTimeout,
-		IdleTimeout:  cfg.IdleTimeout,
+		Addr:              ":" + cfg.Port,
+		Handler:           router,
+		ReadTimeout:       cfg.ReadTimeout,
+		ReadHeaderTimeout: 10 * time.Second,
+		WriteTimeout:      cfg.WriteTimeout,
+		IdleTimeout:       cfg.IdleTimeout,
 	}
 
 	// Graceful shutdown

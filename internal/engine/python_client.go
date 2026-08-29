@@ -127,6 +127,17 @@ func (c *PythonClient) do(req *http.Request) (*http.Response, error) {
 	addr := req.URL.Scheme + "://" + req.URL.Host
 	var lastErr error
 
+	// 缓存请求体，用于重试时重新创建 body
+	var bodyBuf []byte
+	if req.Body != nil {
+		var err error
+		bodyBuf, err = io.ReadAll(req.Body)
+		req.Body.Close()
+		if err != nil {
+			return nil, fmt.Errorf("read request body: %w", err)
+		}
+	}
+
 	for attempt := 0; attempt <= defaultRetryConfig.MaxRetries; attempt++ {
 		if attempt > 0 {
 			// 指数退避
@@ -149,6 +160,11 @@ func (c *PythonClient) do(req *http.Request) (*http.Response, error) {
 				return nil, req.Context().Err()
 			case <-time.After(backoff):
 			}
+		}
+
+		// 重试时需要重新创建 body（bytes.Reader 被消耗后不可重复读）
+		if bodyBuf != nil {
+			req.Body = io.NopCloser(bytes.NewReader(bodyBuf))
 		}
 
 		resp, err := c.client.Do(req)
