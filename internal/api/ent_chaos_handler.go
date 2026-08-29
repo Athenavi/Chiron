@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"github.com/athenavi/chiron/internal/auth"
 	"github.com/athenavi/chiron/internal/db"
@@ -35,9 +36,23 @@ func (h *EntChaosHandler) RegisterRoutes(mux *http.ServeMux, authMW func(http.Ha
 }
 
 func (h *EntChaosHandler) ListExperiments(w http.ResponseWriter, r *http.Request) {
+	claims := auth.GetClaims(r.Context())
+	if claims == nil || claims.TenantID == "" {
+		Forbidden(w, "tenant_id not found")
+		return
+	}
+	// 分页参数
+	page := 1
+	if p := r.URL.Query().Get("page"); p != "" {
+		if n, err := strconv.Atoi(p); err == nil && n > 0 {
+			page = n
+		}
+	}
+	limit := 50
 	rows, err := db.GlobalDBManager.Query(r.Context(),
 		`SELECT id, fault_type, target, duration_ms, intensity, status, config, result, created_at
-		 FROM ent_chaos_experiments ORDER BY created_at DESC`)
+		 FROM ent_chaos_experiments WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
+		claims.TenantID, limit, (page-1)*limit)
 	if err != nil {
 		slog.Error("chaos list experiments", "error", err)
 		InternalError(w, "failed to list experiments")
@@ -64,7 +79,7 @@ func (h *EntChaosHandler) ListExperiments(w http.ResponseWriter, r *http.Request
 	if list == nil {
 		list = []map[string]interface{}{}
 	}
-	OK(w, map[string]interface{}{"experiments": list})
+	OK(w, map[string]interface{}{"experiments": list, "page": page})
 }
 
 func (h *EntChaosHandler) CreateExperiment(w http.ResponseWriter, r *http.Request) {
@@ -102,13 +117,14 @@ func (h *EntChaosHandler) CreateExperiment(w http.ResponseWriter, r *http.Reques
 	if configData == "" {
 		configData = "{}"
 	}
-	insertErr := db.GlobalDBManager.QueryRow(r.Context(),
+	idExp := uuid.New().String()
+	idErr := db.GlobalDBManager.QueryRow(r.Context(),
 		`INSERT INTO ent_chaos_experiments (id, tenant_id, fault_type, target, duration_ms, intensity, config, created_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) RETURNING id`,
-		uuid.New().String(), claims.TenantID, body.FaultType, body.Target, body.DurationMs, body.Intensity, configData).
-		Scan(&insertErr)
-	if insertErr != nil {
-		slog.Error("chaos create experiment", "error", insertErr)
+		idExp, claims.TenantID, body.FaultType, body.Target, body.DurationMs, body.Intensity, configData).
+		Scan(&idExp)
+	if idErr != nil {
+		slog.Error("chaos create experiment", "error", idErr)
 		InternalError(w, "failed to create experiment")
 		return
 	}
@@ -116,30 +132,49 @@ func (h *EntChaosHandler) CreateExperiment(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *EntChaosHandler) GetExperiment(w http.ResponseWriter, r *http.Request) {
+	claims := auth.GetClaims(r.Context())
+	if claims == nil || claims.TenantID == "" {
+		Forbidden(w, "tenant_id not found")
+		return
+	}
 	expID := r.PathValue("id")
 	if expID == "" {
 		BadRequest(w, "id is required")
 		return
 	}
-	rowErr := db.GlobalDBManager.QueryRow(r.Context(),
+	var expIDOut, faultType, target, status, configContent string
+	var durationMs, result int
+	var intensity float64
+	err := db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT id, fault_type, target, duration_ms, intensity, status, config, result, created_at
-		 FROM ent_chaos_experiments WHERE id = $1`, expID).
-		Scan(&rowErr)`
-	if rowErr != nil {
+		 FROM ent_chaos_experiments WHERE id = $1 AND tenant_id = $2`, expID, claims.TenantID).
+		Scan(&expIDOut, &faultType, &target, &durationMs, &intensity, &status, &configContent, &result, nil)
+	if err != nil {
 		NotFound(w, "experiment not found")
 		return
 	}
-	OK(w, "experiment_found")
+	OK(w, map[string]interface{}{
+		"id":          expIDOut,
+		"fault_type":  faultType,
+		"target":      target,
+		"duration_ms": durationMs,
+		"status":      status,
+	})
 }
 
 func (h *EntChaosHandler) RollbackExperiment(w http.ResponseWriter, r *http.Request) {
+	claims := auth.GetClaims(r.Context())
+	if claims == nil || claims.TenantID == "" {
+		Forbidden(w, "tenant_id not found")
+		return
+	}
 	expID := r.PathValue("id")
 	if expID == "" {
 		BadRequest(w, "id is required")
 		return
 	}
 	tag, err := db.GlobalDBManager.Exec(r.Context(),
-		`UPDATE ent_chaos_experiments SET status = 'rolled_back' WHERE id = $1`, expID)
+		`UPDATE ent_chaos_experiments SET status = 'rolled_back' WHERE id = $1 AND tenant_id = $2`, expID, claims.TenantID)
 	if err != nil {
 		slog.Error("chaos rollback experiment", "error", err)
 		InternalError(w, "failed to rollback experiment")
@@ -153,11 +188,17 @@ func (h *EntChaosHandler) RollbackExperiment(w http.ResponseWriter, r *http.Requ
 }
 
 func (h *EntChaosHandler) Status(w http.ResponseWriter, r *http.Request) {
+	claims := auth.GetClaims(r.Context())
+	if claims == nil {
+		Forbidden(w, "tenant_id not found")
+		return
+	}
+	tenantID := claims.TenantID
 	var activeCount, totalCount int
 	_ = db.GlobalDBManager.QueryRow(r.Context(),
-		`SELECT COUNT(*) FROM ent_chaos_experiments WHERE status = 'running'`).Scan(&activeCount)
+		`SELECT COUNT(*) FROM ent_chaos_experiments WHERE tenant_id = $1 AND status = 'running'`, tenantID).Scan(&activeCount)
 	_ = db.GlobalDBManager.QueryRow(r.Context(),
-		`SELECT COUNT(*) FROM ent_chaos_experiments`).Scan(&totalCount)
+		`SELECT COUNT(*) FROM ent_chaos_experiments WHERE tenant_id = $1`, tenantID).Scan(&totalCount)
 	OK(w, map[string]interface{}{
 		"active_count": activeCount,
 		"total_count":  totalCount,
@@ -166,13 +207,18 @@ func (h *EntChaosHandler) Status(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *EntChaosHandler) DeleteExperiment(w http.ResponseWriter, r *http.Request) {
+	claims := auth.GetClaims(r.Context())
+	if claims == nil || claims.TenantID == "" {
+		Forbidden(w, "tenant_id not found")
+		return
+	}
 	expID := r.PathValue("id")
 	if expID == "" {
 		BadRequest(w, "id is required")
 		return
 	}
 	tag, err := db.GlobalDBManager.Exec(r.Context(),
-		`DELETE FROM ent_chaos_experiments WHERE id = $1`, expID)
+		`DELETE FROM ent_chaos_experiments WHERE id = $1 AND tenant_id = $2`, expID, claims.TenantID)
 	if err != nil {
 		slog.Error("chaos delete experiment", "error", err)
 		InternalError(w, "failed to delete experiment")
