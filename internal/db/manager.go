@@ -52,7 +52,7 @@ func (m *DBManager) GetReadPool() (*pgxpool.Pool, error) {
 	p := Pool
 	PoolMu.RUnlock()
 	if Router != nil {
-		pool := Router.ReadPreferred()
+		pool := Router.Read()
 		if pool == nil {
 			return nil, ErrDatabaseNotAvailable
 		}
