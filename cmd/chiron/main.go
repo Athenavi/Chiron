@@ -115,7 +115,7 @@ func main() {
 	// 引导：连上数据库后，读取后台已持久化的基础设施/业务配置覆盖 cfg。
 	// 使后续 Redis/存储/路由初始化使用 DB 值——支持仅靠 APP_SECRET 切换 Redis 集群等，重启生效。
 	if pgConnected {
-		applyDBSettingsAfterConnect(cfg)
+		applyDBSettingsAfterConnect(ctx, cfg)
 	}
 
 	// ── Redis ──
@@ -146,11 +146,11 @@ func main() {
 	if db.Redis != nil {
 		auditSink := db.NewDefaultAuditSink()
 		defer auditSink.Close()
-		auditCtx, auditCancel := context.WithCancel(context.Background())
-		defer auditCancel()
-		go func() { _ = db.NewAuditConsumer(db.Redis, auditSink.Handle).Start(auditCtx) }()
+		go func() { _ = db.NewAuditConsumer(db.Redis, auditSink.Handle).Start(lifecycleCtx) }()
 		slog.Info("audit consumer started", "stream", "audit:events")
 	}
+	// 启动审计中间件 worker（受 lifecycleCtx 控制，支持优雅关闭）
+	api.StartAuditWorker(lifecycleCtx)
 
 	// ── Monitor ──
 	monitor.Init()
@@ -209,7 +209,7 @@ func main() {
 				slog.Error("INTERNAL_TOKEN not set but python engine is configured — refusing to start (set INTERNAL_TOKEN env var or remove PYTHON_ENGINE_ADDRESS)")
 				return
 			}
-			api.StartCronScheduler(ctx, pythonClient)
+			api.StartCronScheduler(lifecycleCtx, pythonClient)
 			slog.Info("python engine configured", "addresses", addrs)
 		}
 	} else if !setupMode {
@@ -245,14 +245,14 @@ func main() {
 		slog.Info("session manager initialized")
 
 		// ── Background Maintenance ──
-		api.StartBlacklistCleaner(ctx)
+		api.StartBlacklistCleaner(lifecycleCtx)
 		// P0-1: 启动JWT黑名单跨实例同步
-		api.StartBlacklistPubSub(ctx)
+		api.StartBlacklistPubSub(lifecycleCtx)
 
 		// P1-1: 启动数据库连接池自动调优（每5分钟检查一次）
 		if db.GlobalDBManager != nil {
 			db.GlobalDBManager.SetTuneInterval(5 * time.Minute)
-			db.GlobalDBManager.StartAutoTuner(ctx)
+			db.GlobalDBManager.StartAutoTuner(lifecycleCtx)
 			slog.Info("database connection pool auto-tuner started")
 		}
 
@@ -285,7 +285,7 @@ func main() {
 	<-done
 	slog.Info("shutting down...")
 
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	shutdownCtx, shutdownCancel := context.WithTimeout(lifecycleCtx, 10*time.Second)
 	defer shutdownCancel()
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
@@ -299,12 +299,11 @@ func main() {
 // 依赖：db.Pool 已就绪，cfg.AppSecret 已校验。
 // 作用范围：仅影响进程「后续初始化」使用的配置（Redis 集群、CORS、存储、S3、
 // Agent、限流、支付）；DB 连接本身使用 env/默认引导串，切换数据库集群需重启。
-func applyDBSettingsAfterConnect(cfg *config.Config) {
+func applyDBSettingsAfterConnect(ctx context.Context, cfg *config.Config) {
 	if db.Pool == nil {
 		return
 	}
 	store := settings.New(db.Pool, cfg.AppSecret)
-	ctx := context.Background()
 
 	apply := func(category string, fn func(map[string]interface{})) {
 		m, err := store.LoadConfig(ctx, category)

@@ -691,8 +691,8 @@ func (h *InstallHandler) Step3(w http.ResponseWriter, r *http.Request) {
 		BadRequest(w, "email, password, and name are required")
 		return
 	}
-	if len(req.Password) < 8 {
-		BadRequest(w, "password must be at least 8 characters")
+	if ok, msg := auth.ValidatePasswordComplexity(req.Password); !ok {
+		BadRequest(w, msg)
 		return
 	}
 
@@ -761,7 +761,7 @@ func createOwnerAccount(ctx context.Context, email, name, password string) (stri
 	}
 
 	// Hash password
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), auth.BcryptCost)
 	if err != nil {
 		return "", err
 	}
@@ -809,8 +809,8 @@ func (h *InstallHandler) Setup(w http.ResponseWriter, r *http.Request) {
 		BadRequest(w, "email, password, and name are required")
 		return
 	}
-	if len(req.Password) < 8 {
-		BadRequest(w, "password must be at least 8 characters")
+	if ok, msg := auth.ValidatePasswordComplexity(req.Password); !ok {
+		BadRequest(w, msg)
 		return
 	}
 

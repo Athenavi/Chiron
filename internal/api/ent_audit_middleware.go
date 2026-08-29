@@ -45,36 +45,44 @@ func auditWorker(ctx context.Context) {
 			for {
 				select {
 				case rec := <-auditChan:
-					writeAuditRecord(rec)
+					writeAuditRecord(ctx, rec)
 				default:
 					return
 				}
 			}
 		case rec := <-auditChan:
-			writeAuditRecord(rec)
+			writeAuditRecord(ctx, rec)
 		}
 	}
 }
 
-func writeAuditRecord(rec auditRecord) {
+// writeAuditRecord 使用传入的 ctx 写入审计日志，避免使用 context.Background()。
+// 从 auditWorker 传入 lifecycleCtx，由 lifecycleCtx 控制超时/取消。
+func writeAuditRecord(ctx context.Context, rec auditRecord) {
 	defer func() {
 		if r := recover(); r != nil {
 			slog.Error("audit middleware: record panic", "panic", r)
 		}
 	}()
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	writeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
+	db.AuditLog(writeCtx, rec.userID, rec.tenantID, rec.action, rec.resource, rec.detail, rec.ip, nil)
+}
+
+// writeAuditRecordWithContext 使用传入的 ctx 写入审计日志，避免使用 context.Background()。
+// Deprecated: 请直接使用 writeAuditRecord(ctx, rec)。
+func writeAuditRecordWithContext(ctx context.Context, rec auditRecord) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("audit middleware: record panic", "panic", r)
+		}
+	}()
 	db.AuditLog(ctx, rec.userID, rec.tenantID, rec.action, rec.resource, rec.detail, rec.ip, nil)
 }
 
-func init() {
-	// P0: init 中启动默认 worker（context.Background 不影响 shutdown，因为
-	// main.go 可调用 StartAuditWorker(lifecycleCtx) 替换为可取消的 worker）
-	go auditWorker(context.Background())
-}
-
-// StartAuditWorker 启动一个可取消的审计 worker，替换 init 启动的默认 worker。
-// 由 main.go 传入 lifecycleCtx 以支持优雅关闭。
+// StartAuditWorker 启动一个可取消的审计 worker。
+// 由 main.go 传入 lifecycleCtx 以支持优雅关闭，替换默认的 context.Background() worker。
+// 注意：init() 中不再默认启动 worker，由 main.go 显式调用，避免无法取消的 goroutine 逃逸。
 func StartAuditWorker(ctx context.Context) {
 	go auditWorker(ctx)
 }

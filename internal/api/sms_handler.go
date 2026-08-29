@@ -420,7 +420,7 @@ func (h *SmsHandler) provisionSmsUser(ctx context.Context, phone string) (UserRe
 	if _, err := rand.Read(randomPassword); err != nil {
 		return UserResponse{}, err
 	}
-	passwordHash, err := bcrypt.GenerateFromPassword([]byte(hex.EncodeToString(randomPassword)), bcrypt.DefaultCost)
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(hex.EncodeToString(randomPassword)), auth.BcryptCost)
 	if err != nil {
 		return UserResponse{}, err
 	}

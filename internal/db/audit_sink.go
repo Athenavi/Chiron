@@ -88,9 +88,13 @@ func (s *AuditSink) loop() {
 	for {
 		select {
 		case <-ticker.C:
-			s.Flush(context.Background())
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			s.Flush(ctx)
+			cancel()
 		case <-s.stopCh:
-			s.Flush(context.Background())
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			s.Flush(ctx)
+			cancel()
 			return
 		}
 	}

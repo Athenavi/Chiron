@@ -231,12 +231,8 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		BadRequest(w, "email, password, and name are required")
 		return
 	}
-	if len(req.Password) < 8 {
-		BadRequest(w, "password must be at least 8 characters")
-		return
-	}
-	if len(req.Password) > 128 {
-		BadRequest(w, "password too long (max 128 characters)")
+	if ok, msg := auth.ValidatePasswordComplexity(req.Password); !ok {
+		BadRequest(w, msg)
 		return
 	}
 	if len(req.Email) > 255 || len(req.Name) > 128 {
@@ -276,7 +272,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), auth.BcryptCost)
 	if err != nil {
 		InternalError(w, "registration failed")
 		return

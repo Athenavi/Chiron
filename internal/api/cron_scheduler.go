@@ -111,7 +111,11 @@ func (s *CronScheduler) sync() {
 			continue
 		}
 		j := j // 循环变量拷贝：闭包捕获稳定值（Go 1.22 前语义）
-		eid, err := s.cron.AddFunc(j.Schedule, func() { s.execute(context.Background(), j) })
+		eid, err := s.cron.AddFunc(j.Schedule, func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+				defer cancel()
+				s.execute(ctx, j)
+			})
 		if err != nil {
 			slog.Warn("cron register failed", "job", j.Name, "schedule", j.Schedule, "error", err)
 			continue

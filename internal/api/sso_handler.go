@@ -604,8 +604,8 @@ func (h *SSOHandler) SetPassword(w http.ResponseWriter, r *http.Request) {
 		BadRequest(w, ErrInvalidReq)
 		return
 	}
-	if len(req.NewPassword) < 8 || len(req.NewPassword) > 128 {
-		BadRequest(w, "password must be 8-128 characters")
+	if ok, msg := auth.ValidatePasswordComplexity(req.NewPassword); !ok {
+		BadRequest(w, msg)
 		return
 	}
 	ctx := r.Context()
@@ -635,7 +635,7 @@ func (h *SSOHandler) SetPassword(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), auth.BcryptCost)
 	if err != nil {
 		InternalError(w, "set password failed")
 		return
@@ -1161,7 +1161,7 @@ func (h *SSOHandler) provisionAndBind(r *http.Request, provider *ssoProvider, id
 	if _, err := rand.Read(randomPassword); err != nil {
 		return nil, err
 	}
-	passwordHash, err := bcrypt.GenerateFromPassword([]byte(hex.EncodeToString(randomPassword)), bcrypt.DefaultCost)
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(hex.EncodeToString(randomPassword)), auth.BcryptCost)
 	if err != nil {
 		return nil, err
 	}
