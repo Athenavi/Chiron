@@ -52,6 +52,8 @@ export interface ChatAttachment {
   url: string
   /** 是否为图片（图片在消息气泡内内联展示） */
   isImage: boolean
+  /** 是否为音频（音频在消息气泡内显示播放器） */
+  isAudio?: boolean
 }
 
 export interface ReasoningItem extends ChatItemBase {

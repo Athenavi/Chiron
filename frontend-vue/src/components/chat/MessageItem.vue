@@ -361,6 +361,20 @@ function handleMsgClick(e: MouseEvent) {
               loading="lazy"
               @error="onAttachmentImgError(att)"
             >
+            <div
+              v-else-if="att.isAudio"
+              class="msg-attachment-audio"
+            >
+              <audio
+                :src="attachmentUrl(att)"
+                controls
+                preload="metadata"
+                class="msg-audio-player"
+              >
+                您的浏览器不支持音频播放
+              </audio>
+              <span class="att-audio-name">{{ att.name }}</span>
+            </div>
             <a
               v-else
               :href="attachmentUrl(att)"
@@ -651,6 +665,11 @@ function handleMsgClick(e: MouseEvent) {
 .msg-attachment-file:hover { border-color: var(--primary); color: var(--primary); }
 .msg-attachment-file .att-name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .msg-attachment-file .att-size { color: var(--text-tertiary); font-size: 12px; }
+/* 音频播放器 */
+.msg-attachment-audio { display: flex; flex-direction: column; gap: 4px; width: 100%; max-width: 300px; padding: 8px; border-radius: var(--sig-radius-card); border: 1px solid var(--border); background: var(--bg-card); }
+.msg-audio-player { width: 100%; height: 40px; border-radius: 4px; }
+.msg-audio-player::-webkit-media-controls-panel { background: var(--bg-card); }
+.att-audio-name { font-size: 12px; color: var(--text-tertiary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ── 反向定位：来源工作台 chips（与 kb-hits 标签同设计语言：胶囊 + CSS 变量色）── */
 .source-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }

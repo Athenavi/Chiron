@@ -1,7 +1,7 @@
 ﻿<script setup lang="ts">
 import { ref, onMounted, watch, computed, nextTick } from 'vue'
 import { Input, Button, Select, message } from 'ant-design-vue'
-import { SendOutlined, StopOutlined, PaperClipOutlined, CloseOutlined, FileOutlined, BranchesOutlined } from '@ant-design/icons-vue'
+import { SendOutlined, StopOutlined, PaperClipOutlined, CloseOutlined, FileOutlined, BranchesOutlined, AudioOutlined } from '@ant-design/icons-vue'
 import { uploadFile, listModels } from '../../api'
 import type { LlmModel } from '../../api'
 import type { ChatAttachment } from './chat-types'
@@ -40,6 +40,7 @@ const uploading = ref(false)
 
 // 允许的文件类型（图片 + 常见文档）
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml']
+const AUDIO_TYPES = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/flac', 'audio/webm', 'audio/mp4', 'audio/x-m4a', 'audio/aac']
 const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
 
 // ── 模型路由选择器（GET /v1/models，仅 enabled） ──
@@ -167,6 +168,7 @@ async function handleFiles(files: FileList | File[]) {
         mimeType: result.mimeType,
         url: result.url,
         isImage: IMAGE_TYPES.includes(result.mimeType),
+        isAudio: AUDIO_TYPES.includes(result.mimeType),
       })
     }
   } catch (e: any) {
@@ -232,6 +234,76 @@ function discardPastedText() {
 function removeAttachment(id: string) {
   const idx = pendingAttachments.value.findIndex(a => a.id === id)
   if (idx >= 0) pendingAttachments.value.splice(idx, 1)
+}
+
+// ── 录音 ──
+const recording = ref(false)
+const recordingTimer = ref(0)
+let recordingInterval: ReturnType<typeof setInterval> | null = null
+let mediaRecorder: MediaRecorder | null = null
+let audioChunks: Blob[] = []
+
+async function startRecording() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    message.error('浏览器不支持录音')
+    return
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    audioChunks = []
+    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus'
+      : 'audio/webm'
+    mediaRecorder = new MediaRecorder(stream, { mimeType })
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) audioChunks.push(e.data)
+    }
+    mediaRecorder.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop())
+      const blob = new Blob(audioChunks, { type: mimeType })
+      if (blob.size < 100) return // 太短不处理
+      const file = new File([blob], `recording_${Date.now()}.webm`, { type: mimeType })
+      uploading.value = true
+      try {
+        const result = await uploadFile(file)
+        pendingAttachments.value.push({
+          id: result.id,
+          name: '🎤 ' + result.name,
+          size: result.size,
+          mimeType: result.mimeType,
+          url: result.url,
+          isImage: false,
+        })
+      } catch (e: any) {
+        message.error('录音上传失败: ' + (e.message || '网络错误'))
+      } finally {
+        uploading.value = false
+      }
+    }
+    mediaRecorder.start()
+    recording.value = true
+    recordingTimer.value = 0
+    recordingInterval = setInterval(() => { recordingTimer.value++ }, 1000)
+  } catch {
+    message.error('无法访问麦克风，请检查权限设置')
+  }
+}
+
+function stopRecording() {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop()
+  }
+  recording.value = false
+  if (recordingInterval) {
+    clearInterval(recordingInterval)
+    recordingInterval = null
+  }
+}
+
+function formatRecordingTime(seconds: number): string {
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
 }
 
 // ── 斜杠命令 ──
@@ -378,6 +450,19 @@ function onSlashInput() {
               <PaperClipOutlined />
             </template>
           </Button>
+          <Button
+            type="text"
+            size="small"
+            class="record-btn"
+            :class="{ recording: recording }"
+            :title="recording ? '点击停止录音' : '语音输入'"
+            @click="recording ? stopRecording() : startRecording()"
+          >
+            <template #icon>
+              <AudioOutlined />
+            </template>
+            <span v-if="recording" class="recording-timer">{{ formatRecordingTime(recordingTimer) }}</span>
+          </Button>
           <span class="mode-label">模式</span>
           <Select
             :model-value="mode"
@@ -504,6 +589,15 @@ function onSlashInput() {
 .att-remove:hover { background: var(--error); }
 .attach-btn { color: var(--text-tertiary); display: inline-flex; align-items: center; justify-content: center; }
 .attach-btn:hover { color: var(--primary); }
+/* 录音按钮 */
+.record-btn { color: var(--text-tertiary); display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
+.record-btn:hover { color: var(--primary); }
+.record-btn.recording { color: var(--error); animation: pulse-rec 1.2s ease-in-out infinite; }
+@keyframes pulse-rec {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.recording-timer { font-size: 12px; font-variant-numeric: tabular-nums; min-width: 32px; }
 /* 拖拽态：边框主色 + 背景淡色 */
 .input-card.drag-active { border-color: var(--primary); background: var(--primary-bg); box-shadow: var(--shadow-md), 0 0 0 3px var(--primary-bg); }
 
