@@ -9,15 +9,24 @@
 
 from __future__ import annotations
 
+import base64
+import logging
 import os
 import re
 from datetime import datetime
 from typing import Any
 
+import httpx
+
 from app.media.store import create_store
 from app.tools.registry import registry
+from app.tools.ssrf import assert_safe_url, fetch_url_safe
 
+logger = logging.getLogger(__name__)
 _store = create_store()
+
+# 文件下载大小限制：100MB
+MAX_DOWNLOAD_SIZE = 100 * 1024 * 1024
 
 
 def _sanitize_filename(prompt: str) -> str:
@@ -70,11 +79,8 @@ async def image_generate(
             "error": "image generation not available: IMAGE_GEN_API_URL not configured"
         }
 
-    import httpx
-
-    from app.config import settings
-
     try:
+        from app.config import settings
         headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         async with httpx.AsyncClient(timeout=settings.http_timeout_long) as client:
             resp = await client.post(
@@ -135,12 +141,14 @@ async def vision_analyze(
         return result
     # analyze_image 失败时降级：用 llm 客户端直接调用
     try:
-        import httpx
-
         from app.config import settings
 
+        # SSRF 防护：跳过 data: URL
+        if not image_url.startswith("data:"):
+            assert_safe_url(image_url)
+
         async with httpx.AsyncClient(timeout=settings.http_timeout_web) as client:
-            resp = await client.head(image_url, follow_redirects=True)
+            resp = await client.head(image_url, follow_redirects=False)
             content_type = resp.headers.get("content-type", "")
             if not content_type.startswith("image/"):
                 return {"error": f"URL does not point to an image: {content_type}"}
@@ -203,16 +211,18 @@ async def speech_to_text(
             "error": "speech_to_text not available: no OpenAI API key configured (set OPENAI_API_KEY)"
         }
 
-    import httpx
-
-    from app.config import settings as s
+    # SSRF 防护
+    assert_safe_url(audio_url)
 
     try:
-        # 下载音频文件
-        async with httpx.AsyncClient(timeout=s.http_timeout_long) as client:
-            resp = await client.get(audio_url, follow_redirects=True)
+        from app.config import settings as s
+
+        async with httpx.AsyncClient(timeout=s.http_timeout_long, follow_redirects=False) as client:
+            resp = await fetch_url_safe(client, audio_url)
             resp.raise_for_status()
             audio_data = resp.content
+            if len(audio_data) > MAX_DOWNLOAD_SIZE:
+                return {"error": f"audio file too large: {len(audio_data)} bytes (max {MAX_DOWNLOAD_SIZE})"}
 
         # 调用 Whisper API
         whisper_url = f"{base_url.rstrip('/')}/audio/transcriptions"
@@ -273,10 +283,6 @@ async def text_to_speech(
             "error": "text_to_speech not available: no OpenAI API key configured (set OPENAI_API_KEY)"
         }
 
-    import base64
-
-    import httpx
-
     from app.config import settings as s
 
     speed = max(0.25, min(speed, 4.0))
@@ -336,17 +342,22 @@ async def file_analyzer(
     Returns:
         包含分析结果的字典
     """
-    import httpx
+    # SSRF 防护
+    assert_safe_url(file_url)
 
     from app.config import settings as s
 
     try:
         # 下载文件
-        async with httpx.AsyncClient(timeout=s.http_timeout_long, follow_redirects=True) as client:
-            resp = await client.get(file_url)
+        async with httpx.AsyncClient(timeout=s.http_timeout_long, follow_redirects=False) as client:
+            resp = await fetch_url_safe(client, file_url)
             resp.raise_for_status()
             file_data = resp.content
             content_type = resp.headers.get("content-type", "")
+
+        # 文件大小限制（100MB）
+        if len(file_data) > MAX_DOWNLOAD_SIZE:
+            return {"error": f"file too large: {len(file_data)} bytes (max {MAX_DOWNLOAD_SIZE})"}
 
         # 根据类型决定分析策略
         is_image = content_type.startswith("image/") or analysis_type == "image"
@@ -355,13 +366,6 @@ async def file_analyzer(
         is_excel = "spreadsheet" in content_type or analysis_type in ("excel", "xlsx") or file_url.lower().endswith((".xlsx", ".xls"))
 
         if is_image and analysis_type != "text":
-            # 图片 → 走 vision_analyze
-            from app.media.store import create_store
-
-            store = create_store()
-            import base64
-            import uuid
-
             b64 = base64.b64encode(file_data).decode("ascii")
             data_url = f"data:{content_type};base64,{b64}"
             return await vision_analyze(
