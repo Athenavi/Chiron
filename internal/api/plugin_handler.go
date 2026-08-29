@@ -470,6 +470,15 @@ func (h *PluginHandler) Test(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
 	defer cancel()
 
+	// P0 安全：命令白名单检查
+	if err := checkPluginCommandAllowed(plugin.Command); err != nil {
+		OK(w, map[string]interface{}{
+			"ok": false, "message": err.Error(),
+			"duration_ms": time.Since(start).Milliseconds(),
+		})
+		return
+	}
+
 	cmd := exec.CommandContext(ctx, plugin.Command, plugin.Args...)
 	cmd.Env = os.Environ()
 	for k, v := range plugin.Env {

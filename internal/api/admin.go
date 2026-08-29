@@ -23,6 +23,10 @@ import (
 
 var validDBName = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
+// Version 是构建时注入的版本号，通过 -ldflags 注入。
+// 默认值 "dev" 在开发环境使用，生产构建时替换为语义版本号。
+var Version = "dev"
+
 // AdminHandler provides admin-only management endpoints.
 type AdminHandler struct {
 	cfg           *config.Config
@@ -285,12 +289,9 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 
 // 鈹€鈹€ System Management 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
-// 全局注入的版本号（构建时通过 ldflags 注入）
-var BuildVersion = "2.0.0"
-
 func (h *AdminHandler) SystemInfo(w http.ResponseWriter, r *http.Request) {
 	info := map[string]interface{}{
-		"version": BuildVersion,
+		"version": Version,
 		"uptime":  time.Since(monitor.Global.StartTime).String(),
 		"db": map[string]interface{}{
 			"postgres": true,
@@ -304,7 +305,7 @@ func (h *AdminHandler) TriggerMaintenance(w http.ResponseWriter, r *http.Request
 	var body struct {
 		Action string `json:"action"` // vacuum | reindex | analyze | flush_cache
 	}
-	if err := DecodeJSON(w, r, &body); err != nil || body.Action == "" {
+	if err := DecodeJSON(w, r, &body); err != nil {
 		BadRequest(w, "action is required (vacuum, reindex, analyze, flush_cache)")
 		return
 	}
@@ -316,7 +317,6 @@ func (h *AdminHandler) TriggerMaintenance(w http.ResponseWriter, r *http.Request
 			return
 		}
 	case "reindex":
-		// 使用参数化查询 + 白名单校验，防止 SQL 注入
 		dbName := dbNameFromDSN()
 		if !validDBName.MatchString(dbName) {
 			InternalError(w, "invalid database name")
@@ -333,21 +333,11 @@ func (h *AdminHandler) TriggerMaintenance(w http.ResponseWriter, r *http.Request
 		}
 	case "flush_cache":
 		if db.Redis != nil {
-			const prefix = "chiron_cache:"
-			// 使用 UNLINK 批量删除，避免 SCAN 大量 key 时阻塞 Redis
-			iter := db.Redis.Scan(r.Context(), 0, prefix+"*", 0).Iterator()
-			var keys []string
-			for iter.Next(r.Context()) {
-				keys = append(keys, iter.Val())
-				if len(keys) >= 1000 {
-					db.Redis.Unlink(r.Context(), keys...)
-					keys = keys[:0]
-				}
-			}
-			if len(keys) > 0 {
-				db.Redis.Unlink(r.Context(), keys...)
-			}
-			if err := iter.Err(); err != nil {
+			const prefix = "chiron_cache:*"
+			// P0 性能优化：使用 Lua 脚本原子化 SCAN + UNLINK
+			script := `local c="0" local n=0 repeat local r=redis.call("SCAN",c,"MATCH",KEYS[1],"COUNT",500) c=r[1] local k=r[2] if #k>0 then redis.call("UNLINK",unpack(k)) n=n+#k end until c=="0" return n`
+			deleted, err := db.Redis.Eval(r.Context(), script, []string{prefix}).Int()
+			if err != nil {
 				logAndRespond(w, err, http.StatusInternalServerError, "flush_cache failed")
 				return
 			}
@@ -385,14 +375,22 @@ func dbNameFromDSN() string {
 // 鈹€鈹€ Backup & Restore 鈹€鈹€
 
 func (h *AdminHandler) CreateBackup(w http.ResponseWriter, r *http.Request) {
-	// P0-P4 修复：pg_dump 输出流式转发，避免整库缓冲入内存导致 OOM
-	// 参数拆分传入防止 DSN 含特殊字符被解析为额外参数
+	// P0 安全修复：pg_dump 输出流式转发，避免整库缓冲入内存导致 OOM。
+	// 密码通过 PGPASSWORD 环境变量传递，避免出现在进程命令行参数中。
 	dsn := extractDSN()
 	if dsn == "" {
 		InternalError(w, "POSTGRES_DSN not configured")
 		return
 	}
-	cmd := exec.CommandContext(r.Context(), "pg_dump", "--dbname", dsn)
+	host, port, user, dbname, password := parseDSNComponents(dsn)
+	cmd := exec.CommandContext(r.Context(), "pg_dump",
+		"--host", host,
+		"--port", port,
+		"--username", user,
+		"--dbname", dbname,
+	)
+	cmd.Env = os.Environ()
+	cmd.Env = append(cmd.Env, "PGPASSWORD="+password)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "backup failed")
@@ -448,7 +446,7 @@ func (h *AdminHandler) RestoreBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 使用 psql 执行恢复（参数拆分传入防止注入）
+	// 使用 psql 执行恢复（密码通过 PGPASSWORD 环境变量传递，避免出现在命令行参数中）
 	restoreCtx, cancel := context.WithTimeout(r.Context(), 30*time.Minute)
 	defer cancel()
 	psqlDSN := extractDSN()
@@ -456,7 +454,17 @@ func (h *AdminHandler) RestoreBackup(w http.ResponseWriter, r *http.Request) {
 		InternalError(w, "POSTGRES_DSN not configured")
 		return
 	}
-	cmd := exec.CommandContext(restoreCtx, "psql", "--dbname", psqlDSN, "-f", tmpPath, "-v", "ON_ERROR_STOP=1")
+	host, port, user, dbname, password := parseDSNComponents(psqlDSN)
+	cmd := exec.CommandContext(restoreCtx, "psql",
+		"--host", host,
+		"--port", port,
+		"--username", user,
+		"--dbname", dbname,
+		"-f", tmpPath,
+		"-v", "ON_ERROR_STOP=1",
+	)
+	cmd.Env = os.Environ()
+	cmd.Env = append(cmd.Env, "PGPASSWORD="+password)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		slog.Error("restore failed", "error", err, "output", string(output))
@@ -468,6 +476,36 @@ func (h *AdminHandler) RestoreBackup(w http.ResponseWriter, r *http.Request) {
 
 func extractDSN() string {
 	return os.Getenv("POSTGRES_DSN")
+}
+
+// parseDSNComponents 解析 PostgreSQL DSN 返回 host, port, user, dbname, password。
+// P0 安全修复：密码用于 PGPASSWORD 环境变量，避免出现在命令行参数中。
+// DSN 格式: postgres://user:pass@host:port/dbname?params
+func parseDSNComponents(dsn string) (host, port, user, dbname, password string) {
+	host = "localhost"
+	port = "5432"
+	user = "postgres"
+	dbname = "chiron"
+	password = ""
+
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return
+	}
+	if u.User != nil {
+		user = u.User.Username()
+		password, _ = u.User.Password()
+	}
+	if h := u.Hostname(); h != "" {
+		host = h
+	}
+	if p := u.Port(); p != "" {
+		port = p
+	}
+	if u.Path != "" && u.Path != "/" {
+		dbname = u.Path[1:]
+	}
+	return
 }
 
 // ─── Storage Management ────────────────────────────────────────────

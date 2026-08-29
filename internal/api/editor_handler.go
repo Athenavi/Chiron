@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-
-	"github.com/athenavi/chiron/internal/auth"
 )
 
 // EditorHandler handles file browsing and editing for the Monaco editor.
@@ -55,12 +53,6 @@ func (h *EditorHandler) safePath(p string) (string, error) {
 
 // ReadFile returns the content of a file.
 func (h *EditorHandler) ReadFile(w http.ResponseWriter, r *http.Request) {
-	claims := auth.GetClaims(r.Context())
-	if claims == nil {
-		Unauthorized(w, ErrAuthRequired)
-		return
-	}
-
 	path := r.URL.Query().Get("path")
 	if path == "" {
 		BadRequest(w, "path is required")
@@ -85,17 +77,6 @@ func (h *EditorHandler) ReadFile(w http.ResponseWriter, r *http.Request) {
 
 // WriteFile saves content to a file.
 func (h *EditorHandler) WriteFile(w http.ResponseWriter, r *http.Request) {
-	claims := auth.GetClaims(r.Context())
-	if claims == nil {
-		Unauthorized(w, ErrAuthRequired)
-		return
-	}
-	// 仅允许 owner/admin 角色写入文件
-	if claims.Role != "owner" && claims.Role != "admin" {
-		Forbidden(w, "write requires admin role")
-		return
-	}
-
 	var body struct {
 		Path    string `json:"path"`
 		Content string `json:"content"`

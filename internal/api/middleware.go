@@ -245,6 +245,11 @@ func RecoverMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if rec := recover(); rec != nil {
+				// http.ErrAbortHandler 是标准库中用于强制中止连接的 sentinel panic，
+				// 不应被拦截，否则 http.Server 无法正确关闭连接。
+				if rec == http.ErrAbortHandler {
+					panic(rec)
+				}
 				slog.Error("panic recovered", "panic", rec, "path", r.URL.Path)
 				InternalError(w, "internal server error")
 			}
