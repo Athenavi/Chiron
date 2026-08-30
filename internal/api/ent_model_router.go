@@ -35,8 +35,10 @@ type EntModelRouterHandler struct{}
 
 // NewEntModelRouterHandler 创建模型路由 handler。
 func NewEntModelRouterHandler() *EntModelRouterHandler {
-	// 确保表存在
-	_, _ = db.GlobalDBManager.Exec(context.Background(),
+	// 确保表存在（带超时）
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := db.GlobalDBManager.Exec(ctx,
 		`CREATE TABLE IF NOT EXISTS ent_model_routes (
 			id VARCHAR(36) PRIMARY KEY,
 			tenant_id VARCHAR(36) NOT NULL,
@@ -50,6 +52,9 @@ func NewEntModelRouterHandler() *EntModelRouterHandler {
 			updated_at TIMESTAMPTZ DEFAULT NOW(),
 			UNIQUE (tenant_id, model_id)
 		);`)
+	if err != nil {
+		slog.Warn("ent_model_routes table creation failed (table may already exist)", "error", err)
+	}
 	return &EntModelRouterHandler{}
 }
 

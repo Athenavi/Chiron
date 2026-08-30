@@ -170,18 +170,17 @@ func (s *pgEntCostStore) CostSummary(ctx context.Context, from, to time.Time, gr
 	if err != nil {
 		return nil, fmt.Errorf("summary billing_records: %w", err)
 	}
+	defer rows.Close()
 	for rows.Next() {
 		var k string
 		r := entCostSummaryRow{}
 		if err := rows.Scan(&k, &r.CostCents, &r.InputTokens, &r.OutputTokens, &r.Records); err != nil {
-			rows.Close()
 			return nil, fmt.Errorf("summary billing scan: %w", err)
 		}
 		dst := get(k)
 		dst.CostCents, dst.InputTokens, dst.OutputTokens, dst.Records =
 			r.CostCents, r.InputTokens, r.OutputTokens, r.Records
 	}
-	rows.Close()
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("summary billing iterate: %w", err)
 	}
@@ -201,16 +200,15 @@ func (s *pgEntCostStore) CostSummary(ctx context.Context, from, to time.Time, gr
 	if err != nil {
 		return nil, fmt.Errorf("summary credit_transactions: %w", err)
 	}
+	defer rows.Close()
 	for rows.Next() {
 		var k string
 		var spent int64
 		if err := rows.Scan(&k, &spent); err != nil {
-			rows.Close()
 			return nil, fmt.Errorf("summary credits scan: %w", err)
 		}
 		get(k).CreditsSpent = spent
 	}
-	rows.Close()
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("summary credits iterate: %w", err)
 	}
@@ -232,16 +230,15 @@ func (s *pgEntCostStore) CostSummary(ctx context.Context, from, to time.Time, gr
 	if err != nil {
 		return nil, fmt.Errorf("summary payments: %w", err)
 	}
+	defer rows.Close()
 	for rows.Next() {
 		var k string
 		var revenue int64
 		if err := rows.Scan(&k, &revenue); err != nil {
-			rows.Close()
 			return nil, fmt.Errorf("summary payments scan: %w", err)
 		}
 		get(k).RevenueCents = revenue
 	}
-	rows.Close()
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("summary payments iterate: %w", err)
 	}
