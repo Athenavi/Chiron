@@ -6,8 +6,10 @@ Mirrors Go internal/mcp/client.go with multi-server support.
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
 import logging
+import socket
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -17,6 +19,41 @@ import httpx
 MCP_PROTOCOL_VERSION = "2025-03-26"
 
 logger = logging.getLogger(__name__)
+
+# P0 安全修复：SSRF 防护 — 禁止连接到内网/回环/链路本地等私有地址
+PRIVATE_NETWORKS = [
+    "10.0.0.0/8",
+    "172.16.0.0/12",
+    "192.168.0.0/16",
+    "127.0.0.0/8",
+    "::1/128",
+    "fc00::/7",
+    "fe80::/10",
+    "169.254.0.0/16",
+]
+
+
+def _is_private_ip(host: str) -> bool:
+    """Check if a host resolves to a private/reserved IP address (SSRF protection)."""
+    try:
+        addr = ipaddress.ip_address(host)
+        return addr.is_private or addr.is_loopback or addr.is_link_local
+    except ValueError:
+        pass
+    try:
+        addrinfos = socket.getaddrinfo(host, None, socket.AI_ADDRCONFIG)
+        for family, _, _, _, sockaddr in addrinfos:
+            ip_str = sockaddr[0] if family in (socket.AF_INET, socket.AF_INET6) else None
+            if ip_str:
+                try:
+                    addr = ipaddress.ip_address(ip_str)
+                    if addr.is_private or addr.is_loopback or addr.is_link_local:
+                        return True
+                except ValueError:
+                    continue
+    except (socket.gaierror, OSError):
+        pass
+    return False
 
 
 @dataclass
@@ -52,6 +89,16 @@ class HTTPSSEConnection:
         self._lock = asyncio.Lock()
         self._client = httpx.AsyncClient(timeout=30.0)
         self._session_id: str | None = None
+
+        # P0 安全修复：SSRF 防护 — 检查 URL 主机构是否为私有地址
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        host = parsed.hostname
+        if host and _is_private_ip(host):
+            raise ValueError(
+                f"SSRF protection: connecting to private/restricted IP is forbidden "
+                f"(host={host}, server={name})"
+            )
 
     async def send_jsonrpc(
         self, method: str, params: Optional[dict] = None

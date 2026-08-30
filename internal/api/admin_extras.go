@@ -400,6 +400,7 @@ func (h *AdminHandler) ensureSettingsStore() *settings.Store {
 
 // hotReloadRedis 在保存 redis 分组设置后热换 Redis 连接（AtomicRedis.Swap）。
 // 仅当配置了新地址才执行；失败仅记日志不影响保存结果。
+// P0 安全修复：旧连接显式关闭，防止连接泄漏。
 func (h *AdminHandler) hotReloadRedis(cfg map[string]interface{}) {
 	if h.redis == nil {
 		return
@@ -420,7 +421,14 @@ func (h *AdminHandler) hotReloadRedis(cfg map[string]interface{}) {
 		slog.Error("redis hot-swap failed", "addr", addr, "error", err)
 		return
 	}
+	// 关闭旧连接，释放资源
+	oldClient := h.redis.LoadRaw()
 	h.redis.Swap(client)
+	if oldClient != nil {
+		if err := oldClient.Close(); err != nil {
+			slog.Warn("failed to close old redis connection", "error", err)
+		}
+	}
 	slog.Info("redis hot-swapped", "addr", addr)
 }
 

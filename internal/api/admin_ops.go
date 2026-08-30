@@ -229,8 +229,30 @@ type domainRow struct {
 var validDomainRe = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)+$`)
 
 func (h *AdminHandler) ListDomains(w http.ResponseWriter, r *http.Request) {
+	// 支持分页查询
+	page := 1
+	perPage := 20
+	if p := r.URL.Query().Get("page"); p != "" {
+		fmt.Sscanf(p, "%d", &page)
+		if page < 1 {
+			page = 1
+		}
+	}
+	if pp := r.URL.Query().Get("per_page"); pp != "" {
+		fmt.Sscanf(pp, "%d", &perPage)
+		if perPage < 1 || perPage > 100 {
+			perPage = 100
+		}
+	}
+	offset := (page - 1) * perPage
+
+	// 先查询总数
+	var total int
+	_ = db.GlobalDBManager.QueryRow(r.Context(), `SELECT COUNT(*) FROM domains`).Scan(&total)
+
 	rows, err := db.GlobalDBManager.Query(r.Context(),
-		`SELECT id::text, domain, ssl_status, verified, created_at FROM domains ORDER BY created_at DESC LIMIT 100`)
+		`SELECT id::text, domain, ssl_status, verified, created_at FROM domains ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
+		perPage, offset)
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "list domains failed")
 		return
@@ -243,7 +265,12 @@ func (h *AdminHandler) ListDomains(w http.ResponseWriter, r *http.Request) {
 			out = append(out, d)
 		}
 	}
-	OK(w, map[string]interface{}{"domains": out, "total": len(out)})
+	OK(w, map[string]interface{}{
+		"domains": out,
+		"total":   total,
+		"page":    page,
+		"per_page": perPage,
+	})
 }
 
 func (h *AdminHandler) CreateDomain(w http.ResponseWriter, r *http.Request) {
@@ -289,9 +316,32 @@ func (h *AdminHandler) UpdateDomain(w http.ResponseWriter, r *http.Request) {
 
 func (h *AdminHandler) DeleteDomain(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if _, err := db.GlobalDBManager.Exec(r.Context(), `DELETE FROM domains WHERE id = $1`, id); err != nil {
-		logAndRespond(w, err, http.StatusInternalServerError, "delete domain failed")
-		return
+	// P0 安全修复：校验域名所有权，仅允许管理员删除（AdminHandler 已受 admin 权限保护）
+	// 或校验 tenant_id 防止越权删除
+	tenantID := GetTenantID(r)
+	if tenantID != "" {
+		// 多租户模式：校验域名归属
+		var currentTenantID string
+		if err := db.GlobalDBManager.QueryRow(r.Context(),
+			`SELECT tenant_id FROM domains WHERE id = $1`, id).Scan(&currentTenantID); err != nil {
+			NotFound(w, "domain not found")
+			return
+		}
+		if currentTenantID != tenantID {
+			Forbidden(w, "cannot delete domain from another tenant")
+			return
+		}
+		if _, err := db.GlobalDBManager.Exec(r.Context(),
+			`DELETE FROM domains WHERE id = $1 AND tenant_id = $2`, id, tenantID); err != nil {
+			logAndRespond(w, err, http.StatusInternalServerError, "delete domain failed")
+			return
+		}
+	} else {
+		// 管理员模式（无 tenant context）：直接删除
+		if _, err := db.GlobalDBManager.Exec(r.Context(), `DELETE FROM domains WHERE id = $1`, id); err != nil {
+			logAndRespond(w, err, http.StatusInternalServerError, "delete domain failed")
+			return
+		}
 	}
 	OK(w, map[string]string{"status": "deleted"})
 }
@@ -436,7 +486,18 @@ func (h *AdminHandler) RestoreDatabaseBackup(w http.ResponseWriter, r *http.Requ
 		InternalError(w, "POSTGRES_DSN not configured")
 		return
 	}
-	cmd := exec.CommandContext(r.Context(), "psql", "--dbname", dsn, "-f", target)
+	// P0 安全修复：密码通过 PGPASSWORD 环境变量传递，避免出现在命令行参数中
+	host, port, user, dbname, password := parseDSNComponents(dsn)
+	cmd := exec.CommandContext(r.Context(), "psql",
+		"--host", host,
+		"--port", port,
+		"--username", user,
+		"--dbname", dbname,
+		"-f", target,
+		"-v", "ON_ERROR_STOP=1",
+	)
+	cmd.Env = os.Environ()
+	cmd.Env = append(cmd.Env, "PGPASSWORD="+password)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		slog.Error("restore failed", "error", err, "output", string(output))
@@ -854,13 +915,22 @@ func (h *AdminHandler) DeleteCronJob(w http.ResponseWriter, r *http.Request) {
 // ── 工具 ──
 
 // runPGDump 流式落盘 pg_dump（复用 extractDSN）。参数拆分传入防止注入。
+// P0 安全修复：密码通过 PGPASSWORD 环境变量传递，避免出现在命令行参数中。
 // 使用 stdout pipe 流式写入文件，避免整库缓冲入内存导致 OOM。
 func runPGDump(ctx context.Context, target string) error {
 	dsn := extractDSN()
 	if dsn == "" {
 		return fmt.Errorf("POSTGRES_DSN not configured")
 	}
-	cmd := exec.CommandContext(ctx, "pg_dump", "--dbname", dsn)
+	host, port, user, dbname, password := parseDSNComponents(dsn)
+	cmd := exec.CommandContext(ctx, "pg_dump",
+		"--host", host,
+		"--port", port,
+		"--username", user,
+		"--dbname", dbname,
+	)
+	cmd.Env = os.Environ()
+	cmd.Env = append(cmd.Env, "PGPASSWORD="+password)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return fmt.Errorf("stdout pipe: %w", err)

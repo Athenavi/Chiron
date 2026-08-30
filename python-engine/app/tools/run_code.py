@@ -23,29 +23,28 @@ S5 沙箱隔离（subprocess + IPC 代理）：
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import json
 import logging
 import subprocess
 import sys
+import threading
 import time
 import types
 from typing import Any
 
-from app.tools.code_guard import \
-    BLOCKED_BUILTINS as \
-    _BLOCKED_BUILTINS  # noqa: F401 — 向后兼容再导出（tests 直接从本模块导入 _check_static）
-from app.tools.code_guard import DANGEROUS_CALLS, DANGEROUS_MODULES
-from app.tools.code_guard import check_static as _check_static
-from app.tools.code_guard import safe_builtins as _safe_builtins
+from app.tools.code_guard import (
+    DANGEROUS_CALLS,
+    DANGEROUS_MODULES,
+    check_static as _check_static,
+    safe_builtins as _safe_builtins,
+)
 from app.tools.registry import registry
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT_SECONDS = 60
 MAX_LOG_CHARS = 20_000
-
-# 历史别名：run_code 曾自带守卫常量（2026-08-21 抽取到 code_guard.py 单一事实来源）
-DANGEROUS_ATTRS = ("os.", "subprocess.", "sys.", "socket.", "ctypes.")
 
 
 class ToolCallError(Exception):
@@ -163,6 +162,23 @@ def _run_subprocess_sync(
 
     deadline = time.time() + timeout
 
+    # P0 安全修复：启动后台 stderr 消费线程
+    # 如果 stderr 管道被填满，子进程会永久阻塞。后台线程持续消费 stderr 防止此问题。
+    stderr_buffer: list[str] = []
+    stderr_lock = threading.Lock()
+
+    def _drain_stderr():
+        try:
+            if proc.stderr:
+                for line in proc.stderr:
+                    with stderr_lock:
+                        stderr_buffer.append(line)
+        except Exception:
+            pass
+
+    stderr_thread = threading.Thread(target=_drain_stderr, daemon=True, name="stderr_drain")
+    stderr_thread.start()
+
     try:
         # 1) 写 init 消息
         init_msg = (
@@ -180,10 +196,13 @@ def _run_subprocess_sync(
             proc.stdin.write(init_msg)
             proc.stdin.flush()
         except (BrokenPipeError, OSError) as e:
-            stderr = _read_stderr_sync(proc)
+            _kill_proc_sync(proc)
+            stderr_thread.join(timeout=1.0)
+            with stderr_lock:
+                stderr = "".join(stderr_buffer)[:500]
             return {
                 "isError": True,
-                "message": f"subprocess stdin write failed: {e}; stderr: {stderr[:500]}",
+                "message": f"subprocess stdin write failed: {e}; stderr: {stderr}",
                 "logs": "",
             }
 
@@ -193,6 +212,7 @@ def _run_subprocess_sync(
             if line is None:
                 # 超时
                 _kill_proc_sync(proc)
+                stderr_thread.join(timeout=1.0)
                 return {
                     "isError": True,
                     "message": f"subprocess timed out after {timeout}s",
@@ -200,10 +220,12 @@ def _run_subprocess_sync(
                 }
             if line == "":
                 # EOF：子进程退出但无 done/error
-                stderr = _read_stderr_sync(proc)
+                stderr_thread.join(timeout=1.0)
+                with stderr_lock:
+                    stderr = "".join(stderr_buffer)[:500]
                 return {
                     "isError": True,
-                    "message": f"subprocess exited unexpectedly: {stderr[:500]}",
+                    "message": f"subprocess exited unexpectedly: {stderr}",
                     "logs": "",
                 }
 
@@ -283,6 +305,7 @@ def _run_subprocess_sync(
                 logger.warning("unknown IPC message type: %s", mtype)
     except Exception as e:  # noqa: BLE001 — 主循环意外异常
         _kill_proc_sync(proc)
+        stderr_thread.join(timeout=1.0)
         return {
             "isError": True,
             "message": f"orchestrator error: {type(e).__name__}: {e}",
@@ -346,7 +369,7 @@ def _get_reader_pool() -> concurrent.futures.ThreadPoolExecutor:
     global _READER_POOL
     if _READER_POOL is None:
         _READER_POOL = concurrent.futures.ThreadPoolExecutor(
-            max_workers=1,
+            max_workers=4,  # P0 性能修复：提升到 4 以避免高并发序列化瓶颈
             thread_name_prefix="subproc_reader",
         )
     return _READER_POOL
