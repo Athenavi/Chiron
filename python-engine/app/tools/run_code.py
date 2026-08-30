@@ -409,23 +409,6 @@ def _wait_proc_sync(proc: "subprocess.Popen[str]", timeout: float = 2.0) -> None
         _kill_proc_sync(proc)
 
 
-def _read_stderr_sync(proc: "subprocess.Popen[str]") -> str:
-    """读取子进程 stderr（非阻塞）。"""
-    try:
-        import select
-
-        # POSIX 路径
-        if hasattr(select, "select"):
-            r, _, _ = select.select([proc.stderr], [], [], 0.5)
-            if r:
-                return proc.stderr.read() or ""
-            return ""
-        # Windows：read() 在子进程退出后会立即返回，否则阻塞
-        return proc.stderr.read() or ""
-    except Exception:  # noqa: BLE001
-        return ""
-
-
 # ── 主入口（仅 subprocess 隔离执行，子进程不可用即 fail-closed） ──────
 
 

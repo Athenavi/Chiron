@@ -20,18 +20,6 @@ MCP_PROTOCOL_VERSION = "2025-03-26"
 
 logger = logging.getLogger(__name__)
 
-# P0 安全修复：SSRF 防护 — 禁止连接到内网/回环/链路本地等私有地址
-PRIVATE_NETWORKS = [
-    "10.0.0.0/8",
-    "172.16.0.0/12",
-    "192.168.0.0/16",
-    "127.0.0.0/8",
-    "::1/128",
-    "fc00::/7",
-    "fe80::/10",
-    "169.254.0.0/16",
-]
-
 
 def _is_private_ip(host: str) -> bool:
     """Check if a host resolves to a private/reserved IP address (SSRF protection)."""
