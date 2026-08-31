@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"time"
 
 	"github.com/athenavi/chiron/config"
@@ -114,10 +115,35 @@ func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 		Unauthorized(w, "missing tenant context")
 		return
 	}
+
+	// 分页参数
+	page := 1
+	perPage := 20
+	if p := r.URL.Query().Get("page"); p != "" {
+		if v, err := strconv.Atoi(p); err == nil && v >= 1 {
+			page = v
+		}
+	}
+	if pp := r.URL.Query().Get("per_page"); pp != "" {
+		if v, err := strconv.Atoi(pp); err == nil && v >= 1 && v <= 100 {
+			perPage = v
+		}
+	}
+	offset := (page - 1) * perPage
+
+	// 查询总数
+	var total int
+	err := db.GlobalDBManager.QueryRow(r.Context(),
+		`SELECT COUNT(*) FROM users WHERE tenant_id = $1`, tenantID).Scan(&total)
+	if err != nil {
+		logAndRespond(w, err, http.StatusInternalServerError, "count users failed")
+		return
+	}
+
 	rows, err := db.GlobalDBManager.Query(r.Context(),
 		`SELECT id, email, name, role, created_at, updated_at
-		 FROM users WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT 100`,
-		tenantID)
+		 FROM users WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
+		tenantID, perPage, offset)
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "query users failed")
 		return
@@ -140,7 +166,12 @@ func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	OK(w, users)
+	OK(w, map[string]interface{}{
+		"users":    users,
+		"total":    total,
+		"page":     page,
+		"per_page": perPage,
+	})
 }
 
 func (h *AdminHandler) GetUser(w http.ResponseWriter, r *http.Request) {

@@ -19,6 +19,48 @@ import (
 	"github.com/athenavi/chiron/internal/monitor"
 )
 
+// ── 审计日志异步 worker pool ──
+// 避免热路径每个请求启动一个 goroutine，在突发流量下防止 goroutine 堆积
+type auditLogTask struct {
+	ctx        context.Context
+	userID     string
+	tenantID   string
+	method     string
+	path       string
+	remoteAddr string
+	status     int
+}
+
+var (
+	auditLogCh     = make(chan auditLogTask, 4096) // 缓冲通道，防背压时丢弃
+	auditLogOnce   sync.Once
+)
+
+// StartAuditLogWorker 启动审计日志 worker（main.go 中调用一次）
+func StartAuditLogWorker(ctx context.Context) {
+	auditLogOnce.Do(func() {
+		const workerCount = 4
+		for i := 0; i < workerCount; i++ {
+			go func(id int) {
+				slog.Debug("audit log worker started", "id", id)
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case task := <-auditLogCh:
+						meta := map[string]interface{}{
+							"status": task.status,
+							"method": task.method,
+							"path":   task.path,
+						}
+						db.AuditLog(task.ctx, task.userID, task.tenantID, task.method, task.path, "", task.remoteAddr, meta)
+					}
+				}
+			}(i)
+		}
+	})
+}
+
 type responseWriter struct {
 	http.ResponseWriter
 	status  int
@@ -199,13 +241,20 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 		if r.Method != "GET" && r.Method != "OPTIONS" && rw.status < 500 {
 			claims := auth.GetClaims(r.Context())
 			if claims != nil {
-				auditUserID := claims.UserID
-				auditTenantID := claims.TenantID
-				go db.AuditLog(r.Context(), auditUserID, auditTenantID, r.Method, r.URL.Path, "", r.RemoteAddr, map[string]interface{}{
-					"status": rw.status,
-					"method": r.Method,
-					"path":   r.URL.Path,
-				})
+				select {
+				case auditLogCh <- auditLogTask{
+					ctx:        r.Context(),
+					userID:     claims.UserID,
+					tenantID:   claims.TenantID,
+					method:     r.Method,
+					path:       r.URL.Path,
+					remoteAddr: r.RemoteAddr,
+					status:     rw.status,
+				}:
+				default:
+					slog.Warn("audit log channel full, dropping entry",
+						"path", r.URL.Path, "method", r.Method)
+				}
 			}
 		}
 	})

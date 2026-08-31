@@ -6,6 +6,8 @@ WORKDIR /app
 # 系统依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libffi-dev \
+    libmagic1 \
+    file \
     && rm -rf /var/lib/apt/lists/*
 
 # 依赖安装（缓存层）

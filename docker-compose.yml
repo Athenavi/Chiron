@@ -2,10 +2,12 @@
 
   postgres:
     image: pgvector/pgvector:pg16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      # P1 瀹夊叏锛氱敓浜у繀椤昏缃己瀵嗙爜锛涘紑鍙戠幆澧冮粯璁や粎鏈湴鍙闂?
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chiron_dev_change_in_production}
+      # 安全: 生产必须设置强密码；开发环境仅在本地可访问
+      # 生产部署：export POSTGRES_PASSWORD=$(openssl rand -base64 32)
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required — generate a strong password}
       POSTGRES_DB: chiron0827
     ports:
       - "127.0.0.1:5432:5432"
@@ -19,7 +21,8 @@
 
   redis:
     image: redis:7-alpine
-    command: [ "redis-server", "--requirepass", "${REDIS_PASSWORD:-chiron_dev_redis_change_me}" ]
+    restart: unless-stopped
+    command: [ "redis-server", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required — generate a strong password}" ]
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
@@ -32,6 +35,7 @@
 
   temporal:
     image: temporalio/auto-setup:latest
+    restart: unless-stopped
     ports:
       - "127.0.0.1:7233:7233"
       - "127.0.0.1:8233:8233"
@@ -39,7 +43,7 @@
       - DB=postgres12
       - DB_PORT=5432
       - POSTGRES_USER=postgres
-      - POSTGRES_PWD=${TEMPORAL_PWD:-chiron_dev_change_in_production}
+      - POSTGRES_PWD=${TEMPORAL_PWD:?TEMPORAL_PWD is required — generate a strong password}
       - POSTGRES_SEEDS=postgres
     depends_on:
       postgres:
@@ -74,8 +78,15 @@
     build:
       context: python-engine
       dockerfile: Dockerfile
-    ports:
-      - "127.0.0.1:8000:8000"
+    # 不暴露端口到外网：仅容器间网络通信，由 gateway 反向代理
+    # 如需调试可临时映射: "127.0.0.1:8000:8000"
+    expose:
+      - "8000"
+    environment:
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?INTERNAL_TOKEN is required — set to same value as gateway's INTERNAL_TOKEN}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      POSTGRES_DSN: ${POSTGRES_DSN:?POSTGRES_DSN is required}
+      APP_SECRET: ${APP_SECRET:?APP_SECRET is required}
     depends_on:
       redis:
         condition: service_healthy
@@ -83,18 +94,19 @@
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" ]
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')" ]
       interval: 15s
       timeout: 5s
       retries: 5
       start_period: 20s
   milvus:
     image: milvusdb/milvus:v2.4.17
+    restart: unless-stopped
     environment:
       ETCD_ENDPOINTS: etcd:2379
       MINIO_ADDRESS: minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
     volumes:
       - milvusdata:/var/lib/milvus
     depends_on:
@@ -104,10 +116,11 @@
 
   minio:
     image: minio/minio:RELEASE.2024-12-18T13-15-44Z
+    restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
     volumes:
       - miniodata:/data
     ports:
@@ -116,6 +129,7 @@
 
   etcd:
     image: quay.io/coreos/etcd:v3.5.18
+    restart: unless-stopped
     environment:
       ETCD_AUTO_COMPACTION_MODE: revision
       ETCD_AUTO_COMPACTION_RETENTION: "1000"

@@ -88,7 +88,7 @@ def sdk_usage_text() -> str:
         "In the run_code program, a `tools` namespace is available: "
         "each registered tool is an async callable, e.g. "
         "`result = await tools.read_file(path='src/main.py')` or "
-        "`result = await tools.grep_files(pattern='TODO', path='src')`. "
+        "`result = await tools.grep_files(pattern='import', path='src')`. "
         "Tool failures raise ToolCallError(name, message). "
         "Return a JSON-serializable value from the program; captured stdout "
         "appears in logs. Available tools: " + names

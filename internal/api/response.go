@@ -30,7 +30,9 @@ type Meta struct {
 func JSON(w http.ResponseWriter, status int, resp APIResponse) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		slog.Error("json encode response failed", "error", err, "status", status)
+	}
 }
 
 func OK(w http.ResponseWriter, data interface{}) {

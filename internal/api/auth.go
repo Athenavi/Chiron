@@ -95,6 +95,14 @@ func ClearTokenCookie(w http.ResponseWriter, secure bool) {
 	})
 }
 
+// logLoginFailure 统一的登录失败审计日志+验证码记录
+func (h *AuthHandler) logLoginFailure(ctx context.Context, email, tenantID, remoteAddr string) {
+	db.AuditLog(ctx, "", tenantID, "login_failed", "/v1/auth/login", "email="+maskEmail(email), remoteAddr, nil)
+	if h.captcha != nil {
+		h.captcha.RecordFailure(ctx, nil)
+	}
+}
+
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
 	if err := DecodeJSON(w, r, &req); err != nil {
@@ -151,23 +159,13 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	).Scan(&user.ID, &user.Email, &user.Name, &user.Role, &tenantID, &passwordHash)
 	if err != nil {
 		slog.Warn("login failed", "email", req.Email, "error", err)
-		db.AuditLog(r.Context(), "", DefaultTenantID, "login_failed", "/v1/auth/login", "email="+maskEmail(req.Email), r.RemoteAddr, nil)
-		if h.captcha != nil {
-			h.captcha.RecordFailure(r.Context(), r)
-		}
+		h.logLoginFailure(r.Context(), req.Email, DefaultTenantID, r.RemoteAddr)
 		Unauthorized(w, "invalid email or password")
 		return
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(req.Password)); err != nil {
-		auditTenantID := tenantID
-		if auditTenantID == "" {
-			auditTenantID = ""
-		}
-		db.AuditLog(r.Context(), "", auditTenantID, "login_failed", "/v1/auth/login", "email="+maskEmail(req.Email), r.RemoteAddr, nil)
-		if h.captcha != nil {
-			h.captcha.RecordFailure(r.Context(), r)
-		}
+		h.logLoginFailure(r.Context(), req.Email, tenantID, r.RemoteAddr)
 		Unauthorized(w, "invalid email or password")
 		return
 	}

@@ -65,7 +65,11 @@ def safe_join(rel: str) -> Path:
 
 def sandboxed_env() -> dict[str, str]:
     """执行环境：清理敏感/宿主变量，仅保留基础 PATH，并把用户目录变量
-    重定向到沙箱内，防止 `$HOME`/`~` 泄漏宿主路径（S 安全修复）。"""
+    重定向到沙箱内，防止 `$HOME`/`~` 泄漏宿主路径（S 安全修复）。
+
+    注意：PYTHONPATH 和 PYTHONHOME 被显式排除（不在 allow 集合中），
+    防止沙箱子进程通过 import 加载宿主模块。
+    """
     allow = {
         "PATH",
         "SYSTEMROOT",
@@ -77,6 +81,10 @@ def sandboxed_env() -> dict[str, str]:
         "USERPROFILE",
     }
     env = {k: v for k, v in os.environ.items() if k in allow}
+    # 显式清除 PYTHONPATH/PYTHONHOME，防止沙箱子进程加载宿主模块
+    env.pop("PYTHONPATH", None)
+    env.pop("PYTHONHOME", None)
+    env.pop("PYTHONSTARTUP", None)
     env["HOME"] = str(workspace_dir())
     env["USERPROFILE"] = str(workspace_dir())
     env["TEMP"] = str(get_sandbox_dir())
@@ -197,6 +205,13 @@ async def run_in_sandbox(command: str, timeout: int = 120) -> dict[str, Any]:
 
     prog = args[0]
     rest = args[1:]
+
+    # 对 git 命令额外限制：禁止 clone/fetch/pull/push 等网络操作，仅允许本地操作
+    git_restricted = {"clone", "fetch", "pull", "push", "remote", "submodule", "archive", "ls-remote"}
+    if _normalize_exe(prog) == "git" and rest:
+        subcmd = rest[0] if rest and not rest[0].startswith("-") else ""
+        if subcmd in git_restricted:
+            return {"error": f"git command blocked: '{subcmd}' is not allowed in sandbox"}
 
     # Windows: echo/dir/type 等是 cmd.exe 内置命令，无独立可执行文件，
     # create_subprocess_exec 直执会 WinError 2；用 cmd /c 包裹执行。

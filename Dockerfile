@@ -2,10 +2,16 @@
 FROM golang:1.23-alpine AS builder
 WORKDIR /build
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download -x
 COPY . .
-RUN CGO_ENABLED=0 go build -o /build/chiron ./cmd/chiron/
-RUN CGO_ENABLED=0 go build -o /build/chiron-cli ./cmd/chiron-cli/
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go build -o /build/chiron ./cmd/chiron/
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go build -o /build/chiron-cli ./cmd/chiron-cli/
+
+# 清理构建产物中不必要的文件，减小最终镜像体积
+RUN rm -rf /build/migrations
 
 FROM alpine:3.20
 # Security: runtime dependencies + upgrade base image packages

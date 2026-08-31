@@ -3,14 +3,14 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# 安装依赖
+# 安装pnpm与依赖（使用缓存加速）
+RUN npm install -g pnpm
 COPY package.json pnpm-lock.yaml ./
-RUN npm install -g pnpm && pnpm install --frozen-lockfile
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
 
-# 复制源码
+# 复制源码并构建
 COPY . .
-
-# 构建
 RUN pnpm run build
 
 # ── Production Stage ──
