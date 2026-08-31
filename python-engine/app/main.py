@@ -1,4 +1,4 @@
-﻿# Python AI 引擎入口 — 无状态 FastAPI + 连接池 + 健康检查 + 依赖注入
+# Python AI 引擎入口 — 无状态 FastAPI + 连接池 + 健康检查 + 依赖注入
 from __future__ import annotations
 
 import asyncio

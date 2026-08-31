@@ -263,7 +263,7 @@ func (m *DBManager) HealthCheck(ctx context.Context) map[string]interface{} {
 		err := pool.Ping(pingCtx)
 		result["ping_ok"] = err == nil
 		if err != nil {
-			result["ping_error"] = err.Error()
+			result["ping_error"] = "database ping failed"
 		}
 	}
 
