@@ -34,8 +34,13 @@ type EntModelRoute struct {
 type EntModelRouterHandler struct{}
 
 // NewEntModelRouterHandler 创建模型路由 handler。
+// 注意：建表由 InitTable 单独调用，不要在构造函数中执行 DDL。
 func NewEntModelRouterHandler() *EntModelRouterHandler {
-	// 确保表存在（带超时）
+	return &EntModelRouterHandler{}
+}
+
+// InitTable 确保 ent_model_routes 表存在，在服务启动时由初始化流程调用。
+func (h *EntModelRouterHandler) InitTable() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_, err := db.GlobalDBManager.Exec(ctx,
@@ -55,7 +60,6 @@ func NewEntModelRouterHandler() *EntModelRouterHandler {
 	if err != nil {
 		slog.Warn("ent_model_routes table creation failed (table may already exist)", "error", err)
 	}
-	return &EntModelRouterHandler{}
 }
 
 // RegisterRoutes 挂载模型路由管理路由（authMW + RequireEntPerm("model:route")）。

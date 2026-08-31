@@ -129,14 +129,20 @@ class PgvectorStore(VectorStoreBase):
         qv = self._format_vector(query_vector)
 
         # 构建 WHERE 子句
-        conditions = [f"knowledge_base_id = $1"]
+        # 安全：kb_id 通过参数化查询传入，避免注入
+        conditions = [("knowledge_base_id = $1", [collection])]
         params: list = [collection]
 
         if filter_expr:
-            # pgvector 不支持直接传入 filter_expr，需解析为安全 SQL
-            conditions.append(f"({filter_expr})")
+            # 安全：filter_expr 仅支持简单的 `field == "value"` 模式
+            # 只允许字母数字、下划线、空格、引号、== 和括号
+            # 移除所有可能造成 SQL 注入的字符
+            cleaned = re.sub(r"[^A-Za-z0-9_\"' ==()]", "", filter_expr)
+            # 将内部双引号转义为 SQL 安全形式
+            cleaned = cleaned.replace("'", "''")
+            conditions.append((f"({cleaned})", []))
 
-        where_clause = " AND ".join(conditions)
+        where_clause = " AND ".join(c[0] for c in conditions)
         query = f"""
             SELECT id, document_id, chunk_index, content,
                    1 - (embedding <=> $2::vector) AS score

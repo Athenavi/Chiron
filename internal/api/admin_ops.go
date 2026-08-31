@@ -514,7 +514,7 @@ func (h *AdminHandler) DatabaseStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 var selectOnlyRe = regexp.MustCompile(`(?i)^\s*select\b`)
-var dangerousQueryRe = regexp.MustCompile(`(?i)\b(pg_read_file|lo_import|lo_export|lo_unlink|copy\s|pg_write_file|pg_logdir_ls)\b`)
+var dangerousQueryRe = regexp.MustCompile(`(?i)\b(pg_read_file|lo_import|lo_export|lo_unlink|copy\s|copy\b|pg_write_file|pg_logdir_ls|pg_read_binary_file|pg_ls_dir|pg_stat_file)\b`)
 
 func (h *AdminHandler) DatabaseQuery(w http.ResponseWriter, r *http.Request) {
 	var body struct {

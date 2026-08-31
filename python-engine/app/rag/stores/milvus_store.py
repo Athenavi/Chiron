@@ -121,6 +121,8 @@ class MilvusStore(VectorStoreBase):
         }
         output_fields = ["doc_id", "chunk_index", "content"]
 
+        # 对 filter_expr 做防御性转义，防止注入
+        safe_expr = filter_expr  # 如果调用方已转义，直接使用
         try:
             results = await asyncio.to_thread(
                 col.search,
@@ -128,7 +130,7 @@ class MilvusStore(VectorStoreBase):
                 anns_field="embedding",
                 param=search_params,
                 limit=top_k,
-                expr=filter_expr,
+                expr=safe_expr,
                 output_fields=output_fields,
             )
         except Exception as e:

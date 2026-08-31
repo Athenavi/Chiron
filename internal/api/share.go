@@ -70,6 +70,11 @@ func (h *ShareHandler) Create(w http.ResponseWriter, r *http.Request) {
 		BadRequest(w, "message_ids is required")
 		return
 	}
+	// 限制单次分享最多 500 条消息，防止滥用
+	if len(messageIDs) > 500 {
+		BadRequest(w, "message_ids exceeds maximum of 500")
+		return
+	}
 
 	// 消息归属校验：只允许分享本会话的消息
 	rows, err := db.GlobalDBManager.Query(r.Context(),

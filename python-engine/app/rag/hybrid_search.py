@@ -56,8 +56,6 @@ class HybridRetriever:
         kb_id: str,
         tenant_id: str,
         top_k: int = 5,
-        vec_weight: float = 0.5,
-        fts_weight: float = 0.5,
         threshold: float = 0.5,
     ) -> list[dict[str, Any]]:
         """混合检索 — 向量 + 全文 + RRF 融合
@@ -99,6 +97,7 @@ class HybridRetriever:
         kb_id: str,
         tenant_id: str,
         top_k: int,
+        threshold: float = 0.5,
     ) -> list[dict[str, Any]]:
         """向量检索"""
         if not self._vector_store:
@@ -116,7 +115,9 @@ class HybridRetriever:
         if not query_embedding:
             return []
 
-        filter_expr = f'kb_id == "{kb_id}" AND tenant_id == "{tenant_id}"'
+        safe_kb = self._vector_store._sanitize_expr(kb_id)
+        safe_tenant = self._vector_store._sanitize_expr(tenant_id)
+        filter_expr = f'kb_id == "{safe_kb}" AND tenant_id == "{safe_tenant}"'
 
         try:
             results = await self._vector_store.search(
