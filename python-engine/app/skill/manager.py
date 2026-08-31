@@ -499,8 +499,17 @@ class SkillManager:
             elif skill_meta.type == SkillType.PROMPT:
                 # 提示词模板渲染 (config 已在 register_skill 时存入元数据)
                 prompt = skill_meta.config.get("template", "")
-                # 填充变量
-                rendered = prompt.format(**params)
+                # 填充变量（使用 string.Template 替代 str.format 防止属性访问注入）
+                import string
+                tmpl = string.Template(prompt)
+                # 只允许安全字符的参数值，防止模板注入
+                safe_params = {}
+                for k, v in params.items():
+                    if isinstance(v, str):
+                        safe_params[k] = v
+                    else:
+                        safe_params[k] = str(v)
+                rendered = tmpl.safe_substitute(**safe_params)
 
                 duration_ms = int((time.time() - start_time) * 1000)
 
@@ -686,8 +695,19 @@ class SkillManager:
             raise ValueError("skill config missing 'command' field")
 
         # 安全地填充模板变量（仅 str.format，不执行任意代码）
+        # 对参数值中的 shell 元字符做转义，防止注入到沙箱前被利用
+        _SHELL_META_CHARS = re.compile(r'[|&;`$()<>#\n]')
+        import shlex
+        safe_params = {}
+        for k, v in params.items():
+            if isinstance(v, str):
+                safe_params[k] = v
+            else:
+                safe_params[k] = str(v)
+            if _SHELL_META_CHARS.search(safe_params[k]):
+                raise ValueError(f"shell meta characters not allowed in parameter '{k}'")
         try:
-            command = command_template.format(**params)
+            command = command_template.format(**safe_params)
         except KeyError as e:
             raise ValueError(f"missing parameter in command template: {e}")
         except Exception as e:

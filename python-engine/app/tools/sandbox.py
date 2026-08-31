@@ -104,6 +104,8 @@ _ALLOWED_EXECUTABLES: set[str] = {
     # Python 解释器
     "python",
     "python3",
+    # Git 版本控制（经 _ensure_sandbox_repo 校验，不会穿透宿主仓库）
+    "git",
     # 安全的基础命令
     "echo",
     "ls",

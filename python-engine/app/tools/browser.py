@@ -59,6 +59,8 @@ class GatewayBrowserHub:
     """
 
     def __init__(self, base_url: str):
+        from app.tools.ssrf import assert_safe_url
+        assert_safe_url(base_url)
         self._base_url = base_url.rstrip("/")
 
     def connected_client_ids(self) -> list[str]:

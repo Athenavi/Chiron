@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 import asyncio
+import shlex
 from typing import Any
 
 from app.tools.registry import registry
 
 
 async def _run_git(*args: str, cwd: str = ".", timeout: int = 30) -> dict[str, Any]:
-    """Run a git command and return stdout/stderr/exit_code."""
-    from app.tools.sandbox import workspace_dir
+    """Run a git command and return stdout/stderr/exit_code.
+
+    使用 sandboxed_env 清理环境变量，防止宿主密钥泄露给 git 子进程。
+    超时控制防止 git 命令卡住。
+    """
+    from app.tools.sandbox import sandboxed_env, workspace_dir
 
     cmd = ["git", *args]
     proc = await asyncio.create_subprocess_exec(
@@ -18,6 +23,7 @@ async def _run_git(*args: str, cwd: str = ".", timeout: int = 30) -> dict[str, A
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         cwd=str(workspace_dir()),
+        env=sandboxed_env(),
     )
     try:
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
