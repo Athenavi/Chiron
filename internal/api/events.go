@@ -1,10 +1,9 @@
 package api
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"os"
 	"time"
@@ -83,13 +82,8 @@ func SSEHandler(hub *broadcast.Hub, sessionMgr *session.Manager) http.HandlerFun
 	return func(w http.ResponseWriter, r *http.Request) {
 		subID := r.URL.Query().Get("client_id")
 		if subID == "" {
-			var buf [8]byte
-			if _, err := rand.Read(buf[:]); err != nil {
-				// 极端回退：crypto/rand 几乎不会失败，此处仅作防御性兜底
-				subID = fmt.Sprintf("anon-%d-%d", os.Getpid(), time.Now().UnixNano())
-			} else {
-				subID = "anon-" + hex.EncodeToString(buf[:])
-			}
+			// 使用 math/rand 生成快速随机 ID（非安全敏感场景：subID 仅用于订阅标识）
+			subID = fmt.Sprintf("anon-%x-%d", rand.Uint64(), os.Getpid())
 		}
 		sessionID := r.URL.Query().Get("session_id")
 		// P0-S5: 必须显式指定 session_id，否则订阅到全站事件流（含其他用户对话内容）

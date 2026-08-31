@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"context"
@@ -7,12 +7,22 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/athenavi/chiron/internal/auth"
 	"github.com/athenavi/chiron/internal/db"
 	"github.com/redis/go-redis/v9"
 )
+
+// quotaKeyPrefix 脱敏 Redis key 中的 tenantID，仅保留前缀用于日志。
+func quotaKeyPrefix(key string) string {
+	parts := strings.SplitN(key, ":", 4)
+	if len(parts) >= 3 {
+		return strings.Join(parts[:3], ":") + ":***"
+	}
+	return key[:len(key)/2] + "***"
+}
 
 // ErrTenantQuotaExceeded 表示租户当期 token 配额已耗尽（EnforceTenantQuota 唯一非 nil 返回）。
 var ErrTenantQuotaExceeded = errors.New("tenant quota exceeded")
@@ -145,7 +155,7 @@ func (e *tenantQuotaEnforcer) consume(ctx context.Context, tenantID string, pool
 
 	// 缓存键缺失 → 从 billing_records SQL 聚合回填
 	if n, err := e.redis.Exists(ctx, key).Result(); err != nil {
-		slog.Warn("quota enforce: redis exists failed, fail-open", "key", key, "error", err)
+		slog.Warn("quota enforce: redis exists failed, fail-open", "key", quotaKeyPrefix(key), "error", err)
 		return 0, false
 	} else if n == 0 {
 		used, err := e.store.TokenUsageSQL(ctx, tenantID, periodStart)
@@ -156,19 +166,19 @@ func (e *tenantQuotaEnforcer) consume(ctx context.Context, tenantID string, pool
 		}
 		if err := e.redis.Set(ctx, key, used, time.Until(expireAt)).Err(); err != nil {
 			slog.Warn("quota enforce: usage backfill set failed, fail-open",
-				"key", key, "error", err)
+				"key", quotaKeyPrefix(key), "error", err)
 			return 0, false
 		}
 	}
 
 	res, err := e.redis.Eval(ctx, quotaIncrScript, []string{key}, delta, expireAt.Unix()).Result()
 	if err != nil {
-		slog.Warn("quota enforce: redis incr failed, fail-open", "key", key, "error", err)
+		slog.Warn("quota enforce: redis incr failed, fail-open", "key", quotaKeyPrefix(key), "error", err)
 		return 0, false
 	}
 	used, ok := res.(int64)
 	if !ok {
-		slog.Warn("quota enforce: unexpected incr result, fail-open", "key", key, "result", res)
+		slog.Warn("quota enforce: unexpected incr result, fail-open", "key", quotaKeyPrefix(key), "result", res)
 		return 0, false
 	}
 	return used, true

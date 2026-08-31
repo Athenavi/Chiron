@@ -4,12 +4,31 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// redactDSN 脱敏 DSN 中的密码，避免日志泄露。
+// postgres://user:password@host:port/db → postgres://user:***@host:port/db
+func redactDSN(dsn string) string {
+	before, after, found := strings.Cut(dsn, "@")
+	if !found {
+		return dsn
+	}
+	_, userinfo, found := strings.Cut(before, "://")
+	if !found {
+		return dsn
+	}
+	user, _, found := strings.Cut(userinfo, ":")
+	if !found {
+		return dsn
+	}
+	return strings.SplitN(before, ":", 2)[0] + "://" + user + ":***@" + after
+}
 
 // PoolConfig holds connection pool tuning parameters.
 type PoolConfig struct {
@@ -92,13 +111,13 @@ func NewDatabaseRouter(ctx context.Context, writeDSN string, readDSNs []string, 
 
 		pool, err := newPool(ctx, dsn, cfg)
 		if err != nil {
-			slog.Warn("failed to create read pool", "dsn", dsn, "error", err)
+			slog.Warn("failed to create read pool", "dsn", redactDSN(dsn), "error", err)
 			continue
 		}
 
 		pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		if err := pool.Ping(pingCtx); err != nil {
-			slog.Warn("failed to ping read pool", "dsn", dsn, "error", err)
+			slog.Warn("failed to ping read pool", "dsn", redactDSN(dsn), "error", err)
 			pool.Close()
 			cancel()
 			continue

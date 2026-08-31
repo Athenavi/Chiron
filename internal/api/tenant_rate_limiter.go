@@ -89,7 +89,7 @@ func (rl *TenantRateLimiter) Allow(ctx context.Context, resource, tenantID strin
 	}
 
 	key := fmt.Sprintf("tenantbucket:%s:%s", resource, tenantID)
-	now := float64(time.Now().UnixNano()) / 1e9
+	now := float64(time.Now().UnixMicro()) / 1e6
 
 	result, err := rl.rdb.Eval(ctx, tenantBucketLua,
 		[]string{key},
