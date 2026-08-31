@@ -81,6 +81,13 @@ func (e *tenantQuotaEnforcer) enforce(ctx context.Context, claims *auth.Claims, 
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
+	} else {
+		// 确保传入的 ctx 有超时，防止无限阻塞
+		if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
+		}
 	}
 	if estimatedTokens <= 0 {
 		estimatedTokens = 1 // 无预估时最小增量，保持计数器热度

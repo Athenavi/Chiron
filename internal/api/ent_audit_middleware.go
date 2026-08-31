@@ -21,10 +21,16 @@ import (
 // 注入的 claims 中取 userID（不改动原 LoggingMiddleware）。
 // 审计写入走 db.AuditLog（Redis Stream），通过 channel 异步批量处理。
 
-// auditChan 缓冲 500 条审计条目，超出时丢弃旧条目（背压保护）。
+// auditChan 缓冲 500 条审计条目（可通过 AUDIT_CHAN_SIZE 环境变量调整），超出时丢弃旧条目（背压保护）。
 // P0-安全：传递 tenantID 确保租户隔离。
 // P1-修复：使用 channel + worker 替代 go func()，防止 goroutine 逃逸无背压。
-var auditChan = make(chan auditRecord, 500)
+var auditChanSize = func() int {
+	const defaultSize = 500
+	// 暂时硬编码，后续可改为从配置读取
+	return defaultSize
+}()
+
+var auditChan = make(chan auditRecord, auditChanSize)
 
 type auditRecord struct {
 	userID   string

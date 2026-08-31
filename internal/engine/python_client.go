@@ -254,8 +254,16 @@ func (c *PythonClient) pickAddress() string {
 			return c.addresses[idx]
 		}
 	}
-	// 全部地址冷却中：退化为 round-robin
-	return c.addresses[start]
+	// 全部地址冷却中：选择最快冷却完成的地址，避免选到不可用地址
+	earliestIdx := 0
+	earliestTime := atomic.LoadInt64(&c.cooldownUntil[0])
+	for i := 1; i < len(c.addresses); i++ {
+		if t := atomic.LoadInt64(&c.cooldownUntil[i]); t < earliestTime {
+			earliestTime = t
+			earliestIdx = i
+		}
+	}
+	return c.addresses[earliestIdx]
 }
 
 // PythonRunRequest matches the Python engine's Pydantic RunRequest model.

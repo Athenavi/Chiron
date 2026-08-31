@@ -33,7 +33,8 @@ func NewWechatClient(mchID, appID, apiV3Key, mchCertSerialNo, mchPrivateKeyPEM s
 	if err != nil {
 		return nil, fmt.Errorf("load wechat mch private key: %w", err)
 	}
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	opts := []core.ClientOption{
 		option.WithWechatPayAutoAuthCipher(mchID, mchCertSerialNo, mchPrivateKey, apiV3Key),
 	}

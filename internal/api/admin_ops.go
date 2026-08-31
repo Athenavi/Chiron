@@ -514,7 +514,7 @@ func (h *AdminHandler) DatabaseStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 var selectOnlyRe = regexp.MustCompile(`(?i)^\s*select\b`)
-var dangerousQueryRe = regexp.MustCompile(`(?i)\b(pg_read_file|lo_import|lo_export|lo_unlink|copy\s|copy\b|pg_write_file|pg_logdir_ls|pg_read_binary_file|pg_ls_dir|pg_stat_file)\b`)
+var dangerousQueryRe = regexp.MustCompile(`(?i)\b(pg_read_file|lo_import|lo_export|lo_unlink|copy\s|copy\b|pg_write_file|pg_logdir_ls|pg_read_binary_file|pg_ls_dir|pg_stat_file|pg_sleep|generate_series)\b`)
 
 func (h *AdminHandler) DatabaseQuery(w http.ResponseWriter, r *http.Request) {
 	var body struct {
@@ -524,15 +524,30 @@ func (h *AdminHandler) DatabaseQuery(w http.ResponseWriter, r *http.Request) {
 		BadRequest(w, "query is required")
 		return
 	}
+	// 仅允许 SELECT 查询
 	if !selectOnlyRe.MatchString(body.Query) {
 		BadRequest(w, "only SELECT queries are allowed")
 		return
 	}
+	// 禁止危险函数调用
 	if dangerousQueryRe.MatchString(body.Query) {
 		BadRequest(w, "query not allowed")
 		return
 	}
-	rows, err := db.GlobalDBManager.Query(r.Context(), body.Query)
+	// 禁止多语句（防 stacked queries）
+	if strings.Contains(strings.ToUpper(body.Query), ";") {
+		BadRequest(w, "multiple statements not allowed")
+		return
+	}
+	// 禁止 INTO OUTFILE 等导出操作
+	if strings.Contains(strings.ToUpper(body.Query), "INTO OUTFILE") || strings.Contains(strings.ToUpper(body.Query), "INTO DUMPFILE") {
+		BadRequest(w, "export operations not allowed")
+		return
+	}
+	// P0 安全：添加查询超时，防止慢查询耗尽连接池
+	queryCtx, queryCancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer queryCancel()
+	rows, err := db.GlobalDBManager.Query(queryCtx, body.Query)
 	if err != nil {
 		BadRequest(w, "query failed: "+err.Error())
 		return

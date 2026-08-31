@@ -8,8 +8,8 @@ RUN CGO_ENABLED=0 go build -o /build/chiron ./cmd/chiron/
 RUN CGO_ENABLED=0 go build -o /build/chiron-cli ./cmd/chiron-cli/
 
 FROM alpine:3.20
-# Security: runtime dependencies
-RUN apk add --no-cache ca-certificates tzdata wget
+# Security: runtime dependencies + upgrade base image packages
+RUN apk upgrade --no-cache && apk add --no-cache ca-certificates tzdata wget
 # Security: run as non-root user
 RUN addgroup -g 1001 -S appgroup && adduser -u 1001 -S appuser -G appgroup
 WORKDIR /app

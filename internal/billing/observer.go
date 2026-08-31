@@ -3,6 +3,7 @@ package billing
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"github.com/athenavi/chiron/internal/id"
 )
@@ -34,7 +35,9 @@ func (r *TransactionRecorder) OnCreditChange(evt CreditEvent) {
 		Reason:    evt.Reason,
 		CreatedAt: evt.Timestamp,
 	}
-	if err := r.store.AddTransaction(context.Background(), tx); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := r.store.AddTransaction(ctx, tx); err != nil {
 		slog.Warn("failed to record transaction", "user_id", evt.UserID, "error", err)
 	}
 }

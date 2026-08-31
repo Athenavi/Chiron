@@ -39,8 +39,6 @@ func metricsAuthMW(cfg *config.Config, authMW routeMiddleware, h http.HandlerFun
 	})
 }
 
-var startTime = time.Now()
-
 // sessionCancels tracks running session contexts for cancellation support.
 var sessionCancels sync.Map
 

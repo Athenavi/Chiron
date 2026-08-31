@@ -148,11 +148,14 @@ func (m *Manager) publish(evt CreditEvent) {
 
 // getOrLoadBalance returns the cached balance pointer for a user.
 // On first access the balance is loaded from the database.
+// 无外部请求上下文，使用 Background 自建超时上下文（后台缓存加载，不阻塞请求链路）。
 func (m *Manager) getOrLoadBalance(userID string) (*int64, error) {
 	if v, ok := m.balances.Load(userID); ok {
 		return v.(*int64), nil
 	}
-	balance, err := m.store.GetBalance(context.Background(), userID)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	balance, err := m.store.GetBalance(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("load balance: %w", err)
 	}
@@ -176,22 +179,22 @@ func (m *Manager) GetBalance(userID string) (int, error) {
 // Returns an error if insufficient credits.
 // P0-P1 修复：改为 PG 单语句原子扣费（UPDATE ... RETURNING），数据库为唯一
 // 事实源，多副本部署下不会超扣/重复扣费；内存仅作读缓存。
+// 无外部请求上下文，使用 Background 自建超时上下文（异步事件处理不阻塞请求链路）。
 func (m *Manager) Deduct(userID, reason string, amount int) (int, error) {
 	if amount <= 0 {
 		return 0, fmt.Errorf("invalid deduction amount: %d", amount)
 	}
 
-	newBalance, err := m.store.AtomicDeductBalance(context.Background(), userID, amount)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	newBalance, err := m.store.AtomicDeductBalance(ctx, userID, amount)
 	if err != nil {
 		return 0, fmt.Errorf("insufficient credits or user not found: %w", err)
 	}
 
 	// 先更新缓存，再发布事件（缓存失败不影响扣费，只影响读取性能）
 	m.setBalanceCache(userID, newBalance)
-
-	// 使用带超时的context发布事件，避免阻塞
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
 
 	evt := CreditEvent{
 		UserID:    userID,
@@ -222,12 +225,15 @@ func (m *Manager) setBalanceCache(userID string, balance int) {
 
 // AddCredits adds credits to a user's balance (for recharge or admin grants).
 // P0-P1 修复：改为 PG 单语句原子充值，数据库为唯一事实源。
+// 无外部请求上下文，使用 Background 自建超时上下文（异步事件处理不阻塞请求链路）。
 func (m *Manager) AddCredits(userID, reason string, amount int) (int, error) {
 	if amount <= 0 {
 		return 0, fmt.Errorf("invalid credit amount: %d", amount)
 	}
 
-	newBalance, err := m.store.AtomicAddBalance(context.Background(), userID, amount)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	newBalance, err := m.store.AtomicAddBalance(ctx, userID, amount)
 	if err != nil {
 		return 0, fmt.Errorf("add credits failed: %w", err)
 	}
