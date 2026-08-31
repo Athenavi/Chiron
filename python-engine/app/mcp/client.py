@@ -246,8 +246,11 @@ class MCPClient:
             )
         env = None
         if server.env:
-            import os
-            env = {**os.environ, **server.env}
+            # 安全修复：使用 sandboxed_env 清理宿主环境变量，
+            # 仅传递基础 PATH/HOME 和 server.env 白名单覆盖，
+            # 防止 MCP 子进程读取 JWT_SECRET/INTERNAL_TOKEN 等敏感密钥
+            from app.tools.sandbox import sandboxed_env
+            env = {**sandboxed_env(), **server.env}
 
         proc = await asyncio.create_subprocess_exec(
             server.command,

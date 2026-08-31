@@ -180,9 +180,17 @@ def _server_to_def(server: ServerConfig):
 
 
 def _make_tool_handler(client: MCPClient, tool_name: str):
-    """构造 MCP 工具 handler（绑定共享连接）。"""
+    """构造 MCP 工具 handler（绑定共享连接，带超时保护，R7 修复）。"""
 
     async def handler(**kwargs: Any) -> dict[str, Any]:
-        return await client.call_tool(tool_name, kwargs)
+        # 30s 超时保护，防止 MCP 服务器挂死阻塞 Agent 循环
+        try:
+            return await asyncio.wait_for(
+                client.call_tool(tool_name, kwargs), timeout=30.0
+            )
+        except asyncio.TimeoutError:
+            return {"error": f"MCP tool {tool_name} timed out after 30s"}
+        except Exception as e:
+            return {"error": f"MCP tool {tool_name} failed: {e}"}
 
     return handler

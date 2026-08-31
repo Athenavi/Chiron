@@ -133,10 +133,12 @@ func isUniqueViolation(err error) bool {
 // ── CostSummary：billing_records + credit_transactions + payments 跨租户汇总 ──
 
 func (s *pgEntCostStore) CostSummary(ctx context.Context, from, to time.Time, groupBy string) (*entCostSummary, error) {
+	// 白名单：仅允许 "day" 或 "tenant"
 	var keyExpr, groupExpr string
-	if groupBy == "day" {
+	switch groupBy {
+	case "day":
 		keyExpr, groupExpr = "TO_CHAR(DATE(created_at), 'YYYY-MM-DD')", "DATE(created_at)"
-	} else {
+	default:
 		groupBy = "tenant"
 		keyExpr, groupExpr = "tenant_id::text", "tenant_id"
 	}

@@ -170,6 +170,14 @@ class PersistentTerminal:
             exit_code = int(code_file.read_text(encoding="utf-8").strip() or 0)
         except (OSError, ValueError):
             pass
+
+        # 临时目录清理：防止 /tmp 长期累积（S10 修复）
+        try:
+            import shutil
+            shutil.rmtree(workdir, ignore_errors=True)
+        except Exception:
+            pass
+
         return {"output": output, "exit_code": exit_code, "persistent": True}
 
     async def _discard(self, key: str) -> None:

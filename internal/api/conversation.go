@@ -59,7 +59,12 @@ type ToolCall struct {
 // List returns sessions for the current user.
 func (h *ConversationHandler) List(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
-	sessions, err := h.sessionMgr.ListSessions(r.Context(), claims.UserID)
+
+	// 分页参数
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	perPage, _ := strconv.Atoi(r.URL.Query().Get("per_page"))
+
+	sessions, err := h.sessionMgr.ListSessions(r.Context(), claims.UserID, page, perPage)
 	if err != nil {
 		// Fallback: return empty list
 		OK(w, []Conversation{})

@@ -132,17 +132,25 @@ func (m *Manager) CreateSession(ctx context.Context, id, userID, title string) (
 }
 
 // ListSessions returns sessions for a given user, newest first.
-func (m *Manager) ListSessions(ctx context.Context, userID string) ([]model.Session, error) {
+// page 从 1 开始，perPage 默认为 100（最大 200）。
+func (m *Manager) ListSessions(ctx context.Context, userID string, page, perPage int) ([]model.Session, error) {
 	if m.pool == nil {
 		return nil, nil
 	}
+	if page < 1 {
+		page = 1
+	}
+	if perPage < 1 || perPage > 200 {
+		perPage = 100
+	}
+	offset := (page - 1) * perPage
 
 	rows, err := m.pool.Query(ctx,
 		`SELECT id, COALESCE(user_id::text, ''), COALESCE(title, ''), COALESCE(pinned, false), created_at, updated_at
 		 FROM sessions
 		 WHERE user_id = $1
 		 ORDER BY pinned DESC, updated_at DESC
-		 LIMIT 100`, userID)
+		 LIMIT $2 OFFSET $3`, userID, perPage, offset)
 	if err != nil {
 		return nil, fmt.Errorf("list sessions: %w", err)
 	}
@@ -228,6 +236,8 @@ func (m *Manager) UpdateSession(ctx context.Context, id string, title *string, p
 // ── Message helpers ───────────────────────────────────────────────────────
 
 // SaveMessage inserts a single message into the session's message log.
+// The user_id is set to NULL; SaveUserMessage/SaveAssistantMessage should be
+// used for user-facing message persistence.
 func (m *Manager) SaveMessage(ctx context.Context, sessionID, role, content string) error {
 	if m.pool == nil {
 		return nil
@@ -235,7 +245,7 @@ func (m *Manager) SaveMessage(ctx context.Context, sessionID, role, content stri
 
 	_, err := m.pool.Exec(ctx,
 		`INSERT INTO sessions (id, tenant_id, user_id, title, created_at, updated_at)
-		 VALUES ($1, $2, NULL, '', NOW(), NOW())
+		 VALUES ($1, $2, NULL::uuid, '', NOW(), NOW())
 		 ON CONFLICT (id) DO UPDATE SET updated_at = NOW()`,
 		sessionID, DefaultTenantID)
 	if err != nil {

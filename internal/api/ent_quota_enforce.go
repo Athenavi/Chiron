@@ -67,13 +67,10 @@ type tenantQuotaEnforcer struct {
 // 接线点（集成任务）：gateway_router.go registerAgentRoutes 中 POST /submit
 // 现有 billing 预检（billingMgr.DailyFreeCount / GetBalance）旁，一行调用：
 //
-//	if err := api.EnforceTenantQuota(r.Context(), r, claims, 0); errors.Is(err, api.ErrTenantQuotaExceeded) {
+//	if err := api.EnforceTenantQuota(r.Context(), claims, 0); errors.Is(err, api.ErrTenantQuotaExceeded) {
 //	    TooManyRequests(w); return
 //	}
-func EnforceTenantQuota(ctx context.Context, r *http.Request, claims *auth.Claims, estimatedTokens int64) error {
-	if ctx == nil && r != nil {
-		ctx = r.Context()
-	}
+func EnforceTenantQuota(ctx context.Context, claims *auth.Claims, estimatedTokens int64) error {
 	var rr quotaRedis
 	if db.Redis != nil {
 		rr = db.Redis

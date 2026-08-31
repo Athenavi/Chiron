@@ -248,12 +248,19 @@ func Init() {
 
 var (
 	costMu           sync.Mutex
-	costBySession    = make(map[string]*SessionCost)
+	costBySession    = make(map[string]*SessionCostWithTTL)
 	maxSessionCosts  = 10000
 	sessionCostRing  = make([]string, 10000) // ring buffer for FIFO eviction
 	sessionCostHead  = 0                     // next eviction position
 	sessionCostCount = 0                     // number of entries in ring
+	sessionCostTTL   = 30 * time.Minute      // TTL for session cost entries
 )
+
+// SessionCostWithTTL wraps SessionCost with an expiry time.
+type SessionCostWithTTL struct {
+	SessionCost
+	ExpiresAt time.Time
+}
 
 // SessionCost tracks token usage for a session.
 type SessionCost struct {
@@ -267,7 +274,7 @@ func RecordSessionUsage(sessionID string, inputTokens, outputTokens int) {
 	costMu.Lock()
 	defer costMu.Unlock()
 	s, ok := costBySession[sessionID]
-	if !ok {
+	if !ok || time.Now().After(s.ExpiresAt) {
 		// Evict oldest if at capacity
 		if len(costBySession) >= maxSessionCosts {
 			oldest := sessionCostRing[sessionCostHead]
@@ -275,12 +282,18 @@ func RecordSessionUsage(sessionID string, inputTokens, outputTokens int) {
 			sessionCostHead = (sessionCostHead + 1) % maxSessionCosts
 			sessionCostCount--
 		}
-		s = &SessionCost{}
+		s = &SessionCostWithTTL{
+			SessionCost: SessionCost{},
+			ExpiresAt:   time.Now().Add(sessionCostTTL),
+		}
 		costBySession[sessionID] = s
 		// Add to ring buffer at tail
 		tail := (sessionCostHead + sessionCostCount) % maxSessionCosts
 		sessionCostRing[tail] = sessionID
 		sessionCostCount++
+	} else {
+		// Refresh TTL on active session
+		s.ExpiresAt = time.Now().Add(sessionCostTTL)
 	}
 	s.InputTokens += inputTokens
 	s.OutputTokens += outputTokens
@@ -291,19 +304,24 @@ func RecordSessionUsage(sessionID string, inputTokens, outputTokens int) {
 func GetSessionCost(sessionID string) SessionCost {
 	costMu.Lock()
 	defer costMu.Unlock()
-	if s, ok := costBySession[sessionID]; ok {
-		return *s
+	if s, ok := costBySession[sessionID]; ok && !time.Now().After(s.ExpiresAt) {
+		return s.SessionCost
 	}
 	return SessionCost{}
 }
 
-// AllSessionCosts returns snapshots of all tracked session costs.
+// AllSessionCosts returns snapshots of all non-expired tracked session costs.
 func AllSessionCosts() map[string]SessionCost {
 	costMu.Lock()
 	defer costMu.Unlock()
 	result := make(map[string]SessionCost, len(costBySession))
+	now := time.Now()
 	for k, v := range costBySession {
-		result[k] = *v
+		if now.After(v.ExpiresAt) {
+			delete(costBySession, k)
+			continue
+		}
+		result[k] = v.SessionCost
 	}
 	return result
 }

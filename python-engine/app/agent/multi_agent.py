@@ -71,6 +71,7 @@ class SubAgent:
         self.max_turns = max_turns
         self.max_tokens = max_tokens
         self.temperature = temperature
+        self._openai_tools = None  # P8: 缓存工具转换结果
 
     async def run(
         self,
@@ -108,9 +109,9 @@ class SubAgent:
             context_text = "\n".join(f"- {k}: {v}" for k, v in context.items())
             system_prompt = f"{system_prompt}\n\n## Context\n{context_text}"
 
-        # 将 tools 转换为 OpenAI function-calling 格式
-        openai_tools = None
-        if self.tools:
+        # 将 tools 转换为 OpenAI function-calling 格式（缓存结果，P8 修复）
+        openai_tools = self._openai_tools
+        if openai_tools is None and self.tools:
             openai_tools = [
                 {
                     "type": "function",
@@ -122,6 +123,7 @@ class SubAgent:
                 }
                 for t in self.tools
             ]
+            self._openai_tools = openai_tools
 
         # Agent loop
         messages: list[ChatMessage] = []

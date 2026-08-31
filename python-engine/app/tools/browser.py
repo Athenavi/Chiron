@@ -56,58 +56,50 @@ class GatewayBrowserHub:
 
     通过环境变量 RPA_GATEWAY_URL(=http://gateway:8080) 开启；未配置则浏览器工具不可用。
     请求携带共享 X-Internal-Token，由 Go 网关校验（与网关→引擎互信同源）。
+    使用共享 httpx.AsyncClient 连接池，避免每次调用新建连接（R6 修复）。
     """
 
     def __init__(self, base_url: str):
-        from app.tools.ssrf import assert_safe_url
-        assert_safe_url(base_url)
-        self._base_url = base_url.rstrip("/")
-
-    def connected_client_ids(self) -> list[str]:
         import httpx
 
         from app.tools.ssrf import assert_safe_url
+        assert_safe_url(base_url)
+        self._base_url = base_url.rstrip("/")
+        self._client = httpx.AsyncClient(
+            timeout=httpx.Timeout(60.0),
+            follow_redirects=False,
+        )
 
-        url = f"{self._base_url}/v1/rpa/clients"
-        assert_safe_url(url)
-        import os
-
+    async def connected_client_ids(self) -> list[str]:
         from app.config import settings
 
-        # SSRF: 禁用重定向防止 gateway 重写到内网地址
-        resp = httpx.get(
+        import os
+
+        url = f"{self._base_url}/v1/rpa/clients"
+        resp = await self._client.get(
             url,
             headers={
                 "X-Internal-Token": settings.internal_token
                 or os.getenv("INTERNAL_TOKEN", "")
             },
-            timeout=10,
-            follow_redirects=False,
         )
         resp.raise_for_status()
         data = resp.json()
         return data.get("client_ids") or []
 
-    def exec_command(self, client_id: str, method: str, params: dict[str, Any]) -> Any:
+    async def exec_command(self, client_id: str, method: str, params: dict[str, Any]) -> Any:
         import os
 
-        import httpx
-
         from app.config import settings
-        from app.tools.ssrf import assert_safe_url
 
         url = f"{self._base_url}/v1/rpa/exec"
-        assert_safe_url(url)
-        # SSRF: 禁用重定向
-        resp = httpx.post(
+        resp = await self._client.post(
             url,
             json={"client_id": client_id, "method": method, "params": params},
             headers={
                 "X-Internal-Token": settings.internal_token
                 or os.getenv("INTERNAL_TOKEN", "")
             },
-            timeout=60,
-            follow_redirects=False,
         )
         resp.raise_for_status()
         return resp.json()

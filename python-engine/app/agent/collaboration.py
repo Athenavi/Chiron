@@ -77,6 +77,7 @@ class AgentContextStore:
         self.tenant_id = tenant_id
         self._local_store: dict[str, dict] = {}
         self._redis_client = None  # Lazy load
+        self._redis_available = False  # P7: 标记 Redis 可用性
 
     async def set(self, context_id: str, data: dict, ttl: int = 3600) -> None:
         """设置上下文 (带 TTL 自动过期)"""
@@ -90,6 +91,14 @@ class AgentContextStore:
                 json.dumps(data, ensure_ascii=False),
             )
         else:
+            if not self._redis_available:
+                self._redis_available = True
+                logger.warning(
+                    "AgentContextStore Redis unavailable for tenant %s — "
+                    "falling back to in-memory store (data lost on restart, "
+                    "multi-instance inconsistent)",
+                    self.tenant_id,
+                )
             self._local_store[context_id] = data
 
     async def get(self, context_id: str) -> Optional[dict]:
@@ -114,7 +123,17 @@ class AgentContextStore:
     async def list_keys(self) -> list[str]:
         """列出该租户下的所有 context_id"""
         if self._redis_client:
-            keys = await self._redis_client.keys(f"chiron:context:{self.tenant_id}:*")
+            # 使用 SCAN 替代 KEYS 避免 O(N) 阻塞 Redis 主线程
+            keys = []
+            cursor = 0
+            pattern = f"chiron:context:{self.tenant_id}:*"
+            while True:
+                cursor, batch = await self._redis_client.scan(
+                    cursor=cursor, match=pattern, count=100
+                )
+                keys.extend(batch)
+                if cursor == 0:
+                    break
             return [k.split(":")[-1] for k in keys]
         else:
             return list(self._local_store.keys())

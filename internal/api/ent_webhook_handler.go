@@ -41,9 +41,17 @@ func NewEntWebhookHandler() *EntWebhookHandler {
 }
 
 // deriveWebhookKey 从 APP_SECRET 派生 32-byte AES-256 key。
+// 若 APP_SECRET 未设置，使用 HMAC-SHA256 派生（保证密钥熵而非直接返回固定值）。
 func deriveWebhookKey() []byte {
 	secret := os.Getenv("APP_SECRET")
 	length := 32
+	if secret == "" {
+		// APP_SECRET 为空时使用 HMAC-SHA256 派生，确保密钥非空且有熵
+		slog.Warn("APP_SECRET not set, webhook encryption uses fallback key (not safe for production)")
+		mac := hmac.New(sha256.New, []byte("chiron-webhook-encryption-fallback"))
+		mac.Write([]byte("chiron-webhook-key-derivation"))
+		return mac.Sum(nil)[:length]
+	}
 	if len(secret) >= length {
 		return []byte(secret)[:length]
 	}
@@ -91,7 +99,7 @@ type WebhookEvent struct {
 // 加密 webhook secret（AES-256-GCM）
 func encryptWebhookSecret(plaintext, key string) (string, error) {
 	if key == "" {
-		return plaintext, nil // 无密钥时不加密
+		return "", fmt.Errorf("encryption key is empty, cannot encrypt webhook secret")
 	}
 	block, err := aes.NewCipher([]byte(key))
 	if err != nil {

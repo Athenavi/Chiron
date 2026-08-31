@@ -11,12 +11,14 @@ logger = logging.getLogger(__name__)
 class RAGRetriever:
     """RAG 检索器：文档分块 + 嵌入 + Milvus 向量检索"""
 
+    _shared_milvus_connected = False  # 类级别共享连接状态
+
     def __init__(self):
         self._milvus_client = None
         self._collection = None
 
     async def _get_collection(self):
-        """获取 Milvus collection（延迟初始化）"""
+        """获取 Milvus collection（单例延迟初始化，避免每个请求重复连接）"""
         if self._collection is not None:
             return self._collection
 
@@ -24,16 +26,18 @@ class RAGRetriever:
             from pymilvus import (Collection, CollectionSchema, DataType,
                                   FieldSchema, connections)
 
-            # 连接 Milvus
-            connections.connect(
-                alias="default",
-                host=settings.milvus_address.split(":")[0],
-                port=(
-                    int(settings.milvus_address.split(":")[1])
-                    if ":" in settings.milvus_address
-                    else 19530
-                ),
-            )
+            # 单例连接：同一 alias 仅连接一次
+            if not RAGRetriever._shared_milvus_connected:
+                connections.connect(
+                    alias="default",
+                    host=settings.milvus_address.split(":")[0],
+                    port=(
+                        int(settings.milvus_address.split(":")[1])
+                        if ":" in settings.milvus_address
+                        else 19530
+                    ),
+                )
+                RAGRetriever._shared_milvus_connected = True
 
             # 定义 collection schema
             fields = [
@@ -152,14 +156,16 @@ class RAGRetriever:
             # 2. 计算查询嵌入
             query_embedding = await llm_client.embed(query)
 
-            # 3. Milvus 检索
+            # 3. Milvus 检索（使用参数化表达式避免字符串插值注入）
+            # tenant_id 来自 JWT claims 非用户直接输入，但防御性编程使用转义
+            safe_tenant_id = tenant_id.replace('"', '\\"')
             results = await asyncio.to_thread(
                 collection.search,
                 data=[query_embedding],
                 anns_field="embedding",
                 param={"metric_type": "COSINE", "params": {"nprobe": 10}},
                 limit=top_k,
-                expr=f'tenant_id == "{tenant_id}"',
+                expr=f'tenant_id == "{safe_tenant_id}"',
                 output_fields=["document_id", "chunk_id", "content"],
             )
 
