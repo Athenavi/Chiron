@@ -52,7 +52,6 @@ DANGEROUS_CALLS = {
     "input",
     "breakpoint",
 }
-DANGEROUS_ATTRS = ("os.", "subprocess.", "sys.", "socket.", "ctypes.")
 # 注意：getattr/setattr 等反射函数不在静态层封杀 —— 静态层无法识别动态构造的
 # 混淆调用，这类攻击由运行时守卫（_safe_builtins stub）兜底拦截（纵深防御）。
 
@@ -143,7 +142,7 @@ def check_static(code: str) -> str | None:
 # S4 强化：移除 io/copy/operator/enum — 这些模块提供元编程链可触达 os/socket，
 # 导致沙箱逃逸。模型代码不需要它们（文件 IO 由 tools 注入 namespace 提供）。
 # asyncio 保留：模型代码常需 `await asyncio.sleep()`/`asyncio.gather()`，且
-# 危险子模块（asyncio.subprocess）由 DANGEROUS_ATTRS 静态守卫拦截。
+# 危险子模块（asyncio.subprocess）由 DANGEROUS_ATTR_PATHS 静态守卫拦截。
 SAFE_IMPORTS = frozenset(
     {
         "json",

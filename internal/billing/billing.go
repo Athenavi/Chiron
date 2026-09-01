@@ -64,7 +64,8 @@ type Manager struct {
 	eventCh   chan CreditEvent
 	done      chan struct{}
 	closeOnce sync.Once
-	balances  sync.Map // userID → *int64 (atomic balance)
+	wg        sync.WaitGroup // waits for dispatch goroutine to exit
+	balances  sync.Map       // userID → *int64 (atomic balance)
 }
 
 // Store is the interface for persisting credit data.
@@ -89,6 +90,7 @@ func NewManager(store Store) *Manager {
 		eventCh: make(chan CreditEvent, 1024),
 		done:    make(chan struct{}),
 	}
+	m.wg.Add(1)
 	go m.dispatch()
 	return m
 }
@@ -101,14 +103,17 @@ func (m *Manager) Subscribe(obs BillingObserver) {
 }
 
 // Close stops the background event dispatcher and drains remaining events.
+// Waits for the dispatch goroutine to fully exit before returning.
 func (m *Manager) Close() {
 	m.closeOnce.Do(func() {
 		close(m.done)
 	})
+	m.wg.Wait()
 }
 
 // dispatch runs in a background goroutine, forwarding events to all observers.
 func (m *Manager) dispatch() {
+	defer m.wg.Done()
 	for {
 		select {
 		case evt := <-m.eventCh:

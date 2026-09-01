@@ -64,6 +64,8 @@
         condition: service_healthy
       temporal:
         condition: service_started
+    environment:
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?INTERNAL_TOKEN is required — set to same value as python-engine's INTERNAL_TOKEN}
     volumes:
       - workspace:/app/workspace
     restart: unless-stopped

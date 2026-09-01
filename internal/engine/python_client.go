@@ -100,6 +100,7 @@ func (c *PythonClient) HealthCheck(ctx context.Context) map[string]interface{} {
 			addrs[addr] = status
 			continue
 		}
+		c.injectInternalToken(req)
 		resp, err := c.client.Do(req)
 		latency := time.Since(start).Milliseconds()
 		status.LatencyMs = latency
@@ -192,6 +193,11 @@ func (c *PythonClient) do(req *http.Request) (*http.Response, error) {
 	}
 
 	for attempt := 0; attempt <= defaultRetryConfig.MaxRetries; attempt++ {
+		// 检查上下文取消
+		if err := req.Context().Err(); err != nil {
+			return nil, fmt.Errorf("request cancelled before attempt %d: %w", attempt+1, err)
+		}
+
 		if attempt > 0 {
 			// 指数退避
 			backoff := time.Duration(

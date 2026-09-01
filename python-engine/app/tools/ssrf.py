@@ -123,7 +123,9 @@ async def fetch_url_safe(
     """SSRF 安全的 HTTP GET：每次重定向跳转前重新执行 assert_safe_url，
     防止攻击者用公开 URL 302 到内网/云元数据地址（重定向绕过）。
     客户端应使用 follow_redirects=False 的 AsyncClient 调用本函数。
+    max_redirects 上限 20，防止调用方传超大值造成循环攻击。
     """
+    max_redirects = min(max_redirects, 20)
     current = url
     for _ in range(max_redirects + 1):
         assert_safe_url(current)

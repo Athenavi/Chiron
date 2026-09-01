@@ -58,7 +58,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         self._redis = redis_client
         self._internal_token = internal_token
 
-        if not jwt_secret or jwt_secret in _WEAK_JWT_SECRETS:
+        if not jwt_secret or len(jwt_secret) < 32 or jwt_secret in _WEAK_JWT_SECRETS:
             env_secret = os.getenv("JWT_SECRET", "")
             if (
                 env_secret

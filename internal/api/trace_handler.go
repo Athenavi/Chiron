@@ -126,7 +126,7 @@ func (h *TraceHandler) ListTraces(w http.ResponseWriter, r *http.Request) {
 	streamKey := "chiron:traces:" + tenantID
 
 	// 使用 XRevRange 读取最新的 N 条记录（避免 XRANGE 全量扫描）
-	rawEntries, err := h.rdb.XRevRangeN(r.Context(), streamKey, "+", "-", int64(limit*10)).Result()
+	rawEntries, err := h.rdb.XRange(r.Context(), streamKey, "+", "-", int64(limit*10)).Result()
 	if err != nil {
 		slog.Warn("trace list scan failed", "tenant", tenantID, "error", err)
 		OK(w, map[string]any{"traces": []any{}, "count": 0})
@@ -193,7 +193,7 @@ func (h *TraceHandler) queryTraces(traceID, tenantID string) ([]TraceSpan, error
 	// 使用 XRevRange 读取最近 1000 条记录（避免 XRANGE 全量扫描）
 	queryCtx, queryCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer queryCancel()
-	entries, err := h.rdb.XRevRangeN(queryCtx, streamKey, "+", "-", 1000).Result()
+	entries, err := h.rdb.XRange(queryCtx, streamKey, "+", "-", 1000).Result()
 	if err != nil {
 		return nil, err
 	}

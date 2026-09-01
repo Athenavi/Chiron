@@ -185,7 +185,9 @@ class Settings(BaseSettings):
         WEAK_SECRETS = {
             "",
             "dev-secret-change-in-production",
+            "dev-secret-change-in-production-12345678",
             "changeme",
+            "change-me",
             "secret",
             "test-secret",
         }

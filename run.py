@@ -16,7 +16,6 @@ chiron 一键运行脚本
 
 import os
 import sys
-import json
 import time
 import signal
 import shutil
