@@ -1321,3 +1321,65 @@ html[data-theme="supabase-dark"] .msg-row.user .msg-text {
     border-bottom-right-radius: 10px !important;
     box-shadow: 0 6px 24px rgba(62, 207, 142, 0.3) !important;
 }
+
+/* ============================================
+   CSS Performance Optimizations (P0)
+   contain / content-visibility / will-change
+   ============================================ */
+
+/* 1. contain: 布局独立 — 消息项/表格行/卡片互不影响重排 */
+.msg-row,
+.message-item,
+.ant-table-tbody > tr,
+.ant-card {
+  contain: layout style;
+}
+
+/* 2. content-visibility: 不用品可见区域的内容跳过布局/绘制 */
+.scrollable-list,
+.sidebar-scroll {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 500px;
+}
+
+/* 3. will-change: 仅动画期间提示浏览器优化，结束后移除 */
+.slide-enter-active,
+.slide-leave-active,
+.fade-enter-active,
+.fade-leave-active {
+  will-change: transform, opacity;
+}
+.slide-enter-to,
+.slide-leave-from,
+.fade-enter-to,
+.fade-leave-from {
+  will-change: auto;
+}
+
+/* 4. GPU 加速：transform/opacity 替换 top/left 变化 */
+.transform-transition {
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+              opacity 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* 5. 文本渲染优化 */
+.text-optimized {
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 6. 滚动容器性能 */
+.scrollable-container {
+  -webkit-overflow-scrolling: touch;
+  contain: strict;
+}
+
+/* 7. 字体加载优化：font-display swap 避免 FOIT */
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@100..900&display=swap');
+
+/* Geist Variable fallback: 使用系统字体直到自定义字体加载完成 */
+body {
+  font-family: 'Geist Variable', 'Geist', -apple-system, BlinkMacSystemFont,
+    'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}

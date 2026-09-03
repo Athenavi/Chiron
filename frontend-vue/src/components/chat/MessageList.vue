@@ -206,7 +206,7 @@ const badgeText = computed(() => (unseenCount.value > 99 ? '99+' : String(unseen
 </template>
 
 <style scoped>
-.message-list { flex: 1; overflow-y: auto; position: relative; }
+.message-list { flex: 1; overflow-y: auto; position: relative; contain: layout style; }
 .list-empty-placeholder { height: 24px; }
 
 /* P2-E: 首屏骨架屏 */
