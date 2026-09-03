@@ -32,7 +32,7 @@ export async function executeQuickCommand(command: string): Promise<QuickCommand
     return { sessionId, title }
   } catch {
     await router.push({ path: '/chat', query: { task: '', error: 'request failed' } })
-    throw error
+    throw new Error('request failed')
   }
 }
 </script>

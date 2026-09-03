@@ -1,6 +1,6 @@
 <template>
   <Modal
-    v-model:visible="visible"
+    v-model:visible="modalVisible"
     title="文档预览"
     :footer="null"
     :style="{ maxWidth: '800px' }"
@@ -85,6 +85,12 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   (e: 'update:visible', v: boolean): void
 }>()
+
+// v-model 不能直接绑定 prop，使用 computed 双向绑定
+const modalVisible = computed({
+  get: () => props.visible,
+  set: (val: boolean) => emit('update:visible', val),
+})
 
 const loading = ref(false)
 const content = ref('')
