@@ -7,6 +7,8 @@ import router from './router'
 import App from './App.vue'
 import './style.css'
 import { usePerformanceMonitor } from './composables/usePerformanceMonitor'
+import { setupRequestInterceptors } from './utils/requestOptimizer'
+import { api } from './api'
 
 const app = createApp(App)
 
@@ -21,6 +23,9 @@ initMonitor()
 if (import.meta.env.DEV) {
   window.__ChironPerf = { mark, measure, getReport: () => usePerformanceMonitor().getReport() }
 }
+
+// 初始化请求优化（需在全局 api 实例创建后调用）
+setupRequestInterceptors(api)
 
 const pinia = createPinia()
 

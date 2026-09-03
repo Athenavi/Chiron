@@ -1,5 +1,6 @@
 import type { RouteLocationNormalized, NavigationGuardNext } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { requestManager } from '../utils/requestOptimizer'
 
 /**
  * 全局路由守卫：
@@ -15,6 +16,11 @@ export async function authGuard(
   _from: RouteLocationNormalized,
   next: NavigationGuardNext,
 ) {
+  // 路由切换时取消进行中的请求，避免接口瀑布和内存泄漏
+  if (to.path !== _from.path) {
+    requestManager.cancelAll()
+  }
+
   const auth = useAuthStore()
 
   // admin 访问（或本地无会话态）时，以 httpOnly cookie 向后端拉取权威 profile。

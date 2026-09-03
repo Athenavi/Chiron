@@ -7,7 +7,7 @@ import 'highlight.js/styles/github.css'
 import texmath from 'markdown-it-texmath'
 import katex from 'katex'
 import hljs from 'highlight.js/lib/common'
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onBeforeUnmount } from 'vue'
 import { message, Input } from 'ant-design-vue'
 import { CopyOutlined, EditOutlined, ReloadOutlined, FileOutlined, LikeOutlined, DislikeOutlined, LikeFilled, DislikeFilled } from '@ant-design/icons-vue'
 import ReasoningBlock from './ReasoningBlock.vue'
@@ -114,7 +114,11 @@ async function resolveAttachmentUrls() {
   }
 }
 
-watch(() => props.item, () => { void resolveAttachmentUrls() }, { immediate: true, deep: true })
+const attachmentUnwatch = watch(() => props.item, () => { void resolveAttachmentUrls() }, { immediate: true, deep: true })
+
+onBeforeUnmount(() => {
+  attachmentUnwatch()
+})
 
 function onAttachmentImgError(att: ChatAttachment) {
   // 签名 URL 加载失败/过期 → 回退原始公开路径（旧路径仍保留，仅不再作为新渲染首选）

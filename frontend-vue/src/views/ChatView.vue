@@ -484,6 +484,7 @@ onUnmounted(() => {
   stopTurnTimer()
   if (activeSSE) { activeSSE.close(); activeSSE = null }
   if (unifiedDoneTimer) { clearTimeout(unifiedDoneTimer); unifiedDoneTimer = null }
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
   window.removeEventListener('online', onOnline)
   window.removeEventListener('offline', onOffline)
   window.removeEventListener('keydown', onGlobalKeydown)
