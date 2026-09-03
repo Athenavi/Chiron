@@ -66,7 +66,7 @@ func (a *Authenticator) ValidateToken(tokenStr string) (*Claims, error) {
 		return a.secret, nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("token validation: %w", err)
+		return nil, fmt.Errorf("token validation failed")
 	}
 
 	claims, ok := token.Claims.(*Claims)

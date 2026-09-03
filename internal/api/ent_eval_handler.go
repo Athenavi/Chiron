@@ -12,6 +12,9 @@ import (
 )
 
 // ── Agent 评估系统 API ─────────────────────────────────────────────
+//
+// TODO: 实现评估运行执行（CreateRun 端点 + Python 引擎 eval 模块集成），
+// 当前仅提供数据集 CRUD 和版本管理功能。
 
 // EntEvalHandler 提供 Agent 评估管理 API（数据集/运行/评分）。
 type EntEvalHandler struct{}
@@ -122,7 +125,10 @@ func (h *EntEvalHandler) GetDataset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var examplesParsed interface{}
-	_ = json.Unmarshal(examples, &examplesParsed)
+	if err := json.Unmarshal(examples, &examplesParsed); err != nil {
+		slog.Warn("eval: unmarshal dataset examples failed", "error", err)
+		examplesParsed = []interface{}{}
+	}
 	OK(w, map[string]interface{}{
 		"id": id, "tenant_id": tenantID, "name": name, "description": description,
 		"examples": examplesParsed, "example_count": exampleCount,
@@ -206,8 +212,14 @@ func (h *EntEvalHandler) GetRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var resultsParsed, summaryParsed interface{}
-	_ = json.Unmarshal(results, &resultsParsed)
-	_ = json.Unmarshal(summary, &summaryParsed)
+	if err := json.Unmarshal(results, &resultsParsed); err != nil {
+		slog.Warn("eval: unmarshal run results failed", "error", err)
+		resultsParsed = []interface{}{}
+	}
+	if err := json.Unmarshal(summary, &summaryParsed); err != nil {
+		slog.Warn("eval: unmarshal run summary failed", "error", err)
+		summaryParsed = map[string]interface{}{}
+	}
 	OK(w, map[string]interface{}{
 		"id": id, "tenant_id": tenantID, "dataset_name": datasetName, "dataset_id": datasetID,
 		"results": resultsParsed, "summary": summaryParsed, "status": status, "created_at": createdAt,
@@ -280,9 +292,12 @@ func (h *EntEvalHandler) CreatePromptVersion(w http.ResponseWriter, r *http.Requ
 	id := uuid.New().String()
 	// 获取下一个版本号
 	var maxVer int
-	_ = db.GlobalDBManager.QueryRow(r.Context(),
+	if err := db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT COALESCE(MAX(version), 0) FROM ent_eval_prompts WHERE tenant_id = $1 AND name = $2`,
-		tenantID, body.Name).Scan(&maxVer)
+		tenantID, body.Name).Scan(&maxVer); err != nil {
+		slog.Warn("eval: get max version failed, defaulting to 0", "error", err)
+		maxVer = 0
+	}
 	version := maxVer + 1
 	_, err := db.GlobalDBManager.Exec(r.Context(),
 		`INSERT INTO ent_eval_prompts (id, tenant_id, name, version, content, note, tags)

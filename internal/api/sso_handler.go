@@ -317,7 +317,7 @@ func (h *SSOHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	exchanger, cfg, err := h.exchangerFor(provider, clientSecret)
 	if err != nil {
-		BadRequest(w, err.Error())
+		BadRequest(w, "sso provider configuration error")
 		return
 	}
 	authURL, err := exchanger.AuthURL(r.Context(), cfg, state, nonce)
@@ -368,7 +368,7 @@ func (h *SSOHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	// 3. 授权码交换 + 身份校验（OIDC 含 nonce 比对；OAuth2 由 state HMAC 防重放）
 	exchanger, cfg, err := h.exchangerFor(provider, clientSecret)
 	if err != nil {
-		BadRequest(w, err.Error())
+		BadRequest(w, "sso provider configuration error")
 		return
 	}
 	idToken, err := exchanger.ExchangeAndVerify(r.Context(), cfg, code, payload.Nonce)
@@ -758,7 +758,7 @@ func (h *SSOHandler) CreateProvider(w http.ResponseWriter, r *http.Request) {
 	issuer, protocol, providerType, authURL, tokenURL, userinfoURL, scopes, err :=
 		normalizeProviderInput(req.Protocol, req.ProviderType, req.Issuer, req.AuthURL, req.TokenURL, req.UserinfoURL, req.Scopes)
 	if err != nil {
-		BadRequest(w, err.Error())
+		BadRequest(w, "sso provider configuration error")
 		return
 	}
 	if protocol == auth.ProtocolOIDC && issuer == "" {
@@ -948,7 +948,7 @@ func (h *SSOHandler) UpdateProvider(w http.ResponseWriter, r *http.Request) {
 		issuer, protocol, providerType, authURL, tokenURL, userinfoURL, _, err =
 			normalizeProviderInput(protocol, providerType, iss, au, tu, uu, scopes)
 		if err != nil {
-			BadRequest(w, err.Error())
+			BadRequest(w, "sso provider configuration error")
 			return
 		}
 	}

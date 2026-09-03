@@ -243,7 +243,7 @@ func (h *PluginHandler) Install(w http.ResponseWriter, r *http.Request) {
 	}
 	// P0-S7 修复：命令必须命中白名单（默认禁用），防任意命令执行
 	if err := checkPluginCommandAllowed(body.Command); err != nil {
-		Forbidden(w, err.Error())
+		Forbidden(w, "plugin command not allowed")
 		return
 	}
 
@@ -390,7 +390,7 @@ func (h *PluginHandler) Update(w http.ResponseWriter, r *http.Request) {
 			}
 			// P0-S7 修复：命令必须命中白名单（默认禁用）
 			if err := checkPluginCommandAllowed(*body.Command); err != nil {
-				Forbidden(w, err.Error())
+				Forbidden(w, "plugin command not allowed")
 				return
 			}
 			plugins[i].Command = *body.Command
@@ -473,7 +473,7 @@ func (h *PluginHandler) Test(w http.ResponseWriter, r *http.Request) {
 	// P0 安全：命令白名单检查
 	if err := checkPluginCommandAllowed(plugin.Command); err != nil {
 		OK(w, map[string]interface{}{
-			"ok": false, "message": err.Error(),
+			"ok": false, "message": "plugin command not allowed",
 			"duration_ms": time.Since(start).Milliseconds(),
 		})
 		return
@@ -506,7 +506,7 @@ func (h *PluginHandler) Test(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := cmd.Start(); err != nil {
 		OK(w, map[string]interface{}{
-			"ok": false, "message": "无法启动进程: " + err.Error(),
+			"ok": false, "message": "plugin process start failed",
 			"duration_ms": time.Since(start).Milliseconds(),
 		})
 		return
@@ -520,7 +520,7 @@ func (h *PluginHandler) Test(w http.ResponseWriter, r *http.Request) {
 	req := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"chiron","version":"1.0"}}}`
 	if _, err := stdin.Write([]byte(req + "\n")); err != nil {
 		OK(w, map[string]interface{}{
-			"ok": false, "message": "写入握手请求失败: " + err.Error(),
+			"ok": false, "message": "write handshake request failed",
 			"duration_ms": time.Since(start).Milliseconds(),
 		})
 		return
@@ -543,7 +543,7 @@ func (h *PluginHandler) Test(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			msg = "无有效 MCP initialize 响应" + strings.TrimSpace(resp.line)
 			if resp.err != nil {
-				msg = "读取响应失败: " + resp.err.Error()
+				msg = "read response failed"
 			}
 		}
 		OK(w, map[string]interface{}{

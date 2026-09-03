@@ -108,10 +108,14 @@ func (h *EntModelRouterHandler) ListRoutes(w http.ResponseWriter, r *http.Reques
 			continue
 		}
 		if len(fallbackRaw) > 0 {
-			_ = json.Unmarshal(fallbackRaw, &r.FallbackOrder)
+			if err := json.Unmarshal(fallbackRaw, &r.FallbackOrder); err != nil {
+				slog.Warn("model route: unmarshal fallback_order failed", "error", err)
+			}
 		}
 		if len(configRaw) > 0 {
-			_ = json.Unmarshal(configRaw, &r.ProviderConfig)
+			if err := json.Unmarshal(configRaw, &r.ProviderConfig); err != nil {
+				slog.Warn("model route: unmarshal provider_config failed", "error", err)
+			}
 		}
 		out = append(out, r)
 	}
@@ -189,17 +193,21 @@ func (h *EntModelRouterHandler) GetRoute(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if len(fallbackRaw) > 0 {
-		_ = json.Unmarshal(fallbackRaw, &route.FallbackOrder)
+			if err := json.Unmarshal(fallbackRaw, &route.FallbackOrder); err != nil {
+				slog.Warn("model route: unmarshal fallback_order failed", "error", err)
+			}
+		}
+		if len(configRaw) > 0 {
+			if err := json.Unmarshal(configRaw, &route.ProviderConfig); err != nil {
+				slog.Warn("model route: unmarshal provider_config failed", "error", err)
+			}
+		}
+		OK(w, route)
 	}
-	if len(configRaw) > 0 {
-		_ = json.Unmarshal(configRaw, &route.ProviderConfig)
-	}
-	OK(w, route)
-}
 
-// ── UpdateRoute ──
+	// ── UpdateRoute ──
 
-func (h *EntModelRouterHandler) UpdateRoute(w http.ResponseWriter, r *http.Request) {
+	func (h *EntModelRouterHandler) UpdateRoute(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	if claims == nil {
 		Unauthorized(w, ErrAuthRequired)
@@ -325,7 +333,9 @@ func (h *EntModelRouterHandler) SyncRoutes(w http.ResponseWriter, r *http.Reques
 			continue
 		}
 		if len(fallbackRaw) > 0 {
-			_ = json.Unmarshal(fallbackRaw, &rc.FallbackOrder)
+			if err := json.Unmarshal(fallbackRaw, &rc.FallbackOrder); err != nil {
+				slog.Warn("model route: unmarshal fallback_order failed", "error", err)
+			}
 		}
 		out = append(out, rc)
 	}

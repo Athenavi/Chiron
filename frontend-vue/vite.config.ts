@@ -3,6 +3,7 @@ import vue from '@vitejs/plugin-vue'
 import { fileViewerRenderers } from '@file-viewer/vite-plugin'
 import Components from 'unplugin-vue-components/vite'
 import { AntDesignVueResolver } from 'unplugin-vue-components/resolvers'
+import { compression, defineAlgorithm } from 'vite-plugin-compression2'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
@@ -18,6 +19,20 @@ export default defineConfig({
     Components({
       resolvers: [AntDesignVueResolver({ importStyle: false })],
       dts: 'src/components.d.ts',
+    }),
+    // Gzip 压缩：减少传输体积
+    compression({
+      algorithms: [defineAlgorithm('gzip')],
+      exclude: [/\.(br)$/, /\.(gz)$/],
+      threshold: 1024,
+      deleteOriginalAssets: false,
+    }),
+    // Brotli 压缩：更高压缩比
+    compression({
+      algorithms: [defineAlgorithm('brotliCompress')],
+      exclude: [/\.(atlas)$/, /\.map$/, /\.json$/],
+      threshold: 1024,
+      deleteOriginalAssets: false,
     }),
   ],
   resolve: {
@@ -64,16 +79,31 @@ export default defineConfig({
     },
   },
   build: {
+    target: 'es2020',
+    minify: 'esbuild',
+    sourcemap: false,
+    cssCodeSplit: true,
+    chunkSizeWarningLimit: 1000,
+    // 启用 Treeshaking
     rollupOptions: {
       output: {
         manualChunks(id: string) {
-          if (id.includes('node_modules/vue') || id.includes('node_modules/pinia') || id.includes('node_modules/vue-router')) return 'vendor-vue'
-          if (id.includes('node_modules/ant-design-vue')) return 'vendor-ui'
-          if (id.includes('node_modules/echarts')) return 'vendor-charts'
-          if (id.includes('node_modules/mermaid')) return 'vendor-diagram'
-          if (id.includes('node_modules/katex') || id.includes('node_modules/markdown-it')) return 'vendor-markdown'
-          if (id.includes('node_modules/@vue-flow')) return 'vendor-flow'
+          if (id.includes('node_modules')) {
+            if (id.includes('vue') || id.includes('pinia')) return 'vendor-vue'
+            if (id.includes('ant-design')) return 'vendor-ui'
+            if (id.includes('echarts')) return 'vendor-charts'
+            if (id.includes('mermaid')) return 'vendor-diagram'
+            if (id.includes('katex') || id.includes('markdown-it')) return 'vendor-markdown'
+            if (id.includes('vue-flow')) return 'vendor-flow'
+            if (id.includes('three')) return 'vendor-three'
+          }
         },
+        // 优化代码分割和 tree-shaking
+        hoistTransitiveImports: false,
+      },
+      // 强制 tree-shaking
+      treeshake: {
+        moduleSideEffects: 'no-external',
       },
     },
   },

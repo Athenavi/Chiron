@@ -129,7 +129,7 @@ func (h *EntAuditHandler) Query(w http.ResponseWriter, r *http.Request) {
 	}
 	f, err := parseAuditQuery(r.URL.Query(), time.Now())
 	if err != nil {
-		BadRequest(w, err.Error())
+		BadRequest(w, "invalid audit query parameters")
 		return
 	}
 	f.TenantID = entPolicyTenantID(claims)

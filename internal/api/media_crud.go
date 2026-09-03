@@ -129,7 +129,9 @@ func (h *MediaHandler) List(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if len(metadataJSON) > 0 && string(metadataJSON) != "{}" && string(metadataJSON) != "null" {
-			json.Unmarshal(metadataJSON, &a.Metadata)
+			if err := json.Unmarshal(metadataJSON, &a.Metadata); err != nil {
+				slog.Warn("media: unmarshal metadata failed", "error", err)
+			}
 		}
 		if tagsStr != "" {
 			a.Tags = strings.Split(tagsStr, ",")

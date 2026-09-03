@@ -406,7 +406,7 @@ func RPAExecHandler(hub *RPAHub, internalToken string) http.HandlerFunc {
 		}
 		result, err := hub.ExecCommand(r.Context(), req.ClientID, req.Method, req.Params)
 		if err != nil {
-			JSON(w, http.StatusBadGateway, APIResponse{Success: false, Error: err.Error()})
+			JSON(w, http.StatusBadGateway, APIResponse{Success: false, Error: "rpa command execution failed"})
 			return
 		}
 		OK(w, result)

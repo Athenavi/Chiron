@@ -116,6 +116,9 @@ type entUserItem struct {
 // users LEFT JOIN ent_user_roles/ent_roles + 群组信息，email/姓名模糊搜索 + 分页。
 func (h *EntIdentityHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	search := r.URL.Query().Get("search")
+	if len(search) > 200 {
+		search = search[:200]
+	}
 	page, pageSize := parsePageQuery(r)
 	ctx := r.Context()
 

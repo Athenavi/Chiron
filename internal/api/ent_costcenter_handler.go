@@ -589,7 +589,7 @@ func (h *EntCostCenterHandler) CostSummary(w http.ResponseWriter, r *http.Reques
 	}
 	from, to, err := parseTimeRange(r.URL.Query().Get("from"), r.URL.Query().Get("to"))
 	if err != nil {
-		BadRequest(w, err.Error())
+		BadRequest(w, "invalid time range parameters")
 		return
 	}
 	summary, err := h.store.CostSummary(r.Context(), from, to, groupBy)
@@ -612,7 +612,7 @@ func (h *EntCostCenterHandler) GroupCostDetail(w http.ResponseWriter, r *http.Re
 	}
 	from, to, err := parseTimeRange(r.URL.Query().Get("from"), r.URL.Query().Get("to"))
 	if err != nil {
-		BadRequest(w, err.Error())
+		BadRequest(w, "invalid time range parameters")
 		return
 	}
 	out, err := h.store.GroupCost(r.Context(), groupID, from, to)

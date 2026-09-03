@@ -246,6 +246,10 @@ const routes = [
 const router = createRouter({
   history: createWebHistory(),
   routes,
+  scrollBehavior(_to, _from, savedPosition) {
+    if (savedPosition) return savedPosition
+    return { top: 0 }
+  },
 })
 
 // 路由守卫（逻辑在 guard.ts，独立可测）
@@ -253,5 +257,27 @@ router.beforeEach(authGuard)
 
 // 路由进度条
 setupRouteProgress(router)
+
+// 路由预加载：页面空闲时预加载常用路由
+// 使用 RequestIdleCallback 避免阻塞主线程
+if (import.meta.env.PROD && 'requestIdleCallback' in window) {
+  const ROUTE_CHUNKS = [
+    () => import('../views/ChatView.vue'),
+    () => import('../views/AgentsView.vue'),
+    () => import('../views/WorkflowView.vue'),
+    () => import('../views/ProfileView.vue'),
+  ]
+
+  const preloadIfNeeded = (): void => {
+    if ('connection' in navigator) {
+      const conn = navigator.connection as any
+      // 弱网或省流模式不预加载
+      if (conn.saveData || /2g|3g/i.test(conn.effectiveType)) return
+    }
+    ROUTE_CHUNKS.forEach(imp => imp().catch(() => {}))
+  }
+
+  requestIdleCallback(preloadIfNeeded, { timeout: 3000 })
+}
 
 export default router

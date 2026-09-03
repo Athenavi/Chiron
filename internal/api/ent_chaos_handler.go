@@ -12,6 +12,9 @@ import (
 )
 
 // ── 混沌工程 API ─────────────────────────────────────────────
+//
+// TODO: 集成 Python 引擎 chaos 模块执行实际故障注入（CreateExperiment 后、
+// RollbackExperiment 时），当前仅记录数据库状态。
 
 // EntChaosHandler 提供混沌工程实验管理 API。
 type EntChaosHandler struct{}
@@ -195,10 +198,14 @@ func (h *EntChaosHandler) Status(w http.ResponseWriter, r *http.Request) {
 	}
 	tenantID := claims.TenantID
 	var activeCount, totalCount int
-	_ = db.GlobalDBManager.QueryRow(r.Context(),
-		`SELECT COUNT(*) FROM ent_chaos_experiments WHERE tenant_id = $1 AND status = 'running'`, tenantID).Scan(&activeCount)
-	_ = db.GlobalDBManager.QueryRow(r.Context(),
-		`SELECT COUNT(*) FROM ent_chaos_experiments WHERE tenant_id = $1`, tenantID).Scan(&totalCount)
+	if err := db.GlobalDBManager.QueryRow(r.Context(),
+		`SELECT COUNT(*) FROM ent_chaos_experiments WHERE tenant_id = $1 AND status = 'running'`, tenantID).Scan(&activeCount); err != nil {
+		slog.Warn("chaos status: count active failed", "error", err)
+	}
+	if err := db.GlobalDBManager.QueryRow(r.Context(),
+		`SELECT COUNT(*) FROM ent_chaos_experiments WHERE tenant_id = $1`, tenantID).Scan(&totalCount); err != nil {
+		slog.Warn("chaos status: count total failed", "error", err)
+	}
 	OK(w, map[string]interface{}{
 		"active_count": activeCount,
 		"total_count":  totalCount,

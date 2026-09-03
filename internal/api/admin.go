@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"context"
@@ -24,9 +24,7 @@ import (
 
 var validDBName = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
-// Version 是构建时注入的版本号，通过 -ldflags 注入。
-// 默认值 "dev" 在开发环境使用，生产构建时替换为语义版本号。
-var Version = "dev"
+// Version 是构建时注入的版本号，通过 -ldflags 注入�?// 默认�?"dev" 在开发环境使用，生产构建时替换为语义版本号�?var Version = "dev"
 
 // AdminHandler provides admin-only management endpoints.
 type AdminHandler struct {
@@ -64,27 +62,24 @@ func (h *AdminHandler) RegisterRoutes(r *http.ServeMux) {
 	r.HandleFunc("PUT /redis", h.UpdateRedis)
 	r.HandleFunc("POST /redis/test", h.TestRedis)
 
-	// 新增端点：队列管理
-	r.HandleFunc("GET /queue", h.GetQueueStats)
+	// 新增端点：队列管�?	r.HandleFunc("GET /queue", h.GetQueueStats)
 	r.HandleFunc("POST /queue/flush", h.FlushQueue)
 	r.HandleFunc("POST /queue/pause", h.PauseQueue)
 
-	// 新增端点：缓存监控
-	r.HandleFunc("GET /cache/stats", h.GetCacheStats)
+	// 新增端点：缓存监�?	r.HandleFunc("GET /cache/stats", h.GetCacheStats)
 
 	// 新增端点：性能监控
 	r.HandleFunc("GET /performance", h.GetPerformance)
 
 	// 新增端点：API Key 管理
 	r.HandleFunc("GET /api-keys", h.ListApiKeys)
-	// 运维类端点（租户/域名/数据库/Redis/模型/定时任务）—— /admin 全栈实装
+	// 运维类端点（租户/域名/数据�?Redis/模型/定时任务）—�?/admin 全栈实装
 	h.registerOpsRoutes(r)
 	r.HandleFunc("POST /api-keys", h.AddApiKey)
 	r.HandleFunc("PUT /api-keys/{id}", h.UpdateApiKey)
 	r.HandleFunc("DELETE /api-keys/{id}", h.DeleteApiKey)
 
-	// 新增端点：系统设置
-	r.HandleFunc("PUT /settings", h.SaveSettings)
+	// 新增端点：系统设�?	r.HandleFunc("PUT /settings", h.SaveSettings)
 	r.HandleFunc("GET /settings", h.GetSettings)
 }
 
@@ -229,15 +224,13 @@ func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		BadRequest(w, "invalid role: must be owner, admin, or user")
 		return
 	}
-	// S 安全修复：非 owner 不可将角色提升为 owner（防止 admin 提权）
-	claims := auth.GetClaims(r.Context())
+	// S 安全修复：非 owner 不可将角色提升为 owner（防�?admin 提权�?	claims := auth.GetClaims(r.Context())
 	if body.Role == "owner" && (claims == nil || claims.Role != "owner") {
 		BadRequest(w, "only owner can assign owner role")
 		return
 	}
 
-	// Build dynamic UPDATE with column name whitelist — tenant_id 作为额外 WHERE 条件防越权
-	// S 安全修复：列名必须来自白名单，防止 SQL 注入
+	// Build dynamic UPDATE with column name whitelist �?tenant_id 作为额外 WHERE 条件防越�?	// S 安全修复：列名必须来自白名单，防�?SQL 注入
 	userColumnMap := map[string]string{
 		"email": "email",
 		"name":  "name",
@@ -365,7 +358,7 @@ func (h *AdminHandler) TriggerMaintenance(w http.ResponseWriter, r *http.Request
 	case "flush_cache":
 		if db.Redis != nil {
 			const prefix = "chiron_cache:*"
-			// P0 性能优化：使用 Lua 脚本原子化 SCAN + UNLINK
+			// P0 性能优化：使�?Lua 脚本原子�?SCAN + UNLINK
 			script := `local c="0" local n=0 repeat local r=redis.call("SCAN",c,"MATCH",KEYS[1],"COUNT",500) c=r[1] local k=r[2] if #k>0 then redis.call("UNLINK",unpack(k)) n=n+#k end until c=="0" return n`
 			deleted, err := db.Redis.Eval(r.Context(), script, []string{prefix}).Int()
 			if err != nil {
@@ -397,7 +390,7 @@ func dbNameFromDSN() string {
 		return "chiron"
 	}
 	if u.Path != "" && u.Path != "/" {
-		// Path is /dbname 鈥?trim leading slash
+		// Path is /dbname �?trim leading slash
 		return u.Path[1:]
 	}
 	return "chiron"
@@ -406,9 +399,7 @@ func dbNameFromDSN() string {
 // 鈹€鈹€ Backup & Restore 鈹€鈹€
 
 func (h *AdminHandler) CreateBackup(w http.ResponseWriter, r *http.Request) {
-	// P0 安全修复：pg_dump 输出流式转发，避免整库缓冲入内存导致 OOM。
-	// 密码通过 PGPASSWORD 环境变量传递，避免出现在进程命令行参数中。
-	dsn := extractDSN()
+	// P0 安全修复：pg_dump 输出流式转发，避免整库缓冲入内存导致 OOM�?	// 密码通过 PGPASSWORD 环境变量传递，避免出现在进程命令行参数中�?	dsn := extractDSN()
 	if dsn == "" {
 		InternalError(w, "POSTGRES_DSN not configured")
 		return
@@ -442,7 +433,7 @@ func (h *AdminHandler) CreateBackup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AdminHandler) RestoreBackup(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, 500<<20) // 500MB 上传上限，防止 OOM
+	r.Body = http.MaxBytesReader(w, r.Body, 500<<20) // 500MB 上传上限，防�?OOM
 	file, _, err := r.FormFile("file")
 	if err != nil {
 		BadRequest(w, "file is required")
@@ -450,7 +441,7 @@ func (h *AdminHandler) RestoreBackup(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	// P0-P4 防护：流式写入临时文件后以 psql 恢复，避免 OOM
+	// P0-P4 防护：流式写入临时文件后�?psql 恢复，避�?OOM
 	const maxSize int64 = 512 << 20 // 512MB
 	tmpDir := h.cfg.DataDir
 	if tmpDir == "" {
@@ -472,8 +463,7 @@ func (h *AdminHandler) RestoreBackup(w http.ResponseWriter, r *http.Request) {
 	}
 	tmpFile.Close()
 	if written >= maxSize {
-		// 已读满限流器，可能有更多数据被截断
-		BadRequest(w, "backup file too large (max 512MB)")
+		// 已读满限流器，可能有更多数据被截�?		BadRequest(w, "backup file too large (max 512MB)")
 		return
 	}
 
@@ -499,7 +489,7 @@ func (h *AdminHandler) RestoreBackup(w http.ResponseWriter, r *http.Request) {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		slog.Error("restore failed", "error", err, "output", string(output))
-		logAndRespond(w, fmt.Errorf("restore failed: %s", string(output)), http.StatusInternalServerError, "restore failed")
+		logAndRespond(w, err, http.StatusInternalServerError, "restore failed")
 		return
 	}
 	OK(w, map[string]string{"message": "Database restored successfully"})
@@ -509,9 +499,7 @@ func extractDSN() string {
 	return os.Getenv("POSTGRES_DSN")
 }
 
-// parseDSNComponents 解析 PostgreSQL DSN 返回 host, port, user, dbname, password。
-// P0 安全修复：密码用于 PGPASSWORD 环境变量，避免出现在命令行参数中。
-// DSN 格式: postgres://user:pass@host:port/dbname?params
+// parseDSNComponents 解析 PostgreSQL DSN 返回 host, port, user, dbname, password�?// P0 安全修复：密码用�?PGPASSWORD 环境变量，避免出现在命令行参数中�?// DSN 格式: postgres://user:pass@host:port/dbname?params
 func parseDSNComponents(dsn string) (host, port, user, dbname, password string) {
 	host = "localhost"
 	port = "5432"
@@ -617,9 +605,9 @@ func (h *AdminHandler) UpdateStorage(w http.ResponseWriter, r *http.Request) {
 	warning := ""
 	if previous != body.Backend {
 		if previous == "local" {
-			warning = "存储后端已从 local 切换为 s3。旧后端中的文件不会自动迁移。"
+			warning = "存储后端已从 local 切换�?s3。旧后端中的文件不会自动迁移�?
 		} else {
-			warning = "存储后端已从 s3 切换为 local。旧后端中的文件不会自动迁移。"
+			warning = "存储后端已从 s3 切换�?local。旧后端中的文件不会自动迁移�?
 		}
 	}
 
@@ -660,7 +648,7 @@ func (h *AdminHandler) TestStorage(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			OK(w, map[string]interface{}{
 				"status":  "error",
-				"message": fmt.Errorf("S3 连接失败: %w", err).Error(),
+				"message": "S3 connection failed",
 			})
 			return
 		}
@@ -669,13 +657,13 @@ func (h *AdminHandler) TestStorage(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			OK(w, map[string]interface{}{
 				"status":  "error",
-				"message": fmt.Errorf("S3 bucket 访问失败: %w", err).Error(),
+				"message": "S3 bucket access failed",
 			})
 			return
 		}
 		OK(w, map[string]interface{}{
 			"status":  "ok",
-			"message": fmt.Sprintf("S3 连接成功，bucket '%s' 可访问", body.S3Bucket),
+			"message": fmt.Sprintf("S3 连接成功，bucket '%s' 可访�?, body.S3Bucket),
 		})
 	default:
 		BadRequest(w, "backend must be 'local' or 's3'")
@@ -784,7 +772,7 @@ func (h *AdminHandler) TestRedis(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		OK(w, map[string]interface{}{
 			"status":  "error",
-			"message": fmt.Errorf("Redis connection failed: %w", err).Error(),
+			"message": "Redis connection failed",
 		})
 		return
 	}

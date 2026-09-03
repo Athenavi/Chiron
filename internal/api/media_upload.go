@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"time"
@@ -29,7 +30,7 @@ func (h *MediaHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
 		// 暴露真实原因（请求体超限 / boundary 缺失 / 格式损坏），便于定位
 		slog.Warn("parse multipart form failed", "error", err, "content_type", r.Header.Get("Content-Type"), "content_length", r.ContentLength)
-		BadRequest(w, "file too large or invalid form: "+err.Error())
+		BadRequest(w, "file too large or invalid form")
 		return
 	}
 
@@ -204,7 +205,18 @@ func (h *MediaHandler) CompleteUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	switch s := inner.(type) {
 	case *storage.S3Store:
-		if !strings.HasPrefix(body.FileURL, s.ObjectURL("")) {
+		// 使用 url.Parse 严格校验 host/scheme，防止前缀匹配绕过
+		parsedURL, err := url.Parse(body.FileURL)
+		if err != nil {
+			BadRequest(w, "invalid file_url")
+			return
+		}
+		expectedURL, err := url.Parse(s.ObjectURL(""))
+		if err != nil {
+			InternalError(w, "storage backend misconfigured")
+			return
+		}
+		if parsedURL.Scheme != expectedURL.Scheme || parsedURL.Host != expectedURL.Host {
 			BadRequest(w, "file_url does not match configured storage backend")
 			return
 		}
@@ -217,6 +229,19 @@ func (h *MediaHandler) CompleteUpload(w http.ResponseWriter, r *http.Request) {
 	default:
 		BadRequest(w, "unsupported storage backend")
 		return
+	}
+
+	// 对已通过预签名上传到 S3 的文件进行 MIME 类型检测
+	// （防止客户端绕过 MIME 检查直接上传恶意文件）
+	if body.FileURL != "" {
+		resp, err := http.Head(body.FileURL)
+		if err == nil {
+			contentType := resp.Header.Get("Content-Type")
+			if isExecutableMIME(contentType, body.Name) {
+				BadRequest(w, "file type not allowed")
+				return
+			}
+		}
 	}
 
 	// ID 由服务端生成，不信任客户端传入的 body.ID

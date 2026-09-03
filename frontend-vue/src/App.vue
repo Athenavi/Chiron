@@ -64,12 +64,12 @@ body {
               background-image 0.4s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* 主题切换：全局平滑过渡 */
-* {
-  transition: background-color 0.3s cubic-bezier(0.22, 1, 0.36, 1),
-              border-color 0.3s cubic-bezier(0.22, 1, 0.36, 1),
-              box-shadow 0.3s cubic-bezier(0.22, 1, 0.36, 1),
-              color 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+/* 主题切换：全局平滑过渡 - 仅对特定属性生效，避免 * 选择器性能问题 */
+:root {
+  transition-property: background-color, border-color, box-shadow, color;
+  transition-duration: 0.3s;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  transition-delay: 0s;
 }
 
 /* 减少动画偏好 */

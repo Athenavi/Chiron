@@ -60,7 +60,7 @@ func (h *EditorHandler) ReadFile(w http.ResponseWriter, r *http.Request) {
 	}
 	abs, err := h.safePath(path)
 	if err != nil {
-		BadRequest(w, err.Error())
+		BadRequest(w, "invalid path")
 		return
 	}
 	b, err := os.ReadFile(abs)
@@ -91,7 +91,7 @@ func (h *EditorHandler) WriteFile(w http.ResponseWriter, r *http.Request) {
 	}
 	abs, err := h.safePath(body.Path)
 	if err != nil {
-		BadRequest(w, err.Error())
+		BadRequest(w, "invalid path")
 		return
 	}
 	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {

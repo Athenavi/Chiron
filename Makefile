@@ -2,6 +2,7 @@
 
 APP=chiron
 BUILD_DIR=build
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 
 all: fmt lint test build
 
@@ -33,8 +34,8 @@ dev:
 	$(MAKE) run
 
 docker-build:
-	docker build -t $(APP):latest -f Dockerfile .
-	@echo "docker image: $(APP):latest"
+	docker build -t $(APP):latest -t $(APP):$(VERSION) -f Dockerfile .
+	@echo "docker image: $(APP):latest, $(APP):$(VERSION)"
 
 docker-run:
 	docker compose up -d

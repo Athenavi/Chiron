@@ -199,7 +199,7 @@ func (h *UserMarketHandler) installMCP(w http.ResponseWriter, r *http.Request, c
 		return
 	}
 	if err := checkPluginCommandAllowed(command); err != nil {
-		Forbidden(w, err.Error())
+		Forbidden(w, "plugin command not allowed")
 		return
 	}
 	plugin := MCPPlugin{

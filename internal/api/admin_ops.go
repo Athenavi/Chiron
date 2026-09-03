@@ -501,7 +501,7 @@ func (h *AdminHandler) RestoreDatabaseBackup(w http.ResponseWriter, r *http.Requ
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		slog.Error("restore failed", "error", err, "output", string(output))
-		InternalError(w, "restore failed: "+string(output))
+		InternalError(w, "restore failed")
 		return
 	}
 	OK(w, map[string]interface{}{"status": "restored", "backup": name})
@@ -549,7 +549,7 @@ func (h *AdminHandler) DatabaseQuery(w http.ResponseWriter, r *http.Request) {
 	defer queryCancel()
 	rows, err := db.GlobalDBManager.Query(queryCtx, body.Query)
 	if err != nil {
-		BadRequest(w, "query failed: "+err.Error())
+		BadRequest(w, "query failed")
 		return
 	}
 	defer rows.Close()
@@ -635,7 +635,7 @@ func (h *AdminHandler) redisDo(ctx context.Context, args ...interface{}) (interf
 func (h *AdminHandler) RedisSlowLog(w http.ResponseWriter, r *http.Request) {
 	res, err := h.redisDo(r.Context(), "SLOWLOG", "GET", 20)
 	if err != nil {
-		OK(w, map[string]interface{}{"slow_log": []interface{}{}, "error": err.Error()})
+		OK(w, map[string]interface{}{"slow_log": []interface{}{}, "error": "redis error"})
 		return
 	}
 	OK(w, map[string]interface{}{"slow_log": res})

@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -54,6 +55,8 @@ func SetInstallLockPath(cfg *config.Config) {
 var installToken string
 
 // InitInstallToken 初始化当前进程的安装令牌并返回（幂等：重复调用返回同一令牌）。
+// 当 APP_SECRET 已配置时，HMAC 确定性派生；否则由 crypto/rand 安全随机生成。
+// 若 crypto/rand 不可用，log.Fatal 终止进程（不提供不安全 fallback）。
 func InitInstallToken(cfg *config.Config) string {
 	if installToken != "" {
 		return installToken
@@ -63,11 +66,10 @@ func InitInstallToken(cfg *config.Config) string {
 	} else {
 		buf := make([]byte, 32)
 		if _, err := rand.Read(buf); err != nil {
-			installToken = "fallback-insecure-token"
-			slog.Error("crypto/rand unavailable: using fallback install token (insecure!)", "error", err)
-		} else {
-			installToken = base64.RawURLEncoding.EncodeToString(buf)
+			slog.Error("crypto/rand unavailable — cannot generate secure install token", "error", err)
+			log.Fatal("crypto/rand unavailable: refusing to generate insecure install token")
 		}
+		installToken = base64.RawURLEncoding.EncodeToString(buf)
 	}
 	return installToken
 }

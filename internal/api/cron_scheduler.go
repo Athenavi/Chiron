@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -137,36 +138,51 @@ func (s *CronScheduler) execute(ctx context.Context, j jobRow) {
 		status = "failed"
 		errMsg = "python engine unavailable"
 	} else {
-		switch {
-		case strings.Contains(j.Task, `"type":"agent"`), strings.Contains(j.Task, `"type": "agent"`):
-			var t struct {
-				AgentID string `json:"agent_id"`
-				Prompt  string `json:"prompt"`
-			}
-			_ = json.Unmarshal([]byte(j.Task), &t)
-			if t.AgentID == "" {
-				status, errMsg = "failed", "agent_id required"
-			} else if err := s.runAgent(execCtx, j.TenantID, j.UserID, t.AgentID, t.Prompt); err != nil {
-				status, errMsg = "failed", err.Error()
-			}
-		default: // quick / 通用统一任务
-			var t struct {
-				UserInput string `json:"user_input"`
-				Mode      string `json:"mode"`
-			}
-			_ = json.Unmarshal([]byte(j.Task), &t)
-			if t.UserInput == "" {
-				status, errMsg = "failed", "user_input required"
-			} else if err := s.runQuick(execCtx, j.TenantID, j.UserID, t.UserInput, t.Mode); err != nil {
-				status, errMsg = "failed", err.Error()
-			}
-		}
+		status, errMsg = s.parseAndExecute(execCtx, j)
 	}
 	_, _ = db.GlobalDBManager.Exec(execCtx,
 		`UPDATE cron_jobs SET last_run_at = NOW(), last_status = $1 WHERE id = $2`,
 		status, j.ID)
 	if status != "success" {
 		slog.Warn("cron job failed", "job", j.Name, "error", errMsg, "duration", time.Since(start))
+	}
+}
+
+// parseAndExecute 解析并执行 cron 任务，返回状态和错误信息。
+func (s *CronScheduler) parseAndExecute(ctx context.Context, j jobRow) (status, errMsg string) {
+	switch {
+	case strings.Contains(j.Task, `"type":"agent"`), strings.Contains(j.Task, `"type": "agent"`):
+		var t struct {
+			AgentID string `json:"agent_id"`
+			Prompt  string `json:"prompt"`
+		}
+		if err := json.Unmarshal([]byte(j.Task), &t); err != nil {
+			slog.Warn("cron: unmarshal agent task failed", "job", j.Name, "error", err)
+			return "failed", "invalid agent task config"
+		}
+		if t.AgentID == "" {
+			return "failed", "agent_id required"
+		}
+		if err := s.runAgent(ctx, j.TenantID, j.UserID, t.AgentID, t.Prompt); err != nil {
+			return "failed", err.Error()
+		}
+		return "success", ""
+	default: // quick / 通用统一任务
+		var t struct {
+			UserInput string `json:"user_input"`
+			Mode      string `json:"mode"`
+		}
+		if err := json.Unmarshal([]byte(j.Task), &t); err != nil {
+			slog.Warn("cron: unmarshal quick task failed", "job", j.Name, "error", err)
+			return "failed", "invalid quick task config"
+		}
+		if t.UserInput == "" {
+			return "failed", "user_input required"
+		}
+		if err := s.runQuick(ctx, j.TenantID, j.UserID, t.UserInput, t.Mode); err != nil {
+			return "failed", err.Error()
+		}
+		return "success", ""
 	}
 }
 
@@ -190,9 +206,12 @@ func (s *CronScheduler) runAgent(ctx context.Context, tenantID, userID, agentID,
 		"max_turns":       maxTurns,
 		"timeout_seconds": timeout,
 	}
+	params := url.Values{}
+	params.Set("user_id", userID)
+	params.Set("tenant_id", tenantID)
+	endpoint := "/v1/agents/dispatch?" + params.Encode()
 	var resp map[string]interface{}
-	return s.python.PostJSON(ctx,
-		"/v1/agents/dispatch?user_id="+userID+"&tenant_id="+tenantID, body, &resp)
+	return s.python.PostJSON(ctx, endpoint, body, &resp)
 }
 
 func (s *CronScheduler) runQuick(ctx context.Context, tenantID, userID, input, mode string) error {
@@ -205,9 +224,12 @@ func (s *CronScheduler) runQuick(ctx context.Context, tenantID, userID, input, m
 		"mode":       mode,
 		"session_id": sessionID,
 	}
+	params := url.Values{}
+	params.Set("user_id", userID)
+	params.Set("tenant_id", tenantID)
+	endpoint := "/v1/chat/submit?" + params.Encode()
 	var resp map[string]interface{}
-	return s.python.PostJSON(ctx,
-		"/v1/chat/submit?user_id="+userID+"&tenant_id="+tenantID, body, &resp)
+	return s.python.PostJSON(ctx, endpoint, body, &resp)
 }
 
 // ── Webhook 触发：POST /v1/hooks/{jobID}?token=xxx ──

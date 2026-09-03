@@ -287,7 +287,7 @@ func (h *SystemHandler) DBQuery(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	results, err := db.GlobalDBManager.FetchAll(ctx, req.SQL, req.Args...)
 	if err != nil {
-		InternalError(w, fmt.Sprintf("query failed: %v", err))
+		InternalError(w, "query failed")
 		return
 	}
 
@@ -339,7 +339,7 @@ func (h *SystemHandler) DBExecute(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	rowsAffected, err := db.GlobalDBManager.Execute(ctx, req.SQL, req.Args...)
 	if err != nil {
-		InternalError(w, fmt.Sprintf("execute failed: %v", err))
+		InternalError(w, "execute failed")
 		return
 	}
 

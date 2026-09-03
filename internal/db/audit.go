@@ -130,6 +130,14 @@ func AuditLog(ctx context.Context, userID, tenantID, action, resource, detail, i
 		return
 	}
 
+	// 将 meta 合并到 detail 中，避免额外元数据被丢弃
+	if meta != nil {
+		metaJSON, err := json.Marshal(meta)
+		if err == nil {
+			detail = detail + " | meta: " + string(metaJSON)
+		}
+	}
+
 	entry := AuditEntry{
 		TenantID:  tenantID,
 		UserID:    userID,
@@ -188,6 +196,7 @@ func (c *AuditConsumer) Start(ctx context.Context) error {
 
 	// 创建消费者组
 	if err := c.rdb.XGroupCreateMkStream(ctx, c.stream, c.group, "0").Err(); err != nil {
+		// BUSYGROUP 表示消费组已存在（非错误），因 redis 库未导出专门错误类型，回退字符串判断
 		if !strings.Contains(err.Error(), "BUSYGROUP") {
 			slog.Warn("audit consumer group create error", "error", err)
 		}
