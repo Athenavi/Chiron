@@ -278,8 +278,15 @@ async def lifespan(app: FastAPI):
     # ── 3.5. SmartAPIKeyPool ──
     from app.gateway.smart_key_pool import SmartAPIKeyPool
 
-    _key_pool = SmartAPIKeyPool()
-    # 从 settings 注册已有 key
+    # 持久化文件：管理端添加的 API Key 重启不丢（env API_KEYS_FILE 可覆盖默认路径）
+    import os as _os
+    from pathlib import Path as _Path
+
+    _api_keys_file = _os.environ.get("API_KEYS_FILE") or str(
+        _Path(__file__).resolve().parent.parent / "data" / "api_keys.json"
+    )
+    _key_pool = SmartAPIKeyPool(persist_path=_api_keys_file)
+    # 从 settings 注册已有 key（add_key 幂等，与持久化文件中的 key 去重）
     if settings.openai_api_key:
         await _key_pool.add_key("openai", settings.openai_api_key, "from env")
     if settings.deepseek_api_key:

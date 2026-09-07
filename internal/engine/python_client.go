@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"math"
+	"net"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -23,8 +24,9 @@ import (
 type PythonClient struct {
 	addresses     []string
 	counter       uint64
-	client        *http.Client
-	internalToken string // Go↔Python 共享内部 token，用于网关代理身份校验
+	client        *http.Client // 同步 JSON/管理请求（允许慢响应头：编排任务可能数十秒才返回）
+	streamClient  *http.Client // SSE 流式请求（引擎 StreamingResponse 秒级发头，故可用短响应头超时快速失败）
+	internalToken string       // Go↔Python 共享内部 token，用于网关代理身份校验
 
 	// 熔断：每个地址的冷却截止时间（Unix 秒），0 = 正常
 	cooldownUntil []int64
@@ -60,26 +62,45 @@ func NewPythonClient(addresses ...string) *PythonClient {
 		addrs = []string{"http://localhost:8000"}
 	}
 
-	// Configure transport with sensible timeouts to prevent resource leaks
-	transport := &http.Transport{
-		MaxIdleConns:        100,
-		MaxIdleConnsPerHost: 10,
-		IdleConnTimeout:     90 * time.Second,
-		TLSHandshakeTimeout: 10 * time.Second,
+	// Configure transport with sensible timeouts to prevent resource leaks.
+	// 拨号统一 3s 快速失败：引擎宕机/网络不可达时不再依赖系统级 TCP 超时（可达数十秒）。
+	dialer := &net.Dialer{Timeout: pythonDialTimeout}
+	newTransport := func(withStreamHeaderTimeout bool) *http.Transport {
+		tr := &http.Transport{
+			DialContext:         dialer.DialContext,
+			MaxIdleConns:        100,
+			MaxIdleConnsPerHost: 10,
+			IdleConnTimeout:     90 * time.Second,
+			TLSHandshakeTimeout: 10 * time.Second,
+		}
+		if withStreamHeaderTimeout {
+			// 仅流式（SSE）端点启用：引擎 StreamingResponse 秒级发头，假死/容器挂起时
+			// 在此超时快速失败。同步端点（如 /v1/chat/submit 完整编排后才返回 JSON）
+			// 不得加此限制，否则会误杀正常长任务。
+			tr.ResponseHeaderTimeout = pythonResponseHeaderTimeout
+		}
+		return tr
+	}
+	syncClient := &http.Client{
+		Timeout:   60 * time.Second, // Overall timeout protection
+		Transport: newTransport(false),
+	}
+	streamClient := &http.Client{
+		Timeout:   60 * time.Second, // 对 SSE 流仅覆盖"等待响应头"阶段，头到达后由 ctx 控制时长
+		Transport: newTransport(true),
 	}
 
 	return &PythonClient{
-		addresses: addrs,
-		client: &http.Client{
-			Timeout:   60 * time.Second, // Overall timeout protection
-			Transport: transport,
-		},
+		addresses:     addrs,
+		client:        syncClient,
+		streamClient:  streamClient,
 		cooldownUntil: make([]int64, len(addrs)),
 	}
 }
 
-// HealthCheck 对 Python 引擎执行健康检查（GET /health），
+// HealthCheck 对 Python 引擎执行健康检查（GET /healthz），
 // 返回状态和地址级信息。超时 5 秒，不触发重试逻辑。
+// 探测路径为 /healthz：Python 引擎（FastAPI）注册的是 GET /healthz，无 /health。
 func (c *PythonClient) HealthCheck(ctx context.Context) map[string]interface{} {
 	result := make(map[string]interface{})
 	allUp := true
@@ -93,7 +114,7 @@ func (c *PythonClient) HealthCheck(ctx context.Context) map[string]interface{} {
 	for _, addr := range c.addresses {
 		status := addrStatus{Status: "down"}
 		start := time.Now()
-		req, err := http.NewRequestWithContext(ctx, "GET", addr+"/health", nil)
+		req, err := http.NewRequestWithContext(ctx, "GET", addr+"/healthz", nil)
 		if err != nil {
 			status.Error = err.Error()
 			allUp = false
@@ -151,6 +172,17 @@ func (c *PythonClient) injectInternalToken(req *http.Request) {
 // pythonCooldown 单个地址失败后的冷却时长：暂时跳过，避免每 N 个请求必败一个
 const pythonCooldown = 5 * time.Second
 
+// pythonDialTimeout 拨号（TCP 建连）超时：Python 引擎宕机/网络不可达时快速失败，
+// 避免依赖系统级 TCP 超时（可达数十秒）。作用于所有请求。
+const pythonDialTimeout = 3 * time.Second
+
+// pythonResponseHeaderTimeout 发送完请求体后等待响应头的超时，仅对流式（SSE）端点生效。
+// Python 引擎的 /v1/agent/submit 等 SSE 端点正常时响应头秒级返回（StreamingResponse
+// 先发头再流式），仅在引擎假死/容器挂起（docker-proxy 收连接但不转发）时才耗尽此超时。
+// 修复前该类故障只能等 http.Client 60s 总超时且在同一地址重试 4 次，
+// 前端"思考中"最长空等数分钟才收到 "Service temporarily unavailable"。
+const pythonResponseHeaderTimeout = 10 * time.Second
+
 // markFailure 记录地址失败，进入冷却
 func (c *PythonClient) markFailure(addr string) {
 	until := time.Now().Add(pythonCooldown).Unix()
@@ -173,7 +205,20 @@ func (c *PythonClient) markSuccess(addr string) {
 }
 
 // do 统一请求出口：记录成功/失败并更新熔断状态，支持重试
+// do 统一请求出口（同步 JSON/管理端点）：走 client（允许慢响应头）。
 func (c *PythonClient) do(req *http.Request) (*http.Response, error) {
+	return c.doWith(c.client, req)
+}
+
+// doStream 流式（SSE）端点请求出口：走 streamClient（短响应头超时），
+// 引擎假死/容器挂起时快速失败，避免前端"思考中"空等数十秒。
+func (c *PythonClient) doStream(req *http.Request) (*http.Response, error) {
+	return c.doWith(c.streamClient, req)
+}
+
+// doWith 记录成功/失败并更新熔断状态，支持重试。
+// httpClient 由上层 do/doStream 按端点语义选择。
+func (c *PythonClient) doWith(httpClient *http.Client, req *http.Request) (*http.Response, error) {
 	// 注入trace context到HTTP头
 	propagator := propagation.TraceContext{}
 	propagator.Inject(req.Context(), propagation.HeaderCarrier(req.Header))
@@ -226,7 +271,7 @@ func (c *PythonClient) do(req *http.Request) (*http.Response, error) {
 			req.Body = io.NopCloser(bytes.NewReader(bodyBuf))
 		}
 
-		resp, err := c.client.Do(req)
+		resp, err := httpClient.Do(req)
 		if err == nil {
 			// 检查是否是可重试的错误状态码
 			if resp.StatusCode >= 500 || resp.StatusCode == 429 {
@@ -239,8 +284,13 @@ func (c *PythonClient) do(req *http.Request) (*http.Response, error) {
 			return resp, nil
 		}
 
-		lastErr = err
+		// 网络层错误（连接拒绝/拨号超时/响应头超时/连接中断/上下文取消）：说明目标此刻
+		// 不可达或收包不响应，在同一地址上指数退避重试只会把"服务不可用"的等待放大
+		// 数十秒（曾致前端"思考中"空等 50s+ 才收到错误提示）。此类故障交给熔断冷却
+		// （markFailure + pickAddress 跳过该地址）兜底：后续请求自动避开/冷却结束后再试，
+		// 当前请求立即失败，让上层（HandleSubmit）第一时间通知用户。
 		c.markFailure(addr)
+		return nil, fmt.Errorf("call python engine: %w", err)
 	}
 
 	return nil, fmt.Errorf("request failed after %d retries: %w",
@@ -331,7 +381,7 @@ func (c *PythonClient) Run(ctx context.Context, req PythonRunRequest) (<-chan Py
 	httpReq.Header.Set("Accept", "text/event-stream")
 	c.injectInternalToken(httpReq)
 
-	resp, err := c.do(httpReq)
+	resp, err := c.doStream(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("call python engine: %w", err)
 	}
@@ -410,10 +460,13 @@ func (c *PythonClient) Run(ctx context.Context, req PythonRunRequest) (<-chan Py
 }
 
 // IsConnected checks if any Python engine instance is reachable.
+// 注意必须用 GET：Python 引擎（FastAPI）只为 /healthz 注册了 GET 方法，
+// HEAD 会返回 405，曾导致引擎存活却被判为不可达（管理端 API Key 保存
+// 因此恒返回 400 "python engine not available"）。
 func (c *PythonClient) IsConnected() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodHead, c.pickAddress()+"/healthz", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.pickAddress()+"/healthz", nil)
 	if err != nil {
 		return false
 	}
@@ -600,7 +653,8 @@ func (c *PythonClient) RunSSE(ctx context.Context, path string, body any, extraH
 		}
 	}
 
-	resp, err := c.do(httpReq)
+	// SSE 流式：streamClient 带短响应头超时（引擎假死时快速失败）
+	resp, err := c.doStream(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("call python engine: %w", err)
 	}

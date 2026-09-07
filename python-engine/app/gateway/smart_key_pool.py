@@ -6,7 +6,9 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
+import os
 import random
 import time
 from dataclasses import dataclass, field
@@ -99,6 +101,7 @@ class SmartAPIKeyPool:
         weight_decay: float = 0.5,
         weight_recovery: float = 1.1,
         max_weight: float = 2.0,
+        persist_path: str | None = None,
     ):
         self._failure_threshold = failure_threshold
         self._recovery_timeout = recovery_timeout
@@ -106,6 +109,9 @@ class SmartAPIKeyPool:
         self._weight_recovery = weight_recovery
         self._max_weight = max_weight
         self._lock = asyncio.Lock()
+
+        # 持久化文件（管理端添加的 Key 落盘；None = 纯内存，向后兼容）
+        self._persist_path = persist_path
 
         # 初始化 Key 池
         self._pools: dict[str, list[APIKeyInfo]] = {}
@@ -122,6 +128,10 @@ class SmartAPIKeyPool:
                     )
                     for key in key_list
                 ]
+
+        # 启动时加载已持久化的 Key（幂等，与 keys/env 注入不重复）
+        if persist_path:
+            self._load_persisted()
 
     async def get_key(self, provider: str) -> Optional[str]:
         """
@@ -238,12 +248,17 @@ class SmartAPIKeyPool:
                         return
 
     async def add_key(self, provider: str, key: str, remark: str = "") -> None:
-        """添加 Key"""
+        """添加 Key（幂等：同 provider+key 已存在时仅更新备注；变更后落盘）"""
         async with self._lock:
-            if provider not in self._pools:
-                self._pools[provider] = []
+            pool = self._pools.setdefault(provider, [])
+            for existing in pool:
+                if existing.key == key:
+                    if remark and remark != existing.remark:
+                        existing.remark = remark
+                        self._persist_locked()
+                    return
 
-            self._pools[provider].append(
+            pool.append(
                 APIKeyInfo(
                     key=key,
                     provider=provider,
@@ -254,14 +269,18 @@ class SmartAPIKeyPool:
                     ),
                 )
             )
+            self._persist_locked()
 
     async def remove_key(self, provider: str, key: str) -> bool:
-        """删除 Key"""
+        """删除 Key（成功删除后落盘）"""
         async with self._lock:
             pool = self._pools.get(provider, [])
             for i, k in enumerate(pool):
                 if k.key == key:
                     pool.pop(i)
+                    if not pool:
+                        del self._pools[provider]
+                    self._persist_locked()
                     return True
         return False
 
@@ -290,11 +309,12 @@ class SmartAPIKeyPool:
                         # 手动恢复为 active 时重置熔断器，否则下次 get_key 仍被熔断拦截
                         if new_status == KeyStatus.ACTIVE and k.circuit_breaker:
                             k.circuit_breaker.record_success()
+                        self._persist_locked()
                         return True
         return False
 
     async def remove_key_by_id(self, key_id: str) -> bool:
-        """按 ID 删除 Key（管理端路径删除，无需请求体携带完整 key）"""
+        """按 ID 删除 Key（管理端路径删除，无需请求体携带完整 key；成功删除后落盘）"""
         async with self._lock:
             for provider, pool in self._pools.items():
                 for i, k in enumerate(pool):
@@ -302,8 +322,80 @@ class SmartAPIKeyPool:
                         pool.pop(i)
                         if not pool:
                             del self._pools[provider]
+                        self._persist_locked()
                         return True
         return False
+
+    # ── 持久化（管理端添加的 Key 重启不丢；原子写，失败仅告警不阻断请求） ──
+
+    def _load_persisted(self) -> None:
+        """启动时从持久化文件加载 Key（幂等；文件缺失/损坏时静默跳过）"""
+        path = self._persist_path
+        if not path or not os.path.exists(path):
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            for item in data.get("keys", []) if isinstance(data, dict) else []:
+                provider = str(item.get("provider") or "").strip()
+                key = str(item.get("key") or "").strip()
+                if not provider or not key:
+                    continue
+                try:
+                    status = KeyStatus(str(item.get("status") or "active"))
+                except ValueError:
+                    status = KeyStatus.ACTIVE
+                pool = self._pools.setdefault(provider, [])
+                if any(k.key == key for k in pool):
+                    continue  # 与 keys/env 注入的重复项去重
+                pool.append(
+                    APIKeyInfo(
+                        key=key,
+                        provider=provider,
+                        remark=str(item.get("remark") or ""),
+                        status=status,
+                        circuit_breaker=CircuitBreaker(
+                            failure_threshold=self._failure_threshold,
+                            recovery_timeout=self._recovery_timeout,
+                        ),
+                    )
+                )
+            logger.info("loaded %d persisted api key(s) from %s", self._key_count(), path)
+        except Exception:
+            logger.exception("failed to load persisted api keys from %s", path)
+
+    def _key_count(self) -> int:
+        return sum(len(p) for p in self._pools.values())
+
+    def _persist_locked(self) -> None:
+        """把当前 Key 池原子写入持久化文件（须在 _lock 内调用）。
+        明文存储与 .env 同级；部署时需保护文件权限或挂载私有卷。"""
+        if not self._persist_path:
+            return
+        try:
+            path = os.path.abspath(self._persist_path)
+            parent = os.path.dirname(path)
+            if parent:
+                os.makedirs(parent, exist_ok=True)
+            payload = {
+                "version": 1,
+                "keys": [
+                    {
+                        "provider": k.provider,
+                        "key": k.key,
+                        "remark": k.remark,
+                        "status": k.status.value,
+                    }
+                    for pool in self._pools.values()
+                    for k in pool
+                ],
+            }
+            tmp = path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(payload, f, ensure_ascii=False, indent=2)
+            os.replace(tmp, path)
+        except Exception:
+            logger.exception("failed to persist api keys to %s", self._persist_path)
 
     def get_stats(self) -> dict:
         """获取统计信息"""
