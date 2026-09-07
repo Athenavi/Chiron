@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -176,100 +177,27 @@ func RunMigrations(dsn string) error {
 		python = v
 	}
 
-	// Step 1: Check version consistency
-	expected, err := getExpectedRevision()
-	if err != nil {
-		// version.lock may not exist yet; that's okay, we'll generate migration
-		fmt.Printf("No version.lock found, will generate initial migration\n")
-	} else {
-		current, err := getCurrentRevision(python)
-		if err == nil && current == expected {
-			fmt.Printf("Database revision matches version.lock (%s), no migration needed\n", expected)
-			return nil
+	// ── 迁移执行（多实例安全） ──
+	// 数据库 revision 以 alembic_version 表为唯一事实源；启动只执行幂等的
+	// `alembic upgrade head`。不再 autogenerate、不再依赖本地 version.lock：
+	// 多网关实例并发启动时以 PostgreSQL advisory lock 串行化，避免重复生成
+	// 迁移文件与并发 DDL。新表结构变更通过显式提交的 migration 文件交付。
+	const migrationLockKey = 819470606 // "CHRN"
+	if Pool != nil {
+		if _, err := Pool.Exec(context.Background(), "SELECT pg_advisory_lock($1)", migrationLockKey); err != nil {
+			return fmt.Errorf("acquire migration advisory lock: %w", err)
 		}
-		if err != nil {
-			fmt.Printf("Failed to get current revision, generating migration: %v\n", err)
-		} else {
-			fmt.Printf("Version mismatch: lock=%s, db=%s, generating migration\n", expected, current)
-		}
+		defer func() { _, _ = Pool.Exec(context.Background(), "SELECT pg_advisory_unlock($1)", migrationLockKey) }()
 	}
 
-	// Step 2: Generate migration if needed
-	migrationsDir := filepath.Join(".", "migrations", "versions")
-	beforeFiles, _ := listMigrationFiles(migrationsDir)
-
-	revisionMsg := "auto_migration"
-	if expected != "" {
-		revisionMsg = fmt.Sprintf("db_%s", expected)
-	}
-	revisionCmd := exec.Command(python, "-m", "alembic", "--config", alembicConfigPath(),
-		"revision", "--autogenerate", "-m", revisionMsg)
-	revisionCmd.Dir = "."
-	revisionCmd.Stdout = os.Stdout
-	revisionCmd.Stderr = os.Stderr
-	_ = revisionCmd.Run() // Ignore error; empty migration may cause error but we continue
-
-	// Check if a new migration file was generated
-	afterFiles, _ := listMigrationFiles(migrationsDir)
-	newFile := findNewFile(beforeFiles, afterFiles)
-
-	if newFile == "" {
-		// No new file generated, models match database
-		fmt.Printf("No migration generated, models match database\n")
-		// Update version.lock to current database revision
-		current, err := getCurrentRevision(python)
-		if err != nil {
-			return fmt.Errorf("failed to get current revision after no migration: %w", err)
-		}
-		if err := updateVersionLockDB(current); err != nil {
-			fmt.Printf("Warning: failed to update version.lock: %v\n", err)
-		}
-		return nil
-	}
-
-	// Check if the new migration is empty
-	isEmpty, err := isEmptyMigration(filepath.Join(migrationsDir, newFile))
-	if err != nil {
-		fmt.Printf("Warning: failed to check migration file: %v\n", err)
-		// Continue anyway
-	}
-
-	if isEmpty {
-		// Empty migration, remove it and update version.lock
-		if err := os.Remove(filepath.Join(migrationsDir, newFile)); err != nil {
-			fmt.Printf("Warning: failed to remove empty migration: %v\n", err)
-		}
-		fmt.Printf("Empty migration removed, updating version.lock\n")
-		current, err := getCurrentRevision(python)
-		if err != nil {
-			return fmt.Errorf("failed to get current revision after removing empty migration: %w", err)
-		}
-		if err := updateVersionLockDB(current); err != nil {
-			fmt.Printf("Warning: failed to update version.lock: %v\n", err)
-		}
-		return nil
-	}
-
-	// Step 3: Apply the generated migration
-	fmt.Printf("Applying new migration: %s\n", newFile)
 	upgradeCmd := exec.Command(python, "-m", "alembic", "--config", alembicConfigPath(), "upgrade", "head")
 	upgradeCmd.Dir = "."
 	upgradeCmd.Stdout = os.Stdout
 	upgradeCmd.Stderr = os.Stderr
 
 	if err := upgradeCmd.Run(); err != nil {
-		return fmt.Errorf("alembic upgrade after migration failed: %w", err)
+		return fmt.Errorf("alembic upgrade head failed: %w", err)
 	}
-
-	// Step 4: Update version.lock to the new current revision
-	current, err := getCurrentRevision(python)
-	if err != nil {
-		return fmt.Errorf("failed to get current revision after upgrade: %w", err)
-	}
-	if err := updateVersionLockDB(current); err != nil {
-		fmt.Printf("Warning: failed to update version.lock: %v\n", err)
-	}
-
 	fmt.Printf("Migration completed successfully\n")
 	return nil
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -96,7 +97,9 @@ func checkJWTBlacklisted(ctx context.Context, jti string) (bool, error) {
 		}
 	}
 	if db.Redis == nil {
-		return false, nil
+		// fail-close（安全优先，用户策略）：Redis 不可用视为无法验证，
+		// 返回错误让调用方拒绝请求，而非放行登出后的 token。
+		return false, errors.New("jwt blacklist store unavailable (redis not configured)")
 	}
 	n, err := db.Redis.Exists(ctx, "jwt:blacklist:"+jti).Result()
 	if err != nil {
@@ -434,10 +437,14 @@ func AuthMiddleware(a *auth.Authenticator) func(http.Handler) http.Handler {
 			}
 
 			// ── JWT 黑名单检查（登出后的 token 立即失效）──
+			// fail-close：Redis 不可用/检查失败时拒绝请求（安全优先），
+			// 避免故障期间登出 token 被复用。
 			if claims.ID != "" {
 				blacklisted, err := checkJWTBlacklisted(r.Context(), claims.ID)
 				if err != nil {
-					slog.Warn("jwt blacklist check failed", "error", err)
+					slog.Warn("jwt blacklist check failed (fail-close)", "error", err)
+					Unauthorized(w, "authentication service unavailable")
+					return
 				}
 				if blacklisted {
 					Unauthorized(w, "token has been revoked")

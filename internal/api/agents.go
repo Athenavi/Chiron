@@ -23,10 +23,10 @@ import (
 type AgentHandler struct {
 	authenticator *auth.Authenticator
 	pythonClient  *engine.PythonClient
-	sem           chan struct{} // 并发执行上限（与 /submit 的 agentSem 同源）
+	sem           *SharedSemaphore // 并发执行上限（与 /submit 的 agentSem 同源；Redis 共享计数）
 }
 
-func NewAgentHandler(a *auth.Authenticator, pc *engine.PythonClient, sem chan struct{}) *AgentHandler {
+func NewAgentHandler(a *auth.Authenticator, pc *engine.PythonClient, sem *SharedSemaphore) *AgentHandler {
 	h := &AgentHandler{authenticator: a, pythonClient: pc, sem: sem}
 	go func() {
 		defer func() {
@@ -387,8 +387,9 @@ func (h *AgentHandler) Run(w http.ResponseWriter, r *http.Request) {
 		timeout = DefaultAgentTimeout
 	}
 	// P1 修复：执行前获取并发信号量，防止无上限并发打爆引擎
+	var releaseAgent func()
 	if h.sem != nil {
-		h.sem <- struct{}{}
+		releaseAgent, _ = h.sem.Acquire(r.Context())
 	}
 	go func() {
 		defer func() {
@@ -401,8 +402,8 @@ func (h *AgentHandler) Run(w http.ResponseWriter, r *http.Request) {
 					`UPDATE agent_sessions SET status = 'failed', result = $1, updated_at = NOW() WHERE id = $2`,
 					fmt.Sprintf(`{"error":"agent execution panicked: %v"}`, r), sessionID)
 			}
-			if h.sem != nil {
-				<-h.sem
+			if releaseAgent != nil {
+				releaseAgent()
 			}
 		}()
 		h.executeAgent(agent, body.Task, sessionID, claims.UserID, claims.TenantID, timeout)

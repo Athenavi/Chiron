@@ -12,10 +12,15 @@ package id
 
 import (
 	"fmt"
+	"math/rand"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/athenavi/chiron/config"
 )
 
 const (
@@ -85,16 +90,44 @@ func (g *Generator) nextInt64() int64 {
 	return (now << timeShift) | (g.workerID << workerShift) | g.seq
 }
 
+// workerIDFile 持久化 worker ID 的文件名（位于 GetDefaultDataDir() 下）。
+// 首次启动自动分配并落盘：同一 data 目录重启后保持同一 worker ID；
+// 多副本部署请显式设置 WORKER_ID（0-1023），或为每个实例提供独立 data 目录。
+const workerIDFile = "worker.id"
+
+// resolveWorkerID 返回实例的 snowflake worker ID，优先级：
+//  1. WORKER_ID 环境变量（显式编排，多实例推荐）
+//  2. data 目录下 worker.id 持久化文件（自动分配并固化，重启不变）
+//  3. 随机分配并写入 worker.id
+// 修复前默认恒为 0：多实例同一毫秒各自递增 seq 会产出相同 ID（JWT jti 等碰撞）。
+func resolveWorkerID() int64 {
+	if v := os.Getenv("WORKER_ID"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n >= 0 && n <= workerMax {
+			return n
+		}
+	}
+	path := filepath.Join(config.GetDefaultDataDir(), workerIDFile)
+	if b, err := os.ReadFile(path); err == nil {
+		if n, err := strconv.ParseInt(strings.TrimSpace(string(b)), 10, 64); err == nil && n >= 0 && n <= workerMax {
+			return n
+		}
+	}
+	n := rand.Int63n(workerMax + 1)
+	if dir := filepath.Dir(path); dir != "" {
+		_ = os.MkdirAll(dir, 0o755)
+	}
+	if err := os.WriteFile(path, []byte(strconv.FormatInt(n, 10)), 0o644); err != nil {
+		fmt.Fprintf(os.Stderr, "id: failed to persist worker id: %v\n", err)
+	}
+	return n
+}
+
 // NextID returns a unique ID using the package-level default generator.
-// The default generator reads WORKER_ID from environment (0-1023), defaulting to 0.
+// The default generator reads WORKER_ID from environment (0-1023) or an
+// auto-assigned persisted worker ID (see resolveWorkerID).
 func NextID() string {
 	once.Do(func() {
-		wid := int64(0)
-		if v := os.Getenv("WORKER_ID"); v != "" {
-			if n, err := strconv.ParseInt(v, 10, 64); err == nil && n >= 0 && n <= workerMax {
-				wid = n
-			}
-		}
+		wid := resolveWorkerID()
 		defaultGenerator, _ = New(wid)
 	})
 	return defaultGenerator.Next()

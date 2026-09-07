@@ -195,14 +195,25 @@ func NewGatewayRouter(
 		rateLimitRPM = 60
 	}
 	if atomicRedis != nil {
+		instances := cfg.RateLimitInstances
+		if instances < 1 {
+			instances = 1
+		}
+		// 分布式限流按实际网关实例数线性放大 global/tenant 上限；
+		// user 级上限固定为单实例 RPM（用户请求通常落在单一实例会话内）。
+		tenantLimit := rateLimitRPM * instances / 2
+		if tenantLimit < rateLimitRPM {
+			tenantLimit = rateLimitRPM
+		}
 		distLimiter = NewDistributedRateLimiter(
 			atomicRedis.LoadRaw(),
-			rateLimitRPM*10, // 全局：单实例限制 × 10
-			rateLimitRPM*5,  // 租户：单实例限制 × 5
-			rateLimitRPM,    // 用户：单实例限制
+			rateLimitRPM*instances, // 全局：单实例限制 × 实例数
+			tenantLimit,            // 租户：单实例限制 × 实例数 / 2
+			rateLimitRPM,           // 用户：单实例限制
 		)
 		rlMW = DistributedRateLimitMiddleware(distLimiter)
-		slog.Info("distributed rate limiter enabled", "global", rateLimitRPM*10)
+		slog.Info("distributed rate limiter enabled",
+			"global", rateLimitRPM*instances, "instances", instances)
 	} else if cfg.RateLimitFailClose {
 		// 生产 fail-close：只读放行，写操作拒绝
 		rlMW = func(next http.Handler) http.Handler {
@@ -261,10 +272,10 @@ func NewGatewayRouter(
 	// 移除 BalanceSyncer 异步落库订阅，避免多副本 split-brain 与重复扣费。
 
 	// Agent execution semaphore — global concurrency limit
-	agentSem := make(chan struct{}, cfg.AgentMaxConcurrency)
+	agentSem := NewSharedSemaphore(atomicRedis, "agent", cfg.AgentMaxConcurrency)
 
 	// Tenant resource manager — per-tenant concurrency & storage quotas
-	tenantResMgr := NewTenantResourceManager(cfg.AgentMaxConcurrency)
+	tenantResMgr := NewTenantResourceManager(atomicRedis, cfg.AgentMaxConcurrency)
 	tenantResMgr.StartCleanup(lifecycleCtx, 30*time.Minute)
 
 	// Submit handler (proxies to Python)
@@ -505,7 +516,7 @@ func registerAgentRoutes(
 	authMW, rlMW, publicMW, sanitizeMW routeMiddleware,
 	submitHandler *SubmitHandler,
 	billingMgr *billing.Manager,
-	agentSem chan struct{},
+	agentSem *SharedSemaphore,
 	eventHub *broadcast.Hub,
 	sessionMgr *session.Manager,
 	authenticator *auth.Authenticator,
@@ -551,17 +562,29 @@ func registerAgentRoutes(
 			}
 		}
 
-		// Reject concurrent submits within the same session
+		// Reject concurrent submits within the same session（跨实例：Redis 运行锁）
 		ctx, cancel := context.WithTimeout(r.Context(), 180*time.Second)
-		if _, loaded := sessionCancels.LoadOrStore(body.SessionID, sessionCancel{userID: userID, cancel: cancel}); loaded {
+		releaseRun, runLocked, lockErr := AcquireSessionRunLock(r.Context(), body.SessionID, userID)
+		if lockErr != nil {
+			// Redis 不可用：兑底进程内防重（多实例下退化为近似限制）
+			slog.Warn("session run lock degraded to in-process (redis unavailable)",
+				"session_id", body.SessionID)
+			if _, loaded := sessionCancels.LoadOrStore(body.SessionID, sessionCancel{userID: userID, cancel: cancel}); loaded {
+				cancel()
+				BadRequest(w, "task already running for this session")
+				return
+			}
+		} else if !runLocked {
 			cancel() // cancel the new one since there's already an active task
 			BadRequest(w, "task already running for this session")
 			return
+		} else {
+			// 分布式锁持有成功：登记本地 registry（供取消）
+			sessionCancels.Store(body.SessionID, sessionCancel{userID: userID, cancel: cancel})
 		}
 
-		select {
-		case agentSem <- struct{}{}:
-		default:
+		releaseSem, ok := agentSem.TryAcquire(r.Context())
+		if !ok {
 			sessionCancels.Delete(body.SessionID)
 			cancel()
 			TooManyRequests(w)
@@ -570,12 +593,15 @@ func registerAgentRoutes(
 
 		Accepted(w, map[string]string{"status": "accepted", "session_id": body.SessionID})
 		go func() {
+			if releaseRun != nil {
+				defer releaseRun()
+			}
+			defer releaseSem()
 			defer func() {
 				if r := recover(); r != nil {
 					slog.Error("submit handler panic", "panic", r)
 				}
 			}()
-			defer func() { <-agentSem }()
 			defer cancel()
 			defer sessionCancels.Delete(body.SessionID)
 			submitHandler.HandleSubmit(ctx, userID, body.SessionID, body.Content, body.LLMConfig)
@@ -974,34 +1000,10 @@ func registerAdminRoutes(
 	mux.Handle("GET /v1/admin/performance", authMW(rlMW(adminReadMW(adminStrip))))
 
 	// API Key admin routes (direct handlers, avoid adminMux path mismatch)
-	mux.Handle("GET /v1/admin/api-keys", authMW(rlMW(adminReadMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if pythonClient == nil || !pythonClient.IsConnected() {
-			OK(w, map[string]interface{}{"keys": []interface{}{}, "stats": map[string]interface{}{"total": 0, "active": 0, "rate_limited": 0, "circuit_open": 0}})
-			return
-		}
-		pythonClient.ForwardRequest(w, r, "/v1/admin/api-keys")
-	})))))
-	mux.Handle("POST /v1/admin/api-keys", authMW(rlMW(adminWriteMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if pythonClient == nil || !pythonClient.IsConnected() {
-			BadRequest(w, "python engine not available")
-			return
-		}
-		pythonClient.ForwardRequest(w, r, "/v1/admin/api-keys")
-	})))))
-	mux.Handle("PUT /v1/admin/api-keys/{id}", authMW(rlMW(adminWriteMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if pythonClient == nil || !pythonClient.IsConnected() {
-			BadRequest(w, "python engine not available")
-			return
-		}
-		pythonClient.ForwardRequest(w, r, "/v1/admin/api-keys/"+r.PathValue("id"))
-	})))))
-	mux.Handle("DELETE /v1/admin/api-keys/{id}", authMW(rlMW(adminWriteMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if pythonClient == nil || !pythonClient.IsConnected() {
-			BadRequest(w, "python engine not available")
-			return
-		}
-		pythonClient.ForwardRequest(w, r, "/v1/admin/api-keys/"+r.PathValue("id"))
-	})))))
+	mux.Handle("GET /v1/admin/api-keys", authMW(rlMW(adminReadMW(http.HandlerFunc(adminHandler.ListLLMKeys)))))
+	mux.Handle("POST /v1/admin/api-keys", authMW(rlMW(adminWriteMW(http.HandlerFunc(adminHandler.AddLLMKey)))))
+	mux.Handle("PUT /v1/admin/api-keys/{id}", authMW(rlMW(adminWriteMW(http.HandlerFunc(adminHandler.UpdateLLMKeyStatus)))))
+	mux.Handle("DELETE /v1/admin/api-keys/{id}", authMW(rlMW(adminWriteMW(http.HandlerFunc(adminHandler.DeleteLLMKey)))))
 
 	// Settings admin routes
 	mux.Handle("PUT /v1/admin/settings", authMW(rlMW(adminWriteMW(adminStrip))))

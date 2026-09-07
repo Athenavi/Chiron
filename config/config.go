@@ -65,6 +65,9 @@ type Config struct {
 	RateLimitRPM       int
 	RateLimitFailClose bool
 	RateLimitGlobal    int // global requests per minute
+	// RateLimitInstances 网关实例数：分布式限流的 global/tenant 上限按实例数
+	// 线性放大（单实例默认 1）。多副本部署请按实际副本数配置 RATE_LIMIT_INSTANCES。
+	RateLimitInstances int
 
 	// TrustedProxyCIDRs trusted reverse-proxy CIDRs (comma separated).
 	// X-Forwarded-For / X-Real-IP are only honored when the direct peer
@@ -187,6 +190,7 @@ func loadConfig() *Config {
 		RateLimitRPM:        getInt("RATE_LIMIT_RPM", 100),
 		RateLimitFailClose:  isTruthy(getEnv("RATE_LIMIT_FAIL_CLOSE", "")),
 		RateLimitGlobal:     getInt("RATE_LIMIT_GLOBAL", 10000),
+		RateLimitInstances:  getInt("RATE_LIMIT_INSTANCES", 1),
 		TrustedProxyCIDRs:   getStringSlice("TRUSTED_PROXY_CIDRS", []string{}),
 		MetricsToken:        getEnv("METRICS_TOKEN", ""),
 		LogLevel:            getEnv("LOG_LEVEL", "info"),

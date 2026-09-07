@@ -115,7 +115,7 @@ func (s *CronScheduler) sync() {
 		eid, err := s.cron.AddFunc(j.Schedule, func() {
 				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 				defer cancel()
-				s.execute(ctx, j)
+				s.execute(ctx, j, false)
 			})
 		if err != nil {
 			slog.Warn("cron register failed", "job", j.Name, "schedule", j.Schedule, "error", err)
@@ -126,7 +126,29 @@ func (s *CronScheduler) sync() {
 	}
 }
 
-func (s *CronScheduler) execute(ctx context.Context, j jobRow) {
+// cronLeaseStaleSecs：run_lease_at 租约陈旧阈值（秒）。大于 execute 的 10 分钟执行
+// 超时上限：正常（含长任务）执行期间租约不被其它实例抢占，仅持有者崩溃/超时才允许重入。
+const cronLeaseStaleSecs = 20 * 60
+
+func (s *CronScheduler) execute(ctx context.Context, j jobRow, force bool) {
+	// 定时触发（force=false）：行级 CAS 抢租约，保证跨网关实例同一 job 只有一个执行者。
+	if !force {
+		tag, err := db.GlobalDBManager.Exec(ctx,
+			`UPDATE cron_jobs SET run_lease_at = NOW()
+			 WHERE id = $1 AND enabled = true
+			   AND (run_lease_at IS NULL
+			        OR run_lease_at < NOW() - make_interval(secs => $2))`,
+			j.ID, cronLeaseStaleSecs)
+		if err != nil {
+			slog.Warn("cron lease acquire failed", "job", j.Name, "error", err)
+			return
+		}
+		if tag.RowsAffected() != 1 {
+			slog.Debug("cron job skipped: lease held by another instance", "job", j.Name)
+			return
+		}
+	}
+
 	// Add a timeout to prevent hanging jobs from blocking the cron executor
 	execCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
@@ -140,8 +162,9 @@ func (s *CronScheduler) execute(ctx context.Context, j jobRow) {
 	} else {
 		status, errMsg = s.parseAndExecute(execCtx, j)
 	}
+	// 释放租约并记录本次运行结果
 	_, _ = db.GlobalDBManager.Exec(execCtx,
-		`UPDATE cron_jobs SET last_run_at = NOW(), last_status = $1 WHERE id = $2`,
+		`UPDATE cron_jobs SET run_lease_at = NULL, last_run_at = NOW(), last_status = $1 WHERE id = $2`,
 		status, j.ID)
 	if status != "success" {
 		slog.Warn("cron job failed", "job", j.Name, "error", errMsg, "duration", time.Since(start))
@@ -268,7 +291,7 @@ func HandleCronWebhook(w http.ResponseWriter, r *http.Request) {
 		if err == nil && rows.Next() {
 			var j jobRow
 			if rows.Scan(&j.ID, &j.Name, &j.Schedule, &j.Task, &j.TenantID, &j.UserID) == nil {
-				s.execute(ctx, j)
+				s.execute(ctx, j, true)
 			}
 		}
 		if rows != nil {
@@ -303,7 +326,7 @@ func (h *AdminHandler) HandleCronTrigger(w http.ResponseWriter, r *http.Request)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
 		s := &CronScheduler{python: cronSchedulerPython}
-		s.execute(ctx, j)
+		s.execute(ctx, j, true)
 	}()
 	_ = tenantID
 	_ = userID

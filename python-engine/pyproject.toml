@@ -37,8 +37,6 @@ dependencies = [
     "python-dotenv>=1.1.0",
     # 认证
     "PyJWT>=2.10.0",
-    # 加密（admin_api_keys 敏感密钥 AES-256-GCM）
-    "cryptography>=41.0.0",
     # 日志
     "structlog>=25.4.0",
     # 可观测�?    "prometheus-client>=0.22.0",

@@ -276,27 +276,27 @@ async def lifespan(app: FastAPI):
     await preload_default_capabilities()
 
     # ── 3.5. SmartAPIKeyPool ──
+    # 中间态：纯内存，不落盘明文、不落库。管理端添加的 Key 重启即丢失；
+    # 正式持久化/多实例方案见 docs/llm-provider-key-management-dr.md。
     from app.gateway.smart_key_pool import SmartAPIKeyPool
 
-    # 管理端添加的密钥：APP_SECRET 派生 AES-256-GCM 加密后存入 admin_api_keys 表（不再落盘明文 JSON）。
     _key_pool = SmartAPIKeyPool()
-    # 从 settings 注入已有 key（persist=False：仅内存，env 为事实源，重启由 env 重新注入）
+    # 从 settings 注入已有 key（env 为事实源，重启由 env 重新注入）
     if settings.openai_api_key:
-        await _key_pool.add_key("openai", settings.openai_api_key, "from env", persist=False)
+        await _key_pool.add_key("openai", settings.openai_api_key, "from env")
     if settings.deepseek_api_key:
-        await _key_pool.add_key("deepseek", settings.deepseek_api_key, "from env", persist=False)
+        await _key_pool.add_key("deepseek", settings.deepseek_api_key, "from env")
     if settings.anthropic_api_key:
-        await _key_pool.add_key("anthropic", settings.anthropic_api_key, "from env", persist=False)
-    # 数据库可用时加载管理端加密密钥；不可用则仅 env 密钥可用（管理端写入会显式报错）
-    try:
-        await _key_pool.load_from_db()
-    except Exception as exc:
-        logger.warning(
-            "admin api key table unavailable, managed keys not loaded: %s", exc
-        )
+        await _key_pool.add_key("anthropic", settings.anthropic_api_key, "from env")
+    logger.warning(
+        "SmartAPIKeyPool is in-memory only: admin-added api keys will be lost on restart (DR pending)"
+    )
     logger.info("SmartAPIKeyPool initialized with %d providers", len(providers))
 
     # ── 4. 限流器（middleware 需要） ──
+    # Redis 可用：分布式租户限流；Redis 不可用：本地限流兑底（避免裸奔/None 崩溃）。
+    from app.gateway.ratelimit import LocalTenantRateLimiter
+
     if _redis is not None:
         limiter = TenantRateLimiter(
             redis=_redis,
@@ -304,7 +304,14 @@ async def lifespan(app: FastAPI):
             requests_per_second=settings.rate_limit_rps,
         )
     else:
-        limiter = None
+        logger.warning(
+            "Redis unavailable: falling back to in-process tenant rate limiter "
+            "(single-instance semantics)"
+        )
+        limiter = LocalTenantRateLimiter(
+            requests_per_minute=settings.rate_limit_rpm,
+            requests_per_second=settings.rate_limit_rps,
+        )
     app.state.limiter = limiter
 
     # ── 5. MCP Plugin System（用户级连接池：25s 轮询活跃用户配置） ──
@@ -1003,18 +1010,7 @@ async def admin_add_api_key(
         from fastapi.responses import JSONResponse
 
         return JSONResponse({"error": "provider and key are required"}, status_code=400)
-    from app.gateway.smart_key_pool import ApiKeyDBUnavailable
-
-    try:
-        await pool.add_key(provider, key, remark)
-    except ApiKeyDBUnavailable as exc:
-        from fastapi.responses import JSONResponse
-
-        logger.error("admin add api key failed (db unavailable): %s", exc)
-        return JSONResponse(
-            {"error": "database unavailable; admin api keys are persisted to PostgreSQL"},
-            status_code=503,
-        )
+    await pool.add_key(provider, key, remark)
     return {"status": "added", "provider": provider}
 
 
@@ -1038,20 +1034,7 @@ async def admin_update_api_key(
             },
             status_code=400,
         )
-    from app.gateway.smart_key_pool import ApiKeyDBUnavailable
-
-    try:
-        updated = await pool.update_key_status(key_id, status_val)
-    except ApiKeyDBUnavailable as exc:
-        logger.error("admin update api key failed (db unavailable): %s", exc)
-        return JSONResponse(
-            {
-                "status": "error",
-                "error": "database unavailable; admin api keys are persisted to PostgreSQL",
-                "id": key_id,
-            },
-            status_code=503,
-        )
+    updated = await pool.update_key_status(key_id, status_val)
     if not updated:
         return JSONResponse(
             {
@@ -1071,16 +1054,6 @@ async def admin_delete_api_key(
 ):
     """删除 API Key（按路径 ID；兼容请求体 provider+key 定位）"""
     key_id = request.path_params.get("key_id", "")
-    from app.gateway.smart_key_pool import ApiKeyDBUnavailable
-
-    db_unavailable = JSONResponse(
-        {
-            "status": "error",
-            "error": "database unavailable; admin api keys are persisted to PostgreSQL",
-            "id": key_id,
-        },
-        status_code=503,
-    )
     try:
         try:
             body = await request.json()
@@ -1089,17 +1062,9 @@ async def admin_delete_api_key(
         provider = body.get("provider", "")
         key_full = body.get("key", "")
         if key_id:
-            try:
-                removed = await pool.remove_key_by_id(key_id)
-            except ApiKeyDBUnavailable as exc:
-                logger.error("admin delete api key failed (db unavailable): %s", exc)
-                return db_unavailable
+            removed = await pool.remove_key_by_id(key_id)
         elif provider and key_full:
-            try:
-                removed = await pool.remove_key(provider, key_full)
-            except ApiKeyDBUnavailable as exc:
-                logger.error("admin delete api key failed (db unavailable): %s", exc)
-                return db_unavailable
+            removed = await pool.remove_key(provider, key_full)
         else:
             return JSONResponse(
                 {

@@ -1,6 +1,7 @@
 # 租户级限流 — Redis 滑动窗口计数器
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 import uuid
@@ -106,3 +107,55 @@ class TenantRateLimiter:
             "rps_remaining": max(0, self.rps - s_count),
             "rpm_remaining": max(0, self.rpm - m_count),
         }
+
+
+class LocalTenantRateLimiter:
+    """进程内滑动窗口限流——Redis 不可用时的兑底实现（单实例语义）。
+
+    接口与 TenantRateLimiter 一致（allow/get_remaining），避免 Redis 故障时
+    引擎完全裸奔（历史行为 limiter=None）。多引擎实例请启用 Redis 以使用
+    分布式 TenantRateLimiter。
+    """
+
+    def __init__(
+        self,
+        requests_per_minute: int = 60,
+        requests_per_second: int = 10,
+    ):
+        self.rpm = requests_per_minute
+        self.rps = requests_per_second
+        self._lock = asyncio.Lock()
+        self._seconds: dict[str, list[float]] = {}
+        self._minutes: dict[str, list[float]] = {}
+
+    @staticmethod
+    def _prune(bucket: list, now: float, window: float) -> int:
+        bucket[:] = [t for t in bucket if t > now - window]
+        return len(bucket)
+
+    async def allow(self, tenant_id: str) -> bool:
+        """检查是否允许请求通过（进程内，单实例语义）"""
+        if not tenant_id:
+            return True
+        now = time.time()
+        async with self._lock:
+            s = self._seconds.setdefault(tenant_id, [])
+            if self._prune(s, now, 1.0) >= self.rps:
+                return False
+            m = self._minutes.setdefault(tenant_id, [])
+            if self._prune(m, now, 60.0) >= self.rpm:
+                return False
+            s.append(now)
+            m.append(now)
+            return True
+
+    async def get_remaining(self, tenant_id: str) -> dict:
+        """返回剩余额度"""
+        now = time.time()
+        async with self._lock:
+            s = self._seconds.setdefault(tenant_id, [])
+            m = self._minutes.setdefault(tenant_id, [])
+            return {
+                "rps_remaining": max(0, self.rps - self._prune(s, now, 1.0)),
+                "rpm_remaining": max(0, self.rpm - self._prune(m, now, 60.0)),
+            }

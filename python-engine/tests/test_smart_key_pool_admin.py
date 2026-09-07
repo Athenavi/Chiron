@@ -1,14 +1,12 @@
 """SmartAPIKeyPool 按稳定 ID 的管理操作（更新状态 / 删除）"""
 import pytest
 
-from tests.fake_db import FakePool
 from app.gateway.smart_key_pool import KeyStatus, SmartAPIKeyPool
-
-TEST_APP_SECRET = "test-app-secret-0123456789abcdef0123456789abcdef"
 
 
 def make_pool() -> SmartAPIKeyPool:
-    return SmartAPIKeyPool(app_secret=TEST_APP_SECRET, db=FakePool())
+    pool = SmartAPIKeyPool()
+    return pool
 
 
 @pytest.mark.asyncio
@@ -17,10 +15,10 @@ async def test_key_id_stable_and_no_key_leak():
     pool = make_pool()
     await pool.add_key("openai", "sk-secret-key-value")
     a = pool.get_all_keys()[0]["id"]
-    await pool.add_key("openai", "sk-secret-key-value")  # 幂等：不产生新行
-    b = pool.get_all_keys()[0]["id"]
+    await pool.add_key("openai", "sk-secret-key-value")
+    b = pool.get_all_keys()[1]["id"]
     await pool.add_key("openai", "sk-other-key")
-    c = pool.get_all_keys()[1]["id"]
+    c = pool.get_all_keys()[2]["id"]
 
     assert a == b  # 稳定
     assert a != c  # 不同 key 不同 ID

@@ -29,20 +29,22 @@ type TenantResourceConfig struct {
 // TenantResourceManager 租户资源管理器
 type TenantResourceManager struct {
 	mu           sync.RWMutex
-	quotas       map[string]*TenantResourceConfig    // tenantID → config
-	semaphores   map[string]chan struct{}            // tenantID → 并发信号量
-	globalSem    chan struct{}                        // 全局并发信号量（回退）
+	rdb          db.RedisClient                            // 可为 nil（纯本地兑底）
+	quotas       map[string]*TenantResourceConfig          // tenantID → config
+	semaphores   map[string]*SharedSemaphore               // tenantID → 并发信号量（Redis 共享）
+	globalSem    *SharedSemaphore                          // 全局并发信号量（回退）
 	cleanupStop  chan struct{}
 }
 
 // NewTenantResourceManager 创建租户资源管理器
 // globalConcurrency: 全局并发上限（当 tenant 未配置时使用）
-func NewTenantResourceManager(globalConcurrency int) *TenantResourceManager {
+func NewTenantResourceManager(rdb db.RedisClient, globalConcurrency int) *TenantResourceManager {
 	trm := &TenantResourceManager{
-		quotas:      make(map[string]*TenantResourceConfig),
-		semaphores:  make(map[string]chan struct{}),
-		globalSem:   make(chan struct{}, globalConcurrency),
-		cleanupStop: make(chan struct{}),
+		rdb:          rdb,
+		quotas:       make(map[string]*TenantResourceConfig),
+		semaphores:   make(map[string]*SharedSemaphore),
+		globalSem:    NewSharedSemaphore(rdb, "tenant-global", globalConcurrency),
+		cleanupStop:  make(chan struct{}),
 	}
 	return trm
 }
@@ -68,7 +70,7 @@ func (trm *TenantResourceManager) cleanupStale() {
 	trm.mu.Lock()
 	defer trm.mu.Unlock()
 	// 只清理信号量，保留配额配置以便重新加载
-	trm.semaphores = make(map[string]chan struct{})
+	trm.semaphores = make(map[string]*SharedSemaphore)
 }
 
 // SetQuota 设置租户的资源配置
@@ -76,9 +78,9 @@ func (trm *TenantResourceManager) SetQuota(cfg TenantResourceConfig) {
 	trm.mu.Lock()
 	defer trm.mu.Unlock()
 	trm.quotas[cfg.TenantID] = &cfg
-	// 如果设置了并发上限，重建信号量
+	// 如果设置了并发上限，重建信号量（Redis 共享计数）
 	if cfg.MaxConcurrency > 0 {
-		trm.semaphores[cfg.TenantID] = make(chan struct{}, cfg.MaxConcurrency)
+		trm.semaphores[cfg.TenantID] = NewSharedSemaphore(trm.rdb, "tenant:"+cfg.TenantID, cfg.MaxConcurrency)
 	}
 	slog.Info("tenant resource quota set",
 		"tenant", cfg.TenantID,
@@ -102,30 +104,20 @@ func (trm *TenantResourceManager) RemoveQuota(tenantID string) {
 	delete(trm.semaphores, tenantID)
 }
 
-// Acquire 尝试获取租户并发执行许可
+// Acquire 尝试获取租户并发执行许可（非阻塞）
 // 返回释放函数（必须调用）。如果租户有独立配置则使用租户级信号量，
-// 否则使用全局信号量。
+// 否则使用全局信号量。Redis 共享计数，不可用时本地兑底。
 func (trm *TenantResourceManager) Acquire(tenantID string) (release func(), acquired bool) {
 	trm.mu.RLock()
 	sem, hasTenantSem := trm.semaphores[tenantID]
 	trm.mu.RUnlock()
 
 	if hasTenantSem {
-		select {
-		case sem <- struct{}{}:
-			return func() { <-sem }, true
-		default:
-			return nil, false // 租户并发上限已满
-		}
+		return sem.TryAcquire(context.Background())
 	}
 
 	// 回退到全局信号量
-	select {
-	case trm.globalSem <- struct{}{}:
-		return func() { <-trm.globalSem }, true
-	default:
-		return nil, false // 全局并发上限已满
-	}
+	return trm.globalSem.TryAcquire(context.Background())
 }
 
 // CheckStorageQuota 检查租户存储配额是否允许添加指定大小的文件

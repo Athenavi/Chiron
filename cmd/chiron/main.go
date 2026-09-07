@@ -248,6 +248,8 @@ func main() {
 		api.StartBlacklistCleaner(lifecycleCtx)
 		// P0-1: 启动JWT黑名单跨实例同步
 		api.StartBlacklistPubSub(lifecycleCtx)
+		// 跨实例 agent 取消广播订阅
+		api.StartAgentCancelSubscriber(lifecycleCtx)
 
 		// P1-1: 启动数据库连接池自动调优（每5分钟检查一次）
 		if db.GlobalDBManager != nil {

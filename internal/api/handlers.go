@@ -75,6 +75,11 @@ func handleCancel(w http.ResponseWriter, r *http.Request) {
 		slog.Info("session cancelled", "session_id", sessionID)
 		OK(w, map[string]string{"status": "cancelled", "session_id": sessionID})
 	} else {
+		// 本实例无该 session 任务：广播取消到其它网关实例（跨实例协调）
+		if err := CancelSessionBroadcast(r.Context(), sessionID, claims.UserID); err == nil {
+			OK(w, map[string]string{"status": "cancel_requested", "session_id": sessionID})
+			return
+		}
 		OK(w, map[string]string{"status": "no_active_task", "session_id": sessionID})
 	}
 }

@@ -3,10 +3,7 @@ import json
 
 import pytest
 
-from tests.fake_db import FakePool
 from app.gateway.smart_key_pool import SmartAPIKeyPool
-
-TEST_APP_SECRET = "test-app-secret-0123456789abcdef0123456789abcdef"
 
 
 class FakeRequest:
@@ -22,7 +19,7 @@ class FakeRequest:
 
 
 async def make_pool_with_key(provider="openai", key="sk-test-1"):
-    pool = SmartAPIKeyPool(app_secret=TEST_APP_SECRET, db=FakePool())
+    pool = SmartAPIKeyPool()
     await pool.add_key(provider, key)
     return pool, pool.get_all_keys()[0]["id"]
 
