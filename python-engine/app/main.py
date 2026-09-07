@@ -163,12 +163,27 @@ async def lifespan(app: FastAPI):
     from app.gateway.router import GatewayRouter
 
     providers: dict[str, LLMProvider] = {}
+    # KeyRing(DR 集中派):管理端密钥的明文环(Redis keyset 镜像)+ env 种子兜底。
+    # provider 在 key_ring 模式下按活跃 key 轮换调用并上报失败。
+    from app.gateway.key_ring import KeyRing
+
+    _key_ring = KeyRing(
+        redis=_redis,
+        env_seeds={
+            "anthropic": [settings.anthropic_api_key] if settings.anthropic_api_key else [],
+            "openai": [settings.openai_api_key or settings.llm_api_key]
+            if (settings.openai_api_key or settings.llm_api_key)
+            else [],
+            "deepseek": [settings.deepseek_api_key] if settings.deepseek_api_key else [],
+        },
+    )
     if settings.anthropic_api_key:
         from app.providers.anthropic import AnthropicProvider
 
         providers["anthropic"] = AnthropicProvider(
             api_key=settings.anthropic_api_key,
             base_url=settings.anthropic_base_url,
+            key_ring=_key_ring,
         )
     if settings.openai_api_key or settings.llm_api_key:
         from app.providers.openai import OpenAIProvider
@@ -176,6 +191,7 @@ async def lifespan(app: FastAPI):
         providers["openai"] = OpenAIProvider(
             api_key=settings.openai_api_key or settings.llm_api_key,
             base_url=settings.openai_base_url or settings.llm_base_url,
+            key_ring=_key_ring,
         )
     if settings.deepseek_api_key:
         from app.providers.deepseek import DeepSeekProvider
@@ -183,6 +199,7 @@ async def lifespan(app: FastAPI):
         providers["deepseek"] = DeepSeekProvider(
             api_key=settings.deepseek_api_key,
             base_url=settings.deepseek_base_url,
+            key_ring=_key_ring,
         )
 
     if not providers:
@@ -709,10 +726,8 @@ def _setup_routes(app: FastAPI) -> None:
     app.include_router(api_router)
 
     # ── Admin API Keys（模块级路由函数） ──
-    app.get("/v1/admin/api-keys")(admin_list_api_keys)
-    app.post("/v1/admin/api-keys")(admin_add_api_key)
-    app.put("/v1/admin/api-keys/{key_id}")(admin_update_api_key)
-    app.delete("/v1/admin/api-keys/{key_id}")(admin_delete_api_key)
+    # DR 集中派：管理端密钥管理已迁移至 Go 网关本地实现(/v1/admin/api-keys)。
+    # 引擎侧 admin_* 函数保留(兼容旧测试)但不再注册路由，避免与网关 keyset 双写分裂。
 
 
 # ── 模块级路由处理函数（FastAPI 需在模块作用域才能正确推断 body 类型） ──

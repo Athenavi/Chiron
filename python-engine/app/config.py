@@ -229,6 +229,22 @@ class Settings(BaseSettings):
                 "POSTGRES_DSN with sslmode=disable is forbidden in production; "
                 "use sslmode=require or verify-full"
             )
+        # DR R6(过渡):由 APP_SECRET 派生 JWT_SECRET/INTERNAL_TOKEN 是兼容旧部署的
+        # 过渡路径;新部署应显式注入两者。完全移除派生前需先确认引擎启动链
+        # (chiron-cli/启动器注入),避免本地仅 .env(APP_SECRET)的实例无法启动。
+        import logging as _logging
+        import os as _os
+
+        if self.app_secret and not _os.getenv("JWT_SECRET") and self.jwt_secret:
+            _logging.getLogger(__name__).warning(
+                "JWT_SECRET derived from APP_SECRET (deprecated). "
+                "DR R6: inject JWT_SECRET explicitly; derivation will be removed."
+            )
+        if self.app_secret and not _os.getenv("INTERNAL_TOKEN") and self.internal_token:
+            _logging.getLogger(__name__).warning(
+                "INTERNAL_TOKEN derived from APP_SECRET (deprecated). "
+                "DR R6: inject INTERNAL_TOKEN explicitly; derivation will be removed."
+            )
         return self
 
     @model_validator(mode="after")

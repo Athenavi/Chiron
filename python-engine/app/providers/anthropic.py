@@ -15,11 +15,15 @@ logger = logging.getLogger(__name__)
 class AnthropicProvider(LLMProvider):
     name = "anthropic"
 
-    def __init__(self, api_key: str, base_url: str = ""):
+    def __init__(self, api_key: str, base_url: str = "", *, key_ring=None):
         kwargs = {"api_key": api_key}
         if base_url:
             kwargs["base_url"] = base_url
+        self._base_kwargs = dict(kwargs)
         self._client = anthropic.AsyncAnthropic(**kwargs)
+        # 多 key(DR 集中派),与 OpenAIProvider 同型;key_ring 为 None 时单 key 直连。
+        self._key_ring = key_ring
+        self._clients: dict[str, anthropic.AsyncAnthropic] = {}
 
     async def chat_stream(
         self,
@@ -44,51 +48,56 @@ class AnthropicProvider(LLMProvider):
 
         input_tokens = 0
         output_tokens = 0
-        async with self._client.messages.stream(**kwargs) as stream:
-            async for event in stream:
-                if event.type == "content_block_delta":
-                    delta = event.delta
-                    if hasattr(delta, "text"):
-                        yield ChatResponse(content=delta.text)
-                    elif hasattr(delta, "partial_json"):
-                        # tool_use delta — accumulate in parent
-                        pass
-                elif event.type == "message_start":
-                    usage = getattr(event.message, "usage", None)
-                    if usage:
-                        input_tokens = getattr(usage, "input_tokens", 0)
-                elif event.type == "message_delta":
-                    usage = getattr(event, "usage", None)
-                    if usage:
-                        output_tokens = getattr(usage, "output_tokens", 0)
+        client, key_item = await self._resolve_client()
+        try:
+            async with client.messages.stream(**kwargs) as stream:
+                async for event in stream:
+                    if event.type == "content_block_delta":
+                        delta = event.delta
+                        if hasattr(delta, "text"):
+                            yield ChatResponse(content=delta.text)
+                        elif hasattr(delta, "partial_json"):
+                            # tool_use delta — accumulate in parent
+                            pass
+                    elif event.type == "message_start":
+                        usage = getattr(event.message, "usage", None)
+                        if usage:
+                            input_tokens = getattr(usage, "input_tokens", 0)
+                    elif event.type == "message_delta":
+                        usage = getattr(event, "usage", None)
+                        if usage:
+                            output_tokens = getattr(usage, "output_tokens", 0)
 
-            # 获取完整消息以提取 tool_calls
-            final = await stream.get_final_message()
-            tool_calls = []
-            if final.content:
-                for block in final.content:
-                    if block.type == "tool_use":
-                        tool_calls.append(
-                            ToolCall(
-                                id=block.id,
-                                name=block.name,
-                                arguments=(
-                                    block.input
-                                    if isinstance(block.input, str)
-                                    else __import__("json").dumps(block.input)
-                                ),
+                # 获取完整消息以提取 tool_calls
+                final = await stream.get_final_message()
+                tool_calls = []
+                if final.content:
+                    for block in final.content:
+                        if block.type == "tool_use":
+                            tool_calls.append(
+                                ToolCall(
+                                    id=block.id,
+                                    name=block.name,
+                                    arguments=(
+                                        block.input
+                                        if isinstance(block.input, str)
+                                        else __import__("json").dumps(block.input)
+                                    ),
+                                )
                             )
-                        )
-            finish = "tool_calls" if tool_calls else "stop"
-            if final.stop_reason == "max_tokens":
-                finish = "length"
+                finish = "tool_calls" if tool_calls else "stop"
+                if final.stop_reason == "max_tokens":
+                    finish = "length"
 
-            yield ChatResponse(
-                tool_calls=tool_calls,
-                finish_reason=finish,
-                input_tokens=input_tokens or getattr(final.usage, "input_tokens", 0),
-                output_tokens=output_tokens or getattr(final.usage, "output_tokens", 0),
-            )
+                yield ChatResponse(
+                    tool_calls=tool_calls,
+                    finish_reason=finish,
+                    input_tokens=input_tokens or getattr(final.usage, "input_tokens", 0),
+                    output_tokens=output_tokens or getattr(final.usage, "output_tokens", 0),
+                )
+        except Exception:
+            await self._report_failure(key_item)
+            raise
 
     async def chat(
         self,
@@ -113,7 +122,12 @@ class AnthropicProvider(LLMProvider):
         if tools:
             kwargs["tools"] = self._convert_tools(tools)
 
-        resp = await self._client.messages.create(**kwargs)
+        client, key_item = await self._resolve_client()
+        try:
+            resp = await client.messages.create(**kwargs)
+        except Exception:
+            await self._report_failure(key_item)
+            raise
 
         content = ""
         tool_calls = []
@@ -150,7 +164,39 @@ class AnthropicProvider(LLMProvider):
         raise NotImplementedError("Anthropic does not provide embedding API")
 
     async def close(self) -> None:
-        await self._client.close()
+        clients = set(self._clients.values())
+        clients.add(self._client)
+        for c in clients:
+            try:
+                await c.close()
+            except Exception:
+                pass
+
+    # ── 多 key helpers（与 OpenAIProvider 同型）──
+
+    async def _resolve_client(self) -> tuple:
+        if self._key_ring is None:
+            return self._client, None
+        item = await self._key_ring.get_key(self.name)
+        if item is None:
+            return self._client, None
+        key = item["key"]
+        client = self._clients.get(key)
+        if client is None:
+            if len(self._clients) >= 8:
+                self._clients.pop(next(iter(self._clients)))
+            kwargs = dict(self._base_kwargs)
+            kwargs["api_key"] = key
+            client = anthropic.AsyncAnthropic(**kwargs)
+            self._clients[key] = client
+        return client, item
+
+    async def _report_failure(self, item) -> None:
+        if self._key_ring is not None and item is not None:
+            try:
+                await self._key_ring.report_failure(self.name, item["key"])
+            except Exception:
+                logger.exception("key ring report_failure failed")
 
     # ── 转换 ──
 

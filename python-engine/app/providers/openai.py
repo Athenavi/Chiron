@@ -15,11 +15,17 @@ logger = logging.getLogger(__name__)
 class OpenAIProvider(LLMProvider):
     name = "openai"
 
-    def __init__(self, api_key: str, base_url: str = ""):
+    def __init__(self, api_key: str, base_url: str = "", *, key_ring=None):
         kwargs: dict = {"api_key": api_key}
         if base_url:
             kwargs["base_url"] = base_url
+        self._base_kwargs = dict(kwargs)
         self._client = AsyncOpenAI(**kwargs)
+        # 多 key(DR 集中派):key_ring 提供各 provider 的活跃 key 集;client 按 key 缓存。
+        # key_ring 为空/不可用时的兜底 = self._client(env 首 key)。
+        self._key_ring = key_ring
+        self._clients: dict[str, AsyncOpenAI] = {}
+
 
     async def chat_stream(
         self,
@@ -33,7 +39,12 @@ class OpenAIProvider(LLMProvider):
         kwargs = self._build_kwargs(messages, model, max_tokens, temperature, tools)
         kwargs["stream"] = True
 
-        response = await self._client.chat.completions.create(**kwargs)
+        client, key_item = await self._resolve_client()
+        try:
+            response = await client.chat.completions.create(**kwargs)
+        except Exception:
+            await self._report_failure(key_item)
+            raise
 
         tool_calls: list[dict] = []
         input_tokens = 0
@@ -111,7 +122,12 @@ class OpenAIProvider(LLMProvider):
         tools: list[dict] | None = None,
     ) -> ChatResponse:
         kwargs = self._build_kwargs(messages, model, max_tokens, temperature, tools)
-        resp = await self._client.chat.completions.create(**kwargs)
+        client, key_item = await self._resolve_client()
+        try:
+            resp = await client.chat.completions.create(**kwargs)
+        except Exception:
+            await self._report_failure(key_item)
+            raise
 
         choice = resp.choices[0]
         content = choice.message.content or ""
@@ -136,7 +152,12 @@ class OpenAIProvider(LLMProvider):
         )
 
     async def embed(self, text: str, model: str) -> EmbeddingResponse:
-        resp = await self._client.embeddings.create(model=model, input=text)
+        client, key_item = await self._resolve_client()
+        try:
+            resp = await client.embeddings.create(model=model, input=text)
+        except Exception:
+            await self._report_failure(key_item)
+            raise
         usage = resp.usage
         return EmbeddingResponse(
             embedding=resp.data[0].embedding,
@@ -144,9 +165,42 @@ class OpenAIProvider(LLMProvider):
         )
 
     async def close(self) -> None:
-        await self._client.close()
+        clients = set(self._clients.values())
+        clients.add(self._client)
+        for c in clients:
+            try:
+                await c.close()
+            except Exception:
+                pass
 
     # ── helpers ──
+
+    async def _resolve_client(self) -> tuple:
+        """返回本次请求使用的 client 与其 key 指纹(可选)。
+        有 key_ring 时按 provider 取活跃 key(按 key 缓存 client);取不到(无 key/异常)
+        回退到 env 首 key 的 self._client(单 key/降级兼容)。"""
+        if self._key_ring is None:
+            return self._client, None
+        item = await self._key_ring.get_key(self.name)
+        if item is None:
+            return self._client, None
+        key = item["key"]
+        client = self._clients.get(key)
+        if client is None:
+            if len(self._clients) >= 8:
+                self._clients.pop(next(iter(self._clients)))  # 简单 LRU 上限
+            kwargs = dict(self._base_kwargs)
+            kwargs["api_key"] = key
+            client = AsyncOpenAI(**kwargs)
+            self._clients[key] = client
+        return client, item
+
+    async def _report_failure(self, item) -> None:
+        if self._key_ring is not None and item is not None:
+            try:
+                await self._key_ring.report_failure(self.name, item["key"])
+            except Exception:
+                logger.exception("key ring report_failure failed")
 
     @staticmethod
     def _build_kwargs(

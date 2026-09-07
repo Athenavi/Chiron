@@ -9,5 +9,5 @@ class DeepSeekProvider(OpenAIProvider):
 
     name = "deepseek"
 
-    def __init__(self, api_key: str, base_url: str = "https://api.deepseek.com"):
-        super().__init__(api_key=api_key, base_url=base_url)
+    def __init__(self, api_key: str, base_url: str = "https://api.deepseek.com", *, key_ring=None):
+        super().__init__(api_key=api_key, base_url=base_url, key_ring=key_ring)
