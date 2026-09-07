@@ -50,3 +50,6 @@ opentelemetry-instrumentation-httpx==0.54b0
 pydantic-ai==2.9.0
 
 
+
+# º”√‹(admin_api_keys √Ù∏–√‹‘ø AES-256-GCM)
+cryptography==49.0.0

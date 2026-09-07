@@ -278,21 +278,22 @@ async def lifespan(app: FastAPI):
     # ── 3.5. SmartAPIKeyPool ──
     from app.gateway.smart_key_pool import SmartAPIKeyPool
 
-    # 持久化文件：管理端添加的 API Key 重启不丢（env API_KEYS_FILE 可覆盖默认路径）
-    import os as _os
-    from pathlib import Path as _Path
-
-    _api_keys_file = _os.environ.get("API_KEYS_FILE") or str(
-        _Path(__file__).resolve().parent.parent / "data" / "api_keys.json"
-    )
-    _key_pool = SmartAPIKeyPool(persist_path=_api_keys_file)
-    # 从 settings 注册已有 key（add_key 幂等，与持久化文件中的 key 去重）
+    # 管理端添加的密钥：APP_SECRET 派生 AES-256-GCM 加密后存入 admin_api_keys 表（不再落盘明文 JSON）。
+    _key_pool = SmartAPIKeyPool()
+    # 从 settings 注入已有 key（persist=False：仅内存，env 为事实源，重启由 env 重新注入）
     if settings.openai_api_key:
-        await _key_pool.add_key("openai", settings.openai_api_key, "from env")
+        await _key_pool.add_key("openai", settings.openai_api_key, "from env", persist=False)
     if settings.deepseek_api_key:
-        await _key_pool.add_key("deepseek", settings.deepseek_api_key, "from env")
+        await _key_pool.add_key("deepseek", settings.deepseek_api_key, "from env", persist=False)
     if settings.anthropic_api_key:
-        await _key_pool.add_key("anthropic", settings.anthropic_api_key, "from env")
+        await _key_pool.add_key("anthropic", settings.anthropic_api_key, "from env", persist=False)
+    # 数据库可用时加载管理端加密密钥；不可用则仅 env 密钥可用（管理端写入会显式报错）
+    try:
+        await _key_pool.load_from_db()
+    except Exception as exc:
+        logger.warning(
+            "admin api key table unavailable, managed keys not loaded: %s", exc
+        )
     logger.info("SmartAPIKeyPool initialized with %d providers", len(providers))
 
     # ── 4. 限流器（middleware 需要） ──
@@ -1002,7 +1003,18 @@ async def admin_add_api_key(
         from fastapi.responses import JSONResponse
 
         return JSONResponse({"error": "provider and key are required"}, status_code=400)
-    await pool.add_key(provider, key, remark)
+    from app.gateway.smart_key_pool import ApiKeyDBUnavailable
+
+    try:
+        await pool.add_key(provider, key, remark)
+    except ApiKeyDBUnavailable as exc:
+        from fastapi.responses import JSONResponse
+
+        logger.error("admin add api key failed (db unavailable): %s", exc)
+        return JSONResponse(
+            {"error": "database unavailable; admin api keys are persisted to PostgreSQL"},
+            status_code=503,
+        )
     return {"status": "added", "provider": provider}
 
 
@@ -1026,7 +1038,20 @@ async def admin_update_api_key(
             },
             status_code=400,
         )
-    updated = await pool.update_key_status(key_id, status_val)
+    from app.gateway.smart_key_pool import ApiKeyDBUnavailable
+
+    try:
+        updated = await pool.update_key_status(key_id, status_val)
+    except ApiKeyDBUnavailable as exc:
+        logger.error("admin update api key failed (db unavailable): %s", exc)
+        return JSONResponse(
+            {
+                "status": "error",
+                "error": "database unavailable; admin api keys are persisted to PostgreSQL",
+                "id": key_id,
+            },
+            status_code=503,
+        )
     if not updated:
         return JSONResponse(
             {
@@ -1046,6 +1071,16 @@ async def admin_delete_api_key(
 ):
     """删除 API Key（按路径 ID；兼容请求体 provider+key 定位）"""
     key_id = request.path_params.get("key_id", "")
+    from app.gateway.smart_key_pool import ApiKeyDBUnavailable
+
+    db_unavailable = JSONResponse(
+        {
+            "status": "error",
+            "error": "database unavailable; admin api keys are persisted to PostgreSQL",
+            "id": key_id,
+        },
+        status_code=503,
+    )
     try:
         try:
             body = await request.json()
@@ -1054,9 +1089,17 @@ async def admin_delete_api_key(
         provider = body.get("provider", "")
         key_full = body.get("key", "")
         if key_id:
-            removed = await pool.remove_key_by_id(key_id)
+            try:
+                removed = await pool.remove_key_by_id(key_id)
+            except ApiKeyDBUnavailable as exc:
+                logger.error("admin delete api key failed (db unavailable): %s", exc)
+                return db_unavailable
         elif provider and key_full:
-            removed = await pool.remove_key(provider, key_full)
+            try:
+                removed = await pool.remove_key(provider, key_full)
+            except ApiKeyDBUnavailable as exc:
+                logger.error("admin delete api key failed (db unavailable): %s", exc)
+                return db_unavailable
         else:
             return JSONResponse(
                 {

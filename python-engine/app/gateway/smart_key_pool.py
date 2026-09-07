@@ -1,21 +1,86 @@
 """
 智能 API Key 池 — 多 Key 轮询 + 动态权重 + 熔断
+管理端添加的 Key 使用 APP_SECRET 派生的 AES-256-GCM 密钥加密后存入
+admin_api_keys 表（provider + encrypted_key 行），不再明文落盘 JSON。
 """
 
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
-import json
 import logging
-import os
 import random
 import time
+import uuid
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+# 加密密钥派生域：与 Go 侧 internal/settings 的 AES-256-GCM 风格一致，
+# 但使用独立 domain 隔离，密文互不通用。主密钥 = APP_SECRET。
+_ENC_DOMAIN = "chiron-admin-api-key:"
+# 密文格式前缀：`v1:` + base64(nonce || ciphertext)（与 Go settings 层一致，便于识别与互操作）
+_CIPHER_PREFIX = "v1:"
+_NONCE_LEN = 12
+
+
+class ApiKeyDBUnavailable(RuntimeError):
+    """PostgreSQL 不可用/未初始化。管理端密钥持久化硬依赖数据库。"""
+
+
+def _encryption_key(app_secret: str) -> bytes:
+    if not app_secret:
+        raise ApiKeyDBUnavailable(
+            "APP_SECRET not configured; cannot derive admin api key encryption key"
+        )
+    return hashlib.sha256((_ENC_DOMAIN + app_secret).encode("utf-8")).digest()
+
+
+def encrypt_key(plain: str, app_secret: str) -> str:
+    """AES-256-GCM 加密：v1:base64(nonce || ciphertext)。nonce 每次随机。"""
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    nonce = uuid.uuid4().bytes  # 128-bit -> 截断为 12 字节
+    nonce = nonce[:_NONCE_LEN]
+    ct = AESGCM(_encryption_key(app_secret)).encrypt(nonce, plain.encode("utf-8"), None)
+    return _CIPHER_PREFIX + base64.b64encode(nonce + ct).decode("ascii")
+
+
+def decrypt_key(cipher: str, app_secret: str) -> str:
+    """解密 encrypt_key 产生的密文。"""
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    if not cipher.startswith(_CIPHER_PREFIX):
+        raise ValueError("invalid admin api key ciphertext")
+    raw = base64.b64decode(cipher[len(_CIPHER_PREFIX):])
+    if len(raw) < _NONCE_LEN:
+        raise ValueError("invalid admin api key ciphertext length")
+    nonce, ct = raw[:_NONCE_LEN], raw[_NONCE_LEN:]
+    return AESGCM(_encryption_key(app_secret)).decrypt(nonce, ct, None).decode("utf-8")
+
+
+def _now_iso() -> str:
+    from datetime import datetime, timezone
+
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _key_id_digest(key_id: str) -> str:
+    """从 key_id（provider-<sha256[:12]>）解析出 12 位哈希前缀；非法格式返回空串。"""
+    if "-" not in key_id:
+        return ""
+    digest = key_id.rsplit("-", 1)[1]
+    if len(digest) == 12 and all(c in "0123456789abcdef" for c in digest):
+        return digest
+    return ""
+
+
+def provider_key_hash(provider: str, key: str) -> str:
+    """provider+key 的完整 sha256 hex：写入 admin_api_keys.key_hash（唯一约束，防重复）。"""
+    return hashlib.sha256(f"{provider}:{key}".encode("utf-8")).hexdigest()
 
 
 class KeyStatus(str, Enum):
@@ -101,7 +166,8 @@ class SmartAPIKeyPool:
         weight_decay: float = 0.5,
         weight_recovery: float = 1.1,
         max_weight: float = 2.0,
-        persist_path: str | None = None,
+        app_secret: str | None = None,
+        db=None,
     ):
         self._failure_threshold = failure_threshold
         self._recovery_timeout = recovery_timeout
@@ -110,8 +176,11 @@ class SmartAPIKeyPool:
         self._max_weight = max_weight
         self._lock = asyncio.Lock()
 
-        # 持久化文件（管理端添加的 Key 落盘；None = 纯内存，向后兼容）
-        self._persist_path = persist_path
+        # 加密主密钥：管理端密钥加密落库依赖 APP_SECRET（与 Go 端 settings 加密同源但独立 domain）。
+        # 未显式传入时延迟从引擎 settings 读取（保持单测可用构造）。
+        self._app_secret = app_secret
+        # DB pool：默认 None → 延迟取引擎全局 pool（app.db.get_pool）；测试可注入 fake。
+        self._db = db
 
         # 初始化 Key 池
         self._pools: dict[str, list[APIKeyInfo]] = {}
@@ -129,9 +198,13 @@ class SmartAPIKeyPool:
                     for key in key_list
                 ]
 
-        # 启动时加载已持久化的 Key（幂等，与 keys/env 注入不重复）
-        if persist_path:
-            self._load_persisted()
+    def _secret(self) -> str:
+        """返回加密主密钥（APP_SECRET）。延迟加载并缓存，避免循环 import。"""
+        if self._app_secret is None:
+            from app.config import settings
+
+            self._app_secret = settings.app_secret or ""
+        return self._app_secret
 
     async def get_key(self, provider: str) -> Optional[str]:
         """
@@ -247,16 +320,124 @@ class SmartAPIKeyPool:
 
                         return
 
-    async def add_key(self, provider: str, key: str, remark: str = "") -> None:
-        """添加 Key（幂等：同 provider+key 已存在时仅更新备注；变更后落盘）"""
+    def _db_pool(self):
+        """返回数据库 pool；未初始化/不可用抛 ApiKeyDBUnavailable。"""
+        if self._db is not None:
+            return self._db
+        try:
+            from app.db import get_pool
+
+            return get_pool()
+        except Exception as exc:
+            raise ApiKeyDBUnavailable(
+                "PostgreSQL unavailable: admin api key persistence requires database"
+            ) from exc
+
+    async def load_from_db(self) -> int:
+        """启动时把 admin_api_keys 中加密的管理端密钥解密载入内存（幂等，与 env 注入去重）。
+
+        Returns:
+            成功载入条数。DB 不可用时抛 ApiKeyDBUnavailable（由调用方决定告警/继续）。
+        """
+        secret = self._secret()
+        pool = self._db_pool()
+        rows = await pool.fetch(
+            """
+            SELECT provider, encrypted_key, description, status
+            FROM admin_api_keys
+            WHERE provider IS NOT NULL AND provider <> ''
+              AND encrypted_key IS NOT NULL AND encrypted_key <> ''
+            """
+        )
+        loaded = 0
+        async with self._lock:
+            for row in rows:
+                provider = str(row["provider"]).strip()
+                cipher = str(row["encrypted_key"]).strip()
+                if not provider or not cipher:
+                    continue
+                try:
+                    key = decrypt_key(cipher, secret)
+                except Exception:
+                    logger.exception(
+                        "skip admin api key row: decrypt failed for provider=%s", provider
+                    )
+                    continue
+                pool_by_provider = self._pools.setdefault(provider, [])
+                if any(k.key == key for k in pool_by_provider):
+                    continue  # 与 env 注入的重复项去重
+                try:
+                    status = KeyStatus(str(row["status"] or "active"))
+                except ValueError:
+                    status = KeyStatus.ACTIVE
+                pool_by_provider.append(
+                    APIKeyInfo(
+                        key=key,
+                        provider=provider,
+                        remark=str(row["description"] or ""),
+                        status=status,
+                        circuit_breaker=CircuitBreaker(
+                            failure_threshold=self._failure_threshold,
+                            recovery_timeout=self._recovery_timeout,
+                        ),
+                    )
+                )
+                loaded += 1
+        logger.info("loaded %d admin api key(s) from admin_api_keys table", loaded)
+        return loaded
+
+    async def _persist_row_locked(self, provider: str, key: str, remark: str, status: str) -> None:
+        """把密钥加密写入 admin_api_keys（须在 _lock 内调用；DB 不可用抛错，不落明文）。"""
+        secret = self._secret()
+        pool = self._db_pool()
+        encrypted = encrypt_key(key, secret)
+        key_hash = provider_key_hash(provider, key)
+        await pool.execute(
+            """
+            INSERT INTO admin_api_keys
+                (id, key_hash, name, status, created_at, updated_at, description, provider, encrypted_key)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            ON CONFLICT (key_hash) DO UPDATE SET
+                provider = EXCLUDED.provider,
+                encrypted_key = EXCLUDED.encrypted_key,
+                description = EXCLUDED.description,
+                status = EXCLUDED.status,
+                updated_at = EXCLUDED.updated_at
+            """,
+            str(uuid.uuid4()),
+            key_hash,
+            provider,  # name 列冗余存 provider，便于人工核对行归属
+            status,
+            _now_iso(),
+            _now_iso(),
+            remark or None,
+            provider,
+            encrypted,
+        )
+
+    async def add_key(
+        self, provider: str, key: str, remark: str = "", persist: bool = True
+    ) -> None:
+        """添加 Key。
+
+        persist=True（管理端）：先加密写入 admin_api_keys（DB 不可用抛 ApiKeyDBUnavailable，
+        不落明文），成功后才入内存；重复 key 仅刷新备注。
+        persist=False（env 注入）：仅内存，重启由 env 重新注入。
+        """
         async with self._lock:
             pool = self._pools.setdefault(provider, [])
             for existing in pool:
                 if existing.key == key:
                     if remark and remark != existing.remark:
                         existing.remark = remark
-                        self._persist_locked()
+                        if persist:
+                            await self._persist_row_locked(
+                                provider, key, remark, existing.status.value
+                            )
                     return
+
+            if persist:
+                await self._persist_row_locked(provider, key, remark, KeyStatus.ACTIVE.value)
 
             pool.append(
                 APIKeyInfo(
@@ -269,18 +450,23 @@ class SmartAPIKeyPool:
                     ),
                 )
             )
-            self._persist_locked()
 
     async def remove_key(self, provider: str, key: str) -> bool:
-        """删除 Key（成功删除后落盘）"""
+        """删除 Key（DB 行按 key_hash 删除；DB 不可用抛错）"""
+        pool = self._db_pool()
+        digest = provider_key_hash(provider, key)
+        await pool.execute(
+            "DELETE FROM admin_api_keys WHERE provider = $1 AND key_hash = $2",
+            provider,
+            digest,
+        )
         async with self._lock:
-            pool = self._pools.get(provider, [])
-            for i, k in enumerate(pool):
+            bucket = self._pools.get(provider, [])
+            for i, k in enumerate(bucket):
                 if k.key == key:
-                    pool.pop(i)
-                    if not pool:
+                    bucket.pop(i)
+                    if not bucket:
                         del self._pools[provider]
-                    self._persist_locked()
                     return True
         return False
 
@@ -293,109 +479,57 @@ class SmartAPIKeyPool:
     async def update_key_status(self, key_id: str, status: str) -> bool:
         """
         按 ID 更新 Key 状态（active / rate_limited / circuit_open）
+        ID 为 key_id（provider + sha256[:12]），DB 行按 key_hash 前缀定位同步更新。
 
         Returns:
-            是否找到并更新（非法状态值或 ID 不存在返回 False）
+            是否找到并更新（非法状态值或 ID 不存在返回 False；DB 不可用抛错）
         """
         try:
             new_status = KeyStatus(status)
         except ValueError:
             return False
+
+        # 同步 DB 中的状态（管理端密钥行；env 密钥无行，affected=0 仅更新内存）
+        pool = self._db_pool()
+        digest = _key_id_digest(key_id)
+        if digest:
+            await pool.execute(
+                "UPDATE admin_api_keys SET status = $1, updated_at = $2 WHERE left(key_hash, 12) = $3",
+                new_status.value,
+                _now_iso(),
+                digest,
+            )
+
         async with self._lock:
-            for pool in self._pools.values():
-                for k in pool:
+            for bucket in self._pools.values():
+                for k in bucket:
                     if self.key_id(k.provider, k.key) == key_id:
                         k.status = new_status
                         # 手动恢复为 active 时重置熔断器，否则下次 get_key 仍被熔断拦截
                         if new_status == KeyStatus.ACTIVE and k.circuit_breaker:
                             k.circuit_breaker.record_success()
-                        self._persist_locked()
                         return True
         return False
 
     async def remove_key_by_id(self, key_id: str) -> bool:
-        """按 ID 删除 Key（管理端路径删除，无需请求体携带完整 key；成功删除后落盘）"""
+        """按 ID 删除 Key（管理端路径删除，无需请求体携带完整 key）。
+        DB 行按 key_hash 前缀定位删除；env 密钥无 DB 行，仅移除内存。"""
+        pool = self._db_pool()
+        digest = _key_id_digest(key_id)
+        if digest:
+            await pool.execute(
+                "DELETE FROM admin_api_keys WHERE left(key_hash, 12) = $1",
+                digest,
+            )
         async with self._lock:
-            for provider, pool in self._pools.items():
-                for i, k in enumerate(pool):
+            for provider, bucket in self._pools.items():
+                for i, k in enumerate(bucket):
                     if self.key_id(k.provider, k.key) == key_id:
-                        pool.pop(i)
-                        if not pool:
+                        bucket.pop(i)
+                        if not bucket:
                             del self._pools[provider]
-                        self._persist_locked()
                         return True
         return False
-
-    # ── 持久化（管理端添加的 Key 重启不丢；原子写，失败仅告警不阻断请求） ──
-
-    def _load_persisted(self) -> None:
-        """启动时从持久化文件加载 Key（幂等；文件缺失/损坏时静默跳过）"""
-        path = self._persist_path
-        if not path or not os.path.exists(path):
-            return
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            for item in data.get("keys", []) if isinstance(data, dict) else []:
-                provider = str(item.get("provider") or "").strip()
-                key = str(item.get("key") or "").strip()
-                if not provider or not key:
-                    continue
-                try:
-                    status = KeyStatus(str(item.get("status") or "active"))
-                except ValueError:
-                    status = KeyStatus.ACTIVE
-                pool = self._pools.setdefault(provider, [])
-                if any(k.key == key for k in pool):
-                    continue  # 与 keys/env 注入的重复项去重
-                pool.append(
-                    APIKeyInfo(
-                        key=key,
-                        provider=provider,
-                        remark=str(item.get("remark") or ""),
-                        status=status,
-                        circuit_breaker=CircuitBreaker(
-                            failure_threshold=self._failure_threshold,
-                            recovery_timeout=self._recovery_timeout,
-                        ),
-                    )
-                )
-            logger.info("loaded %d persisted api key(s) from %s", self._key_count(), path)
-        except Exception:
-            logger.exception("failed to load persisted api keys from %s", path)
-
-    def _key_count(self) -> int:
-        return sum(len(p) for p in self._pools.values())
-
-    def _persist_locked(self) -> None:
-        """把当前 Key 池原子写入持久化文件（须在 _lock 内调用）。
-        明文存储与 .env 同级；部署时需保护文件权限或挂载私有卷。"""
-        if not self._persist_path:
-            return
-        try:
-            path = os.path.abspath(self._persist_path)
-            parent = os.path.dirname(path)
-            if parent:
-                os.makedirs(parent, exist_ok=True)
-            payload = {
-                "version": 1,
-                "keys": [
-                    {
-                        "provider": k.provider,
-                        "key": k.key,
-                        "remark": k.remark,
-                        "status": k.status.value,
-                    }
-                    for pool in self._pools.values()
-                    for k in pool
-                ],
-            }
-            tmp = path + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(payload, f, ensure_ascii=False, indent=2)
-            os.replace(tmp, path)
-        except Exception:
-            logger.exception("failed to persist api keys to %s", self._persist_path)
 
     def get_stats(self) -> dict:
         """获取统计信息"""

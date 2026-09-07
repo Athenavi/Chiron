@@ -50,6 +50,11 @@ class AdminApiKey(Base):
     description = Column(Text, nullable=True, doc='描述')
 
 
+    provider = Column(String(50), nullable=True, doc='LLM provider 名（openai/deepseek/anthropic…）')
+
+    encrypted_key = Column(Text, nullable=True, doc='LLM provider 密钥密文（APP_SECRET 派生 AES-256-GCM；明文永不落库）')
+
+
     allowed_models = Column(String(255), nullable=True, doc='允许的模型')
 
     rate_limit_qps = Column(Integer, default=10, doc='速率限制 QPS')
