@@ -24,7 +24,8 @@ import (
 
 var validDBName = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
-// Version 是构建时注入的版本号，通过 -ldflags 注入�?// 默认�?"dev" 在开发环境使用，生产构建时替换为语义版本号�?var Version = "dev"
+// Version 是构建时注入的版本号，通过 -ldflags 注入
+var Version = "dev"
 
 // AdminHandler provides admin-only management endpoints.
 type AdminHandler struct {
@@ -224,7 +225,7 @@ func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		BadRequest(w, "invalid role: must be owner, admin, or user")
 		return
 	}
-	// S 安全修复：非 owner 不可将角色提升为 owner（防�?admin 提权�?	claims := auth.GetClaims(r.Context())
+	claims := auth.GetClaims(r.Context())
 	if body.Role == "owner" && (claims == nil || claims.Role != "owner") {
 		BadRequest(w, "only owner can assign owner role")
 		return
@@ -311,7 +312,6 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	OK(w, map[string]string{"status": "deleted"})
 }
 
-// 鈹€鈹€ System Management 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 func (h *AdminHandler) SystemInfo(w http.ResponseWriter, r *http.Request) {
 	info := map[string]interface{}{
@@ -399,7 +399,7 @@ func dbNameFromDSN() string {
 // 鈹€鈹€ Backup & Restore 鈹€鈹€
 
 func (h *AdminHandler) CreateBackup(w http.ResponseWriter, r *http.Request) {
-	// P0 安全修复：pg_dump 输出流式转发，避免整库缓冲入内存导致 OOM�?	// 密码通过 PGPASSWORD 环境变量传递，避免出现在进程命令行参数中�?	dsn := extractDSN()
+	dsn := extractDSN()
 	if dsn == "" {
 		InternalError(w, "POSTGRES_DSN not configured")
 		return
@@ -605,9 +605,9 @@ func (h *AdminHandler) UpdateStorage(w http.ResponseWriter, r *http.Request) {
 	warning := ""
 	if previous != body.Backend {
 		if previous == "local" {
-			warning = "存储后端已从 local 切换�?s3。旧后端中的文件不会自动迁移�?
+			warning = "存储后端已从 local 切换到 s3。旧后端中的文件不会自动迁移。"
 		} else {
-			warning = "存储后端已从 s3 切换�?local。旧后端中的文件不会自动迁移�?
+			warning = "存储后端已从 s3 切换到 local。旧后端中的文件不会自动迁移。"
 		}
 	}
 
@@ -663,7 +663,7 @@ func (h *AdminHandler) TestStorage(w http.ResponseWriter, r *http.Request) {
 		}
 		OK(w, map[string]interface{}{
 			"status":  "ok",
-			"message": fmt.Sprintf("S3 连接成功，bucket '%s' 可访�?, body.S3Bucket),
+			"message": fmt.Sprintf("S3 连接成功，bucket '%s' 可访问", body.S3Bucket),
 		})
 	default:
 		BadRequest(w, "backend must be 'local' or 's3'")
