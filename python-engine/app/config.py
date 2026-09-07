@@ -182,6 +182,23 @@ class Settings(BaseSettings):
                 .rstrip("=")
             )
 
+        # INTERNAL_TOKEN 未显式配置时，由 APP_SECRET 派生（与 Go 网关 deriveSubsecret
+        # 一致：HMAC-SHA256(APP_SECRET, "chiron-internal") → base64url 无 padding）。
+        # Go 网关 ForwardRequest 注入的正是该派生值；不派生则引擎 internal_token 为空，
+        # 需内部 token 的端点（如 /v1/admin/api-keys）恒 401，曾致登录后管理探测被前端判为会话失效。
+        if not self.internal_token and self.app_secret:
+            self.internal_token = (
+                base64.urlsafe_b64encode(
+                    hmac.new(
+                        self.app_secret.encode("utf-8"),
+                        b"chiron-internal",
+                        hashlib.sha256,
+                    ).digest()
+                )
+                .decode("ascii")
+                .rstrip("=")
+            )
+
         WEAK_SECRETS = {
             "",
             "dev-secret-change-in-production",
