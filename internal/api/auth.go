@@ -315,7 +315,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	if claims := auth.GetClaims(r.Context()); claims != nil && claims.ID != "" && db.Redis != nil {
 		remaining := time.Until(claims.ExpiresAt.Time)
 		if remaining > 0 {
-			db.Redis.Set(r.Context(), "jwt:blacklist:"+claims.ID, "1", remaining)
+			db.Redis.Set(r.Context(), db.RedisKey("jwt:blacklist:")+claims.ID, "1", remaining)
 			// P0-1: 璺ㄥ疄渚嬪悓姝ラ粦鍚嶅崟
 			broadcastBlacklistSync(claims.ID)
 		}
@@ -468,7 +468,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if oldClaims.ID != "" && db.Redis != nil {
-		if n, err := db.Redis.Exists(r.Context(), "jwt:blacklist:"+oldClaims.ID).Result(); err == nil && n > 0 {
+		if n, err := db.Redis.Exists(r.Context(), db.RedisKey("jwt:blacklist:")+oldClaims.ID).Result(); err == nil && n > 0 {
 			Unauthorized(w, "token revoked")
 			return
 		}

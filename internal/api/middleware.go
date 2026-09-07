@@ -101,7 +101,7 @@ func checkJWTBlacklisted(ctx context.Context, jti string) (bool, error) {
 		// 返回错误让调用方拒绝请求，而非放行登出后的 token。
 		return false, errors.New("jwt blacklist store unavailable (redis not configured)")
 	}
-	n, err := db.Redis.Exists(ctx, "jwt:blacklist:"+jti).Result()
+	n, err := db.Redis.Exists(ctx, db.RedisKey("jwt:blacklist:")+jti).Result()
 	if err != nil {
 		return false, err
 	}
@@ -155,7 +155,7 @@ func StartBlacklistPubSub(ctx context.Context) {
 	}
 
 	go func() {
-		pubsub := db.Redis.Subscribe(ctx, "jwt:blacklist:sync")
+		pubsub := db.Redis.Subscribe(ctx, db.RedisKey("jwt:blacklist:sync"))
 		defer pubsub.Close()
 
 		ch := pubsub.Channel()
@@ -189,7 +189,7 @@ func broadcastBlacklistSync(jti string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	if err := db.Redis.Publish(ctx, "jwt:blacklist:sync", jti).Err(); err != nil {
+	if err := db.Redis.Publish(ctx, db.RedisKey("jwt:blacklist:sync"), jti).Err(); err != nil {
 		slog.Warn("failed to broadcast JWT blacklist sync", "jti", jti, "error", err)
 	}
 }

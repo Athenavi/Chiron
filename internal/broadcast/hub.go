@@ -45,7 +45,7 @@ func NewHub(rdb db.RedisClient) *Hub {
 	h := &Hub{
 		subs:       make(map[string]chan Event),
 		rdb:        rdb,
-		channel:    "chiron:events",
+		channel:    db.RedisKey("chiron:events"),
 		localOnly:  rdb == nil,
 		instanceID: uuid.New().String(),
 	}

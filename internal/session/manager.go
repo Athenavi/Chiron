@@ -20,9 +20,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// redisKeyPrefix 统一前缀(N2):由 db.RedisKey 注入 REDIS_KEY_PREFIX。
+var redisKeyPrefix = db.RedisKey("session:")
+
 const (
-	redisKeyPrefix = "session:"
-	redisTTL       = 2 * time.Hour
+	redisTTL = 2 * time.Hour
 )
 
 // ErrSessionNotFound 表示会话不存在（SSE 端点据此放行尚未创建的新会话连接）。

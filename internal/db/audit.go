@@ -35,7 +35,7 @@ type Auditor struct {
 func NewAuditor(rdb RedisClient) *Auditor {
 	return &Auditor{
 		rdb:    rdb,
-		stream: "audit:events",
+		stream: db.RedisKey("audit:events"),
 	}
 }
 
@@ -155,7 +155,7 @@ func AuditLog(ctx context.Context, userID, tenantID, action, resource, detail, i
 	}
 
 	if err := Redis.XAdd(ctx, &redis.XAddArgs{
-		Stream: "audit:events",
+		Stream: db.RedisKey("audit:events"),
 		MaxLen: 100000,
 		Approx: true,
 		Values: map[string]any{
@@ -182,7 +182,7 @@ type AuditConsumer struct {
 func NewAuditConsumer(rdb RedisClient, handler func(ctx context.Context, entry AuditEntry) error) *AuditConsumer {
 	return &AuditConsumer{
 		rdb:     rdb,
-		stream:  "audit:events",
+		stream:  db.RedisKey("audit:events"),
 		group:   "audit-processor",
 		handler: handler,
 	}

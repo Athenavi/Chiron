@@ -90,11 +90,11 @@ func (l *DistributedRateLimiter) Allow(ctx context.Context, tenantID, userID str
 		tenantID = "public"
 	}
 
-	globalKey := "ratelimit:global:minute"
-	tenantKey := fmt.Sprintf("ratelimit:tenant:%s:minute", tenantID)
+	globalKey := db.RedisKey("ratelimit:global:minute")
+	tenantKey := fmt.Sprintf(db.RedisKey("ratelimit:tenant:%s:minute"), tenantID)
 	userKey := ""
 	if userID != "" {
-		userKey = fmt.Sprintf("ratelimit:user:%s:minute", userID)
+		userKey = fmt.Sprintf(db.RedisKey("ratelimit:user:%s:minute"), userID)
 	}
 
 	// 限流失效的参数（limit≤0）直接跳过

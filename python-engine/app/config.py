@@ -116,6 +116,10 @@ class Settings(BaseSettings):
 
     # ── 队列 ──
     queue_worker_concurrency: int = 10
+    # 后台队列 worker 跨实例全局并发上限(所有引擎实例共享,防多实例下 10×N 洪峰)。
+    # 默认与单实例 concurrency 相同:单实例不收紧,多实例共享该上限。
+    # 0 = 关闭全局门控(仅每实例 concurrency)。
+    queue_worker_global_concurrency: int = 10
 
     # ── JWT ──
     # 默认空：未显式配置时若存在 APP_SECRET，则由其派生（与 Go 网关 deriveSubsecret 一致），

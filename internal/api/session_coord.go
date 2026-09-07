@@ -19,10 +19,13 @@ import (
 //  2. 取消经 Redis 广播(agent:cancel),持有该 session 的实例执行真实取消。
 // Redis 不可用时均兑底为本地行为并告警(与 SharedSemaphore 一致)。
 
+var (
+	agentRunLockPrefix = db.RedisKey("agent:run-lock:")
+	agentCancelChannel = db.RedisKey("agent:cancel")
+)
+
 const (
-	agentRunLockPrefix = "agent:run-lock:"
-	agentRunLockTTL    = 12 * time.Minute // 长任务兜底；正常结束显式释放
-	agentCancelChannel = "agent:cancel"
+	agentRunLockTTL = 12 * time.Minute // 长任务兜底；正常结束显式释放
 )
 
 const sessionRunLockLua = `

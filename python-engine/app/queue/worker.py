@@ -22,6 +22,31 @@ GROUP_NAME = "engine-workers"
 CONSUMER_PREFIX = "worker"
 MAX_RETRIES = 3
 
+# ── 跨实例全局并发门控(N5,防多引擎实例后台 10×N 洪峰)──
+# Redis 计数键 engine:worker:inflight;TTL 防进程崩溃泄漏;0=关闭。
+GATE_KEY = "engine:worker:inflight"
+GATE_TTL = 300
+GATE_WAIT_SECS = 3.0
+GATE_RETRY_INTERVAL = 0.5
+
+_GATE_ACQUIRE_LUA = """
+local v = redis.call('INCR', KEYS[1])
+redis.call('EXPIRE', KEYS[1], ARGV[1])
+if v > tonumber(ARGV[2]) then
+  redis.call('DECR', KEYS[1])
+  return 0
+end
+return 1
+"""
+
+_GATE_RELEASE_LUA = """
+local v = redis.call('GET', KEYS[1])
+if v and tonumber(v) > 0 then
+  return redis.call('DECR', KEYS[1])
+end
+return 0
+"""
+
 
 class QueueWorker:
     """
@@ -41,9 +66,11 @@ class QueueWorker:
         concurrency: int = 10,
         gateway=None,
         memory_service=None,
+        global_concurrency: int = 10,
     ):
         self._redis = redis
         self._concurrency = concurrency
+        self._gate_limit = global_concurrency
         self._gateway = gateway  # GatewayRouter（用于 RAG 构建/嵌入），可为 None
         self._memory_service = (
             memory_service  # MemoryService（用于记忆存储），可为 None
@@ -145,17 +172,70 @@ class QueueWorker:
 
         for stream, messages in results:
             for stream_id, fields in messages:
-                # 等待信号量
+                # 等待本地信号量（每实例）
                 await self._semaphore.acquire()
+                # 跨实例全局门控：超限等待上限后把消息放回队尾并 ACK，
+                # 避免 XCLAIM(30s) 期间被其它实例重复处理。
+                if not await self._try_acquire_gate(stream_id, fields):
+                    self._semaphore.release()
+                    continue
                 task = asyncio.create_task(self._process_message(stream_id, fields))
                 # 设置超时保护，防止 task 永久挂起
                 timeout_task = asyncio.create_task(asyncio.wait_for(task, timeout=3600))
                 self._in_flight.add(timeout_task)
                 timeout_task.add_done_callback(self._task_done)
 
+    async def _try_acquire_gate(self, stream_id: str, fields: dict) -> bool:
+        """全局并发门控：抢到槽位返回 True；等待 GATE_WAIT_SECS 仍满则放回队尾返回 False。
+        Redis 故障/未配置：fail-open（返回 True，交由后续调用报错/本地并发约束）。"""
+        if not self._gate_limit or self._redis is None:
+            return True
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + GATE_WAIT_SECS
+        while True:
+            try:
+                ok = await self._redis.eval(
+                    _GATE_ACQUIRE_LUA, 1, GATE_KEY, GATE_TTL, self._gate_limit
+                )
+            except Exception:
+                return True  # fail-open
+            if ok:
+                return True
+            if loop.time() >= deadline:
+                # 放回队尾（保持顺序）并 ACK 原消息
+                requeue = {
+                    (k.decode() if isinstance(k, bytes) else k): (
+                        v.decode() if isinstance(v, bytes) else v
+                    )
+                    for k, v in fields.items()
+                }
+                try:
+                    await self._redis.xadd(TASK_STREAM, requeue, maxlen=10000)
+                    await self._redis.xack(TASK_STREAM, GROUP_NAME, stream_id)
+                except Exception as exc:
+                    logger.warning("worker gate requeue failed: %s", exc)
+                    return True  # 放回失败：宁可处理也不丢
+                task_id = requeue.get("task_id", "")
+                logger.info(
+                    "worker global concurrency full; message requeued id=%s",
+                    task_id,
+                )
+                return False
+            await asyncio.sleep(GATE_RETRY_INTERVAL)
+
+    async def _release_gate(self) -> None:
+        if not self._gate_limit or self._redis is None:
+            return
+        try:
+            await self._redis.eval(_GATE_RELEASE_LUA, 1, GATE_KEY)
+        except Exception:
+            pass  # 计数键由 TTL 兜底
+
     def _task_done(self, task: asyncio.Task) -> None:
         self._in_flight.discard(task)
         self._semaphore.release()
+        if self._gate_limit and self._redis:
+            asyncio.create_task(self._release_gate())
         if task.exception():
             logger.error("Task exception: %s", task.exception())
 

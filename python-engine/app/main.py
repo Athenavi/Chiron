@@ -1105,7 +1105,10 @@ async def _run_queue_worker(redis: aioredis.Redis, gateway=None) -> None:
     from app.queue.worker import QueueWorker
 
     worker = QueueWorker(
-        redis=redis, concurrency=settings.queue_worker_concurrency, gateway=gateway
+        redis=redis,
+        concurrency=settings.queue_worker_concurrency,
+        gateway=gateway,
+        global_concurrency=settings.queue_worker_global_concurrency,
     )
     try:
         await worker.start()

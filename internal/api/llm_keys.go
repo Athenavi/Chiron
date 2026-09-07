@@ -21,11 +21,13 @@ import (
 // JSON{key 明文,status}) + 版本号 + 变更 PUBLISH,供引擎 KeyRing 同步。
 // 本文件为网关侧实现;/v1/admin/api-keys 在此本地处理(不再转发引擎)。
 
-const (
-	llmKeysHashPrefix    = "llm:keys:"
-	llmKeysVerKey        = "llm:keys:ver"
-	llmKeysChangedChannel = "llm:keys:changed"
-	llmKeysStatuses      = "active rate_limited circuit_open"
+var (
+	llmKeysHashPrefix     = db.RedisKey("llm:keys:")
+	llmKeysVerKey         = db.RedisKey("llm:keys:ver")
+	llmKeysChangedChannel = db.RedisKey("llm:keys:changed")
+)
+
+const llmKeysStatuses      = "active rate_limited circuit_open"
 )
 
 func llmKeyHash(provider, key string) string {
