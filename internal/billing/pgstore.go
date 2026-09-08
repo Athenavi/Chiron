@@ -91,7 +91,8 @@ func (s *PGStore) EnsureTables(ctx context.Context) error {
 
 func (s *PGStore) GetBalance(ctx context.Context, userID string) (int, error) {
 	var balance int
-	err := db.GlobalDBManager.QueryRow(ctx,
+	// 主库：余额为钱包语义，扣减后/跨实例读取不允许依赖副本延迟
+	err := db.Pool.QueryRow(ctx,
 		`SELECT COALESCE(credits, 0) FROM users WHERE id = $1`, userID).Scan(&balance)
 	if err != nil {
 		return 0, fmt.Errorf("get user credits: %w", err)
@@ -285,7 +286,8 @@ func (s *PGStore) CreatePayment(ctx context.Context, p *Payment) error {
 }
 
 func (s *PGStore) GetPayment(ctx context.Context, id string) (*Payment, error) {
-	row := db.GlobalDBManager.QueryRow(ctx,
+	// 主库：支付回调确认前读取订单状态，不允许副本延迟导致 "unknown order"
+	row := db.Pool.QueryRow(ctx,
 		`SELECT `+_paymentColumns+` FROM payments WHERE id = $1`, id)
 	return scanPayment(row)
 }

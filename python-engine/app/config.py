@@ -35,6 +35,11 @@ class Settings(BaseSettings):
     # 必须与 Go 网关 REDIS_KEY_PREFIX 同值（约定含尾冒号，如 "dev:" / "prod:"）；默认空 = 存量兼容。
     redis_key_prefix: str = ""
 
+    # ── MCP 插件池（按节点开关）──
+    # 多实例部署时仅需要的实例启用（每实例对活跃用户各持有 MCP 连接，全开会 N×连接放大）；
+    # 默认开 = 保持单实例现状。关闭的实例不建 MCP 连接，相关工具调用会报不可用。
+    mcp_pool_enabled: bool = True
+
     # ── PostgreSQL ──
     # 默认空：强制通过 .env / POSTGRES_DSN 环境变量提供，避免误用开发库
     postgres_dsn: str = ""

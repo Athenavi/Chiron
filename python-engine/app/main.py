@@ -332,13 +332,19 @@ async def lifespan(app: FastAPI):
     app.state.limiter = limiter
 
     # ── 5. MCP Plugin System（用户级连接池：25s 轮询活跃用户配置） ──
+    # mcp_pool_enabled=False 时本实例不建立 MCP 连接（多实例部署按节点启用，
+    # 避免 N 实例 × 活跃用户 × server 的连接放大；默认开 = 保持单机现状）。
     global _plugin_pool
-    from app.plugins.pool import MCPClientPool
-    from app.plugins.store import ActiveTracker, PluginStore
+    if settings.mcp_pool_enabled:
+        from app.plugins.pool import MCPClientPool
+        from app.plugins.store import ActiveTracker, PluginStore
 
-    _plugin_pool = MCPClientPool(store=PluginStore(), tracker=ActiveTracker())
-    await _plugin_pool.start()
-    logger.info("MCP plugin pool started (poll=%ds)", 25)
+        _plugin_pool = MCPClientPool(store=PluginStore(), tracker=ActiveTracker())
+        await _plugin_pool.start()
+        logger.info("MCP plugin pool started (poll=%ds)", 25)
+    else:
+        _plugin_pool = None
+        logger.info("MCP plugin pool disabled on this instance (mcp_pool_enabled=false)")
 
     # ── 6. 启动 Queue Worker ──
     if _redis is not None:
@@ -364,19 +370,8 @@ async def lifespan(app: FastAPI):
     _metrics_task = asyncio.create_task(metrics_collector())
     logger.info("Process metrics collector started (interval=10s)")
 
-    # ── 8. 实例注册 ──
-    instance_id = _get_instance_id()
-    if _redis is not None:
-        await _redis.hset(
-            rkey(f"instance:{instance_id}"),
-            mapping={
-                "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                "pod_name": settings.pod_name or socket.gethostname(),
-                "version": "3.0.0",
-            },
-        )
-        await _redis.expire(rkey(f"instance:{instance_id}"), 60)
-        logger.info("Instance registered: %s", instance_id)
+    # ── 8. 实例注册 ──（已移除：instance:{id} 注册无消费方且 60s 无续期即失效，
+    # 属误导性死功能；实例标识仍经 _get_instance_id 用于日志/info）
 
     logger.info("=" * 60)
     logger.info("Ready. HTTP port: %d", settings.http_port)
@@ -386,10 +381,6 @@ async def lifespan(app: FastAPI):
 
     # ── 关闭 ──
     logger.info("Shutting down...")
-
-    # 注销实例
-    if _redis is not None:
-        await _redis.delete(rkey(f"instance:{instance_id}"))
 
     # 停止队列 worker
     if _queue_worker:

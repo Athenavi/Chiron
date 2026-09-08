@@ -79,8 +79,10 @@ func LoadEffectivePerms(ctx context.Context, userID string) ([]string, error) {
 
 // queryEffectivePerms 从 PG 聚合用户的有效权限。
 // 返回 (并集去重后的权限列表, 是否存在任何角色关联, error)。
+// 注意：必须走主库（db.Pool）——权限变更后缓存失效的下一请求若读滞后副本，
+// 会在复制延迟窗口内返回旧权限（安全敏感，不允许读副本）。
 func queryEffectivePerms(ctx context.Context, userID string) ([]string, bool, error) {
-	pool := db.ReadPool()
+	pool := db.Pool
 	if pool == nil {
 		return nil, false, errors.New("ent rbac: postgres pool unavailable")
 	}
@@ -136,7 +138,8 @@ func InvalidateGroupMembersPerms(ctx context.Context, groupID string) {
 		return
 	}
 
-	pool := db.ReadPool()
+	// 走主库：权限变更后的失效流程必须读到最新成员（副本延迟会漏失效用户）
+	pool := db.Pool
 	if pool == nil {
 		slog.Warn("ent rbac: postgres pool unavailable, skip group member cache invalidation",
 			"group_id", groupID)
