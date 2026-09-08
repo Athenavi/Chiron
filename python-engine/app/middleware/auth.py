@@ -14,6 +14,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from app.observability.logging import tenant_id_var
+from app.redis_keys import rkey
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +142,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             jti = payload.get("jti")
             if jti and self._redis:
                 try:
-                    blacklisted = await self._redis.exists(f"jwt:blacklist:{jti}")
+                    blacklisted = await self._redis.exists(rkey(f"jwt:blacklist:{jti}"))
                     if blacklisted:
                         logger.info("JWT rejected: blacklisted jti=%s", jti)
                         return None

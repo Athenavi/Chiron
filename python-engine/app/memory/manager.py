@@ -12,6 +12,7 @@ from app.config import settings
 from app.gateway.router import GatewayRouter
 from app.interfaces.cache import CacheClient
 from app.interfaces.vectorstore import VectorStore
+from app.redis_keys import rkey
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +130,7 @@ class MemoryManager:
         """保存短期记忆"""
         if self._cache_client:
             # 使用 CacheClient 接口
-            key = f"memory:{tenant_id}:{user_id}:{session_id}"
+            key = rkey(f"memory:{tenant_id}:{user_id}:{session_id}")
             data = {
                 "id": memory_id,
                 "content": content,
@@ -140,7 +141,7 @@ class MemoryManager:
             await self._cache_client.expire(key, settings.short_term_ttl)
         else:
             # 直接使用 Redis
-            key = f"memory:{tenant_id}:{user_id}:{session_id}"
+            key = rkey(f"memory:{tenant_id}:{user_id}:{session_id}")
             data = {
                 "id": memory_id,
                 "content": content,
@@ -230,7 +231,7 @@ class MemoryManager:
         """查询短期记忆"""
         if self._cache_client:
             # 使用 CacheClient 接口
-            pattern = f"memory:{tenant_id}:{user_id}:*"
+            pattern = rkey(f"memory:{tenant_id}:{user_id}:*")
             keys = []
             async for key in self._cache_client.scan_iter(match=pattern):
                 keys.append(key)
@@ -255,7 +256,7 @@ class MemoryManager:
             return results
         else:
             # 直接使用 Redis
-            pattern = f"memory:{tenant_id}:{user_id}:*"
+            pattern = rkey(f"memory:{tenant_id}:{user_id}:*")
             keys = []
             async for key in self._redis.scan_iter(match=pattern):
                 keys.append(key if isinstance(key, str) else key.decode())

@@ -368,14 +368,14 @@ async def lifespan(app: FastAPI):
     instance_id = _get_instance_id()
     if _redis is not None:
         await _redis.hset(
-            f"instance:{instance_id}",
+            rkey(f"instance:{instance_id}"),
             mapping={
                 "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "pod_name": settings.pod_name or socket.gethostname(),
                 "version": "3.0.0",
             },
         )
-        await _redis.expire(f"instance:{instance_id}", 60)
+        await _redis.expire(rkey(f"instance:{instance_id}"), 60)
         logger.info("Instance registered: %s", instance_id)
 
     logger.info("=" * 60)
@@ -389,7 +389,7 @@ async def lifespan(app: FastAPI):
 
     # 注销实例
     if _redis is not None:
-        await _redis.delete(f"instance:{instance_id}")
+        await _redis.delete(rkey(f"instance:{instance_id}"))
 
     # 停止队列 worker
     if _queue_worker:

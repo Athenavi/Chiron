@@ -19,8 +19,10 @@ import time
 
 logger = logging.getLogger(__name__)
 
-LLM_KEY_HASH_PREFIX = "llm:keys:"
-LLM_FAIL_PREFIX = "llm:fail:"
+from app.redis_keys import rkey
+
+LLM_KEY_HASH_PREFIX = rkey("llm:keys:")
+LLM_FAIL_PREFIX = rkey("llm:fail:")
 # 共享失败计数窗口(秒)与停用阈值
 FAIL_WINDOW = 60
 FAIL_THRESHOLD = 5

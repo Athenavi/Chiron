@@ -21,10 +21,11 @@ from collections import OrderedDict
 from typing import Optional
 
 from app.middleware.privacy_middleware import is_no_retention
+from app.redis_keys import rkey
 
 logger = logging.getLogger(__name__)
 
-REDIS_KEY_PREFIX = "session_cache:"
+REDIS_KEY_PREFIX = rkey("session_cache:")
 REDIS_TTL_SECONDS = 7200  # 2 小时
 
 

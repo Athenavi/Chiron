@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     # ── Redis ──
     redis_url: str = ""
     redis_max_connections: int = 50
+    # 统一键前缀（多环境共用同一 Redis 时隔离键空间）。
+    # 必须与 Go 网关 REDIS_KEY_PREFIX 同值（约定含尾冒号，如 "dev:" / "prod:"）；默认空 = 存量兼容。
+    redis_key_prefix: str = ""
 
     # ── PostgreSQL ──
     # 默认空：强制通过 .env / POSTGRES_DSN 环境变量提供，避免误用开发库

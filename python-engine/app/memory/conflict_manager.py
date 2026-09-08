@@ -21,6 +21,7 @@ from typing import Any, Optional
 import redis.asyncio as aioredis
 
 from app.memory.layers import MemoryConflict, ProfileItem, SlotType, SourceType
+from app.redis_keys import rkey
 
 logger = logging.getLogger(__name__)
 
@@ -53,19 +54,21 @@ class ConflictManager:
     @staticmethod
     def _pending_key(conflict_id: str) -> str:
         """生成 pending_confirmation 存储键。"""
-        return f"memory:conflict:pending:{conflict_id}"
+        return rkey(f"memory:conflict:pending:{conflict_id}")
 
     @staticmethod
     def _pending_list_key(tenant_id: str, user_id: str) -> str:
         """生成 pending_confirmation 列表键（用户维度）。"""
-        return f"memory:conflict:pending_list:{tenant_id}:{user_id}"
+        return rkey(f"memory:conflict:pending_list:{tenant_id}:{user_id}")
 
     @staticmethod
     def _derived_count_key(
         tenant_id: str, user_id: str, slot: str, item_key: str
     ) -> str:
         """生成 derived 出现次数计数键。"""
-        return f"memory:conflict:derived_count:{tenant_id}:{user_id}:{slot}:{item_key}"
+        return rkey(
+            f"memory:conflict:derived_count:{tenant_id}:{user_id}:{slot}:{item_key}"
+        )
 
     # ── 冲突检测与产出 ──────────────────────────────────────────────────
 

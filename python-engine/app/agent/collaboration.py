@@ -24,6 +24,7 @@ from typing import AsyncIterator, Optional
 
 from app.agent.runtime import AgentEvent, AgentRuntime, CompactionConfig
 from app.gateway.router import GatewayRouter
+from app.redis_keys import rkey
 from app.trace import record_span
 
 logger = logging.getLogger(__name__)
@@ -86,7 +87,7 @@ class AgentContextStore:
 
         if self._redis_client:
             await self._redis_client.setex(
-                f"chiron:context:{self.tenant_id}:{context_id}",
+                rkey(f"chiron:context:{self.tenant_id}:{context_id}"),
                 ttl,
                 json.dumps(data, ensure_ascii=False),
             )
@@ -105,7 +106,7 @@ class AgentContextStore:
         """获取上下文"""
         if self._redis_client:
             data = await self._redis_client.get(
-                f"chiron:context:{self.tenant_id}:{context_id}"
+                rkey(f"chiron:context:{self.tenant_id}:{context_id}")
             )
             return json.loads(data) if data else None
         else:
@@ -115,7 +116,7 @@ class AgentContextStore:
         """删除上下文"""
         if self._redis_client:
             await self._redis_client.delete(
-                f"chiron:context:{self.tenant_id}:{context_id}"
+                rkey(f"chiron:context:{self.tenant_id}:{context_id}")
             )
         else:
             self._local_store.pop(context_id, None)
@@ -126,7 +127,7 @@ class AgentContextStore:
             # 使用 SCAN 替代 KEYS 避免 O(N) 阻塞 Redis 主线程
             keys = []
             cursor = 0
-            pattern = f"chiron:context:{self.tenant_id}:*"
+            pattern = rkey(f"chiron:context:{self.tenant_id}:*")
             while True:
                 cursor, batch = await self._redis_client.scan(
                     cursor=cursor, match=pattern, count=100

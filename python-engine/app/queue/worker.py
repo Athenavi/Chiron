@@ -13,18 +13,19 @@ import redis.asyncio as aioredis
 from app.observability.metrics import (QUEUE_DEPTH, QUEUE_DLQ_TOTAL,
                                        QUEUE_PROCESSING_DURATION,
                                        QUEUE_RETRY_TOTAL)
+from app.redis_keys import rkey
 
 logger = logging.getLogger(__name__)
 
-TASK_STREAM = "engine:tasks"
-DLQ_STREAM = "engine:tasks:dlq"
+TASK_STREAM = rkey("engine:tasks")
+DLQ_STREAM = rkey("engine:tasks:dlq")
 GROUP_NAME = "engine-workers"
 CONSUMER_PREFIX = "worker"
 MAX_RETRIES = 3
 
 # ── 跨实例全局并发门控(N5,防多引擎实例后台 10×N 洪峰)──
 # Redis 计数键 engine:worker:inflight;TTL 防进程崩溃泄漏;0=关闭。
-GATE_KEY = "engine:worker:inflight"
+GATE_KEY = rkey("engine:worker:inflight")
 GATE_TTL = 300
 GATE_WAIT_SECS = 3.0
 GATE_RETRY_INTERVAL = 0.5

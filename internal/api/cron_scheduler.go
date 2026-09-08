@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -113,10 +114,10 @@ func (s *CronScheduler) sync() {
 		}
 		j := j // 循环变量拷贝：闭包捕获稳定值（Go 1.22 前语义）
 		eid, err := s.cron.AddFunc(j.Schedule, func() {
-				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-				defer cancel()
-				s.execute(ctx, j, false)
-			})
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+			defer cancel()
+			s.executeScheduled(ctx, j)
+		})
 		if err != nil {
 			slog.Warn("cron register failed", "job", j.Name, "schedule", j.Schedule, "error", err)
 			continue
@@ -126,29 +127,73 @@ func (s *CronScheduler) sync() {
 	}
 }
 
-// cronLeaseStaleSecs：run_lease_at 租约陈旧阈值（秒）。大于 execute 的 10 分钟执行
-// 超时上限：正常（含长任务）执行期间租约不被其它实例抢占，仅持有者崩溃/超时才允许重入。
-const cronLeaseStaleSecs = 20 * 60
+// 租约陈旧阈值（秒）：run_lease_at 超过阈值视为持有者已崩溃/超时，允许其它实例重入。
+// - scheduled（定时触发）：须大于 execute 的 10 分钟执行超时上限，正常执行期间不被抢占；
+// - manual（Webhook/手动触发）：10 分钟执行上限 + 1 分钟缓冲，运行中再次触发直接拒绝（409）。
+const (
+	cronLeaseStaleScheduledSecs = 20 * 60
+	cronLeaseStaleManualSecs    = 11 * 60
+)
 
-func (s *CronScheduler) execute(ctx context.Context, j jobRow, force bool) {
-	// 定时触发（force=false）：行级 CAS 抢租约，保证跨网关实例同一 job 只有一个执行者。
-	if !force {
-		tag, err := db.GlobalDBManager.Exec(ctx,
-			`UPDATE cron_jobs SET run_lease_at = NOW()
-			 WHERE id = $1 AND enabled = true
-			   AND (run_lease_at IS NULL
-			        OR run_lease_at < NOW() - make_interval(secs => $2))`,
-			j.ID, cronLeaseStaleSecs)
-		if err != nil {
-			slog.Warn("cron lease acquire failed", "job", j.Name, "error", err)
-			return
-		}
-		if tag.RowsAffected() != 1 {
-			slog.Debug("cron job skipped: lease held by another instance", "job", j.Name)
-			return
-		}
+// errCronBusy：job 正在其它实例/当前实例运行中（租约新鲜），手动触发被拒绝。
+var errCronBusy = errors.New("cron job is running")
+
+// tryAcquireLease 行级 CAS 抢租约：跨网关实例同一 job 同时只允许一个执行者。
+// staleSecs 决定持有者"多久未续租视为已崩溃"，scheduled 与 manual 阈值不同。
+func (s *CronScheduler) tryAcquireLease(ctx context.Context, j jobRow, staleSecs int) (bool, error) {
+	tag, err := db.GlobalDBManager.Exec(ctx,
+		`UPDATE cron_jobs SET run_lease_at = NOW()
+		 WHERE id = $1 AND enabled = true
+		   AND (run_lease_at IS NULL
+		        OR run_lease_at < NOW() - make_interval(secs => $2))`,
+		j.ID, staleSecs)
+	if err != nil {
+		slog.Warn("cron lease acquire failed", "job", j.Name, "error", err)
+		return false, err
 	}
+	return tag.RowsAffected() == 1, nil
+}
 
+// executeScheduled 定时触发入口：抢不到租约（其它实例正在运行或崩溃窗口内）即跳过本轮。
+func (s *CronScheduler) executeScheduled(ctx context.Context, j jobRow) {
+	ok, err := s.tryAcquireLease(ctx, j, cronLeaseStaleScheduledSecs)
+	if err != nil {
+		return
+	}
+	if !ok {
+		slog.Debug("cron job skipped: lease held by another instance", "job", j.Name)
+		return
+	}
+	s.runJob(ctx, j)
+}
+
+// triggerManual Webhook/手动触发入口：同步抢短租约；job 运行中返回 errCronBusy（调用方回 409），
+// 抢到后异步执行，让触发请求尽快返回。
+func (s *CronScheduler) triggerManual(j jobRow) error {
+	acquireCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	ok, err := s.tryAcquireLease(acquireCtx, j, cronLeaseStaleManualSecs)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return errCronBusy
+	}
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("cron job async panic", "job", j.Name, "panic", r)
+			}
+		}()
+		runCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+		s.runJob(runCtx, j)
+	}()
+	return nil
+}
+
+// runJob 实际执行任务体，结束时释放租约并记录本次运行结果。
+func (s *CronScheduler) runJob(ctx context.Context, j jobRow) {
 	// Add a timeout to prevent hanging jobs from blocking the cron executor
 	execCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
@@ -275,41 +320,33 @@ func HandleCronWebhook(w http.ResponseWriter, r *http.Request) {
 		Forbidden(w, "invalid token or job disabled")
 		return
 	}
-	// 异步执行（webhook 尽快返回）
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				slog.Error("cron webhook async panic", "job", jobID, "panic", r)
-			}
-		}()
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer cancel()
-		s := &CronScheduler{python: cronSchedulerPython}
-		rows, err := db.GlobalDBManager.Query(ctx,
-			`SELECT id::text, name, schedule, task, COALESCE(tenant_id::text,''), COALESCE(user_id::text,'')
-			 FROM cron_jobs WHERE id = $1`, jobID)
-		if err == nil && rows.Next() {
-			var j jobRow
-			if rows.Scan(&j.ID, &j.Name, &j.Schedule, &j.Task, &j.TenantID, &j.UserID) == nil {
-				s.execute(ctx, j, true)
-			}
-		}
-		if rows != nil {
-			rows.Close()
-		}
-	}()
-	OK(w, map[string]interface{}{"status": "triggered"})
+	// 同步抢租约：job 正在运行时返回 409；抢到才异步执行（webhook 尽快返回）。
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	var j jobRow
+	if err := db.GlobalDBManager.QueryRow(ctx,
+		`SELECT id::text, name, schedule, task, COALESCE(tenant_id::text,''), COALESCE(user_id::text,'')
+		 FROM cron_jobs WHERE id = $1`, jobID).
+		Scan(&j.ID, &j.Name, &j.Schedule, &j.Task, &j.TenantID, &j.UserID); err != nil {
+		slog.Warn("cron webhook: load job failed", "job", jobID, "error", err)
+		NotFound(w, "job not found")
+		return
+	}
+	s := &CronScheduler{python: cronSchedulerPython}
+	switch err := s.triggerManual(j); {
+	case err == nil:
+		OK(w, map[string]interface{}{"status": "triggered"})
+	case errors.Is(err, errCronBusy):
+		JSON(w, http.StatusConflict, APIResponse{Success: false, Error: "job is running"})
+	default:
+		slog.Warn("cron webhook trigger failed", "job", jobID, "error", err)
+		InternalError(w, "trigger failed")
+	}
 }
 
 // HandleCronTrigger 管理端手动触发：POST /v1/admin/cron-jobs/{id}/trigger
 func (h *AdminHandler) HandleCronTrigger(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var tenantID, userID string
-	if err := db.GlobalDBManager.QueryRow(r.Context(),
-		`SELECT COALESCE(tenant_id::text,''), COALESCE(user_id::text,'') FROM cron_jobs WHERE id = $1`, id).Scan(&tenantID, &userID); err != nil {
-		NotFound(w, "job not found")
-		return
-	}
 	var j jobRow
 	if err := db.GlobalDBManager.QueryRow(r.Context(),
 		`SELECT id::text, name, schedule, task, COALESCE(tenant_id::text,''), COALESCE(user_id::text,'')
@@ -317,18 +354,15 @@ func (h *AdminHandler) HandleCronTrigger(w http.ResponseWriter, r *http.Request)
 		NotFound(w, "job not found")
 		return
 	}
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				slog.Error("cron trigger async panic", "job", id, "panic", r)
-			}
-		}()
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer cancel()
-		s := &CronScheduler{python: cronSchedulerPython}
-		s.execute(ctx, j, true)
-	}()
-	_ = tenantID
-	_ = userID
-	OK(w, map[string]interface{}{"status": "triggered"})
+	// 同步抢租约：job 正在运行时返回 409；抢到后异步执行。
+	s := &CronScheduler{python: cronSchedulerPython}
+	switch err := s.triggerManual(j); {
+	case err == nil:
+		OK(w, map[string]interface{}{"status": "triggered"})
+	case errors.Is(err, errCronBusy):
+		JSON(w, http.StatusConflict, APIResponse{Success: false, Error: "job is running"})
+	default:
+		slog.Warn("cron trigger failed", "job", id, "error", err)
+		InternalError(w, "trigger failed")
+	}
 }

@@ -12,9 +12,11 @@ from app.observability.logging import trace_id_var
 
 logger = logging.getLogger(__name__)
 
-# Stream 名称
-TASK_STREAM = "engine:tasks"
-DLQ_STREAM = "engine:tasks:dlq"
+# Stream 名称（统一键前缀：多环境共用 Redis 时隔离键空间，与 Go 网关 RedisKey 语义一致）
+from app.redis_keys import rkey
+
+TASK_STREAM = rkey("engine:tasks")
+DLQ_STREAM = rkey("engine:tasks:dlq")
 
 
 class QueueProducer:

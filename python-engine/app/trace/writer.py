@@ -19,11 +19,12 @@ import time
 from typing import Any, Optional
 
 from app.middleware.privacy_middleware import is_no_retention
+from app.redis_keys import rkey
 
 logger = logging.getLogger(__name__)
 
-# Redis Stream 键名 (SaaS: 按 tenant_id 隔离)
-TRACES_STREAM_TPL = "chiron:traces:{}"  # {} 将被 tenant_id 替换
+# Redis Stream 键名 (SaaS: 按 tenant_id 隔离;统一键前缀与 Go trace_handler RedisKey 对齐)
+TRACES_STREAM_TPL = rkey("chiron:traces:{}")  # {} 将被 tenant_id 替换
 
 
 def get_tenant_stream(tenant_id: str) -> str:

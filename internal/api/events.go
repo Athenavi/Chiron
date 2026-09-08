@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"math/rand"
 	"net/http"
 	"os"
@@ -37,6 +38,28 @@ func handleSSE(w http.ResponseWriter, r *http.Request, hub *broadcast.Hub, subID
 	ch := hub.Subscribe(subID)
 	defer hub.Unsubscribe(subID)
 
+	// 断线重连补发：浏览器对同一 EventSource 自动重连时携带 Last-Event-ID；
+	// 前端亦可显式传 last_event_id 参数。从 per-session 缓冲流补发缺口后再进入实时转发。
+	lastEventID := r.Header.Get("Last-Event-ID")
+	if lastEventID == "" {
+		lastEventID = r.URL.Query().Get("last_event_id")
+	}
+	lastSentID := lastEventID
+	if sessionID != "" && lastEventID != "" {
+		replayed, err := hub.ReplayAfter(r.Context(), sessionID, lastEventID)
+		if err != nil {
+			// 缓冲不可读时降级为仅实时（不阻断连接；事件仍可由前端按 DB 状态自愈）
+			slog.Warn("sse replay failed, falling back to live-only", "session", sessionID, "error", err)
+		}
+		for _, ev := range replayed {
+			w.Write([]byte(broadcast.FormatSSE(ev)))
+			lastSentID = ev.ID
+		}
+		if len(replayed) > 0 {
+			flusher.Flush()
+		}
+	}
+
 	// Send initial connected event
 	w.Write([]byte(broadcast.FormatSSE(broadcast.Event{Type: "connected", Data: map[string]string{"id": subID}})))
 	flusher.Flush()
@@ -56,8 +79,15 @@ func handleSSE(w http.ResponseWriter, r *http.Request, hub *broadcast.Hub, subID
 			if sessionID != "" && event.SessionID != "" && event.SessionID != sessionID {
 				continue
 			}
+			// 去重：补发与实时在订阅切换窗口可能重叠，丢弃已发送过的旧事件（按流 ID 比较）
+			if event.ID != "" && event.ID <= lastSentID {
+				continue
+			}
 			w.Write([]byte(broadcast.FormatSSE(event)))
 			flusher.Flush()
+			if event.ID != "" {
+				lastSentID = event.ID
+			}
 			// Reset ping timer after activity
 			if !pingTimer.Stop() {
 				select {

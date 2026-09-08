@@ -23,6 +23,7 @@ from app.db import get_pool
 from app.memory.conflict_manager import ConflictManager
 from app.memory.layers import (ConflictRef, ProfileItem, ProfileUpdateResult,
                                SlotType, SourceType)
+from app.redis_keys import rkey
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +65,7 @@ class ProfileCard:
     @staticmethod
     def _cache_key(tenant_id: str, user_id: str) -> str:
         """生成档案卡缓存键。"""
-        return f"memory:profile:{tenant_id}:{user_id}"
+        return rkey(f"memory:profile:{tenant_id}:{user_id}")
 
     # ── 1. get_profile ──────────────────────────────────────────────────
 

@@ -8,6 +8,8 @@ import uuid
 
 import redis.asyncio as aioredis
 
+from app.redis_keys import rkey
+
 logger = logging.getLogger(__name__)
 
 
@@ -39,7 +41,7 @@ class TenantRateLimiter:
         now = time.time()
 
         # 检查每秒限流
-        if not await self._check_window(f"ratelimit:{tenant_id}:s", now, 1.0, self.rps):
+        if not await self._check_window(rkey(f"ratelimit:{tenant_id}:s"), now, 1.0, self.rps):
             logger.warning(
                 "Rate limit exceeded: tenant=%s (rps=%d)", tenant_id, self.rps
             )
@@ -47,7 +49,7 @@ class TenantRateLimiter:
 
         # 检查每分钟限流
         if not await self._check_window(
-            f"ratelimit:{tenant_id}:m", now, 60.0, self.rpm
+            rkey(f"ratelimit:{tenant_id}:m"), now, 60.0, self.rpm
         ):
             logger.warning(
                 "Rate limit exceeded: tenant=%s (rpm=%d)", tenant_id, self.rpm
@@ -97,8 +99,8 @@ class TenantRateLimiter:
     async def get_remaining(self, tenant_id: str) -> dict:
         """返回剩余额度"""
         now = time.time()
-        s_key = f"ratelimit:{tenant_id}:s"
-        m_key = f"ratelimit:{tenant_id}:m"
+        s_key = rkey(f"ratelimit:{tenant_id}:s")
+        m_key = rkey(f"ratelimit:{tenant_id}:m")
 
         s_count = await self._redis.zcount(s_key, now - 1.0, now)
         m_count = await self._redis.zcount(m_key, now - 60.0, now)

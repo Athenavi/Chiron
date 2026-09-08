@@ -7,7 +7,12 @@ import redis.asyncio as aioredis
 
 logger = logging.getLogger(__name__)
 
-DLQ_STREAM = "engine:tasks:dlq"
+# 统一键前缀（与 Go 网关 RedisKey 语义一致，多环境隔离）
+from app.redis_keys import rkey
+
+# 主任务流与死信流（消费组名 engine-workers 挂在流上，无需前缀）
+TASK_STREAM = rkey("engine:tasks")
+DLQ_STREAM = rkey("engine:tasks:dlq")
 
 
 class DeadLetterQueue:
@@ -48,7 +53,7 @@ class DeadLetterQueue:
         message["retry_count"] = "0"
 
         # 重新入队
-        await self._redis.xadd("engine:tasks", message)
+        await self._redis.xadd(TASK_STREAM, message)
         # 从 DLQ 删除
         await self._redis.xdel(DLQ_STREAM, stream_id)
         logger.info("DLQ message requeued: %s", stream_id)

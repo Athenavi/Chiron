@@ -19,6 +19,7 @@ import redis.asyncio as aioredis
 
 from app.db import get_pool
 from app.memory.layers import MemoryType, RecalledItem, Scope, SummaryEntry
+from app.redis_keys import rkey
 
 logger = logging.getLogger(__name__)
 
@@ -71,13 +72,13 @@ class SummaryStore:
         """生成查询缓存键。"""
         raw = f"{tenant_id}:{user_id}:{query}"
         h = hashlib.sha256(raw.encode()).hexdigest()[:16]
-        return f"memory:l3:query:{h}"
+        return rkey(f"memory:l3:query:{h}")
 
     @staticmethod
     def _embedding_cache_key(query: str) -> str:
         """生成嵌入缓存键。"""
         h = hashlib.sha256(query.encode()).hexdigest()[:16]
-        return f"memory:l3:embed:{h}"
+        return rkey(f"memory:l3:embed:{h}")
 
     # ── 嵌入向量缓存 ──────────────────────────────────────────────────────
 
@@ -538,7 +539,7 @@ class SummaryStore:
     async def _invalidate_query_cache(self, tenant_id: str, user_id: str) -> None:
         """失效指定用户的所有查询缓存。"""
         try:
-            pattern = "memory:l3:query:*"
+            pattern = rkey("memory:l3:query:*")
             async for key in self._redis.scan_iter(match=pattern):
                 await self._redis.delete(key)
         except Exception as e:

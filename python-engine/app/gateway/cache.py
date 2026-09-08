@@ -11,6 +11,7 @@ from typing import Optional
 import redis.asyncio as aioredis
 
 from app.gateway.provider import ChatMessage, ChatResponse
+from app.redis_keys import rkey
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +117,7 @@ class SemanticCache:
             return self._decode(data, model)
 
         # L2
-        raw = await self._redis.get(f"llm:cache:{exact}")
+        raw = await self._redis.get(rkey(f"llm:cache:{exact}"))
         if raw:
             data = json.loads(raw)
             self._l1_set(exact, data)
@@ -126,7 +127,7 @@ class SemanticCache:
         # L3
         sem_key = await self._semantic_key(messages, model)
         if sem_key:
-            bucket_key = f"llm:semantic:{sem_key[:8]}"
+            bucket_key = rkey(f"llm:semantic:{sem_key[:8]}")
             cached = await self._redis.hget(bucket_key, sem_key)
             if cached:
                 data = json.loads(cached)
@@ -159,7 +160,7 @@ class SemanticCache:
 
         # L2
         await self._redis.set(
-            f"llm:cache:{exact}",
+            rkey(f"llm:cache:{exact}"),
             json.dumps(data, ensure_ascii=False),
             ex=self._l2_ttl,
         )
@@ -167,7 +168,7 @@ class SemanticCache:
         # L3 (语义)
         sem_key = await self._semantic_key(messages, model)
         if sem_key:
-            bucket_key = f"llm:semantic:{sem_key[:8]}"
+            bucket_key = rkey(f"llm:semantic:{sem_key[:8]}")
             await self._redis.hset(
                 bucket_key, sem_key, json.dumps(data, ensure_ascii=False)
             )

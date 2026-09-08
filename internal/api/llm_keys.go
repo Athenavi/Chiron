@@ -27,8 +27,7 @@ var (
 	llmKeysChangedChannel = db.RedisKey("llm:keys:changed")
 )
 
-const llmKeysStatuses      = "active rate_limited circuit_open"
-)
+const llmKeysStatuses = "active rate_limited circuit_open"
 
 func llmKeyHash(provider, key string) string {
 	d := sha256.Sum256([]byte(provider + ":" + key))

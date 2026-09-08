@@ -33,6 +33,9 @@ const activeSession = computed(() => sessions.value.find(s => s.id === activeSes
 const loading = ref(false)
 const items = ref<ChatItem[]>([])
 let activeSSE: EventSource | null = null
+// 每个会话最后收到的 SSE 事件 id（服务端 id: 行 → event.lastEventId）。
+// 跨轮重建 SSE 时回传（last_event_id），服务端从缓冲流补发上一轮断线缺口（见 api/index.ts createSSEConnection）
+const sseLastIdBySession = new Map<string, string>()
 
 // ── Trace ID (当前会话的链路追踪标识) ──
 const currentTraceId = ref('')  // SSE done 事件回传的 trace_id
@@ -1108,7 +1111,7 @@ async function sendMessage(text: string, attachments?: ChatAttachment[]) {
   currentTraceId.value = ''
   try {
     if (activeSSE) { activeSSE.close(); activeSSE = null }
-    activeSSE = await createSSEConnection(
+    activeSSE = createSSEConnection(
       sessionId,
       onSSEMessage,
       () => {
@@ -1117,6 +1120,13 @@ async function sendMessage(text: string, attachments?: ChatAttachment[]) {
         connectionLost.value = true
         activeSSE?.close(); activeSSE = null
         markMessageFailed(userItemId, '连接已断开')
+      },
+      {
+        // 携带上一连接的最后事件 id：服务端按 last_event_id 从缓冲流补发断线缺口
+        initialLastEventId: sseLastIdBySession.get(sessionId) || '',
+        // 单轮流式进行中断线时交由浏览器原生自动重连（重连自动带 Last-Event-ID 头，无感续传）
+        autoReconnect: true,
+        onLastEventId: (id) => { sseLastIdBySession.set(sessionId, id) },
       },
     )
     const body: any = { content: text, session_id: sessionId, llm_config: buildLlmConfig() }

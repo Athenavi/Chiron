@@ -7,6 +7,8 @@ import time
 
 import redis.asyncio as aioredis
 
+from app.redis_keys import rkey
+
 logger = logging.getLogger(__name__)
 
 
@@ -30,7 +32,7 @@ class TokenBudget:
     @staticmethod
     def _key(tenant_id: str) -> str:
         month = time.strftime("%Y-%m")
-        return f"budget:{tenant_id}:{month}"
+        return rkey(f"budget:{tenant_id}:{month}")
 
     async def check(self, tenant_id: str, estimated_tokens: int) -> bool:
         """预检查：是否有足够额度"""
@@ -65,7 +67,7 @@ class TokenBudget:
                 limit = int(limit_raw)
                 if limit > 0 and new_used / limit >= self.BUDGET_WARN_RATIO:
                     await self._redis.publish(
-                        "budget:alerts",
+                        rkey("budget:alerts"),
                         json.dumps(
                             {"tenant_id": tenant_id, "used": new_used, "limit": limit}
                         ),

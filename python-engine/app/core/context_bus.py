@@ -24,6 +24,9 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Awaitable, Callable
 
+from app.config import settings
+from app.redis_keys import rkey
+
 logger = logging.getLogger(__name__)
 
 
@@ -176,7 +179,7 @@ class RedisContextBus:
         )
 
         # 写入 Redis Stream
-        stream_key = f"contextbus:{tenant_id}:{topic}"
+        stream_key = rkey(f"contextbus:{tenant_id}:{topic}")
         entry = {
             "message_id": message.message_id,
             "message_type": message_type.value,
@@ -188,11 +191,11 @@ class RedisContextBus:
         await self.redis.xadd(stream_key, entry, maxlen=1000, approximate=True)
 
         # 更新 Snapshot (最新状态)
-        snapshot_key = f"contextbus:snapshot:{tenant_id}:{topic}"
+        snapshot_key = rkey(f"contextbus:snapshot:{tenant_id}:{topic}")
         await self.redis.setex(snapshot_key, ttl, json.dumps(data, ensure_ascii=False))
 
         # 发布到 Pub/Sub channel（跨进程通知）
-        channel = f"contextbus:{tenant_id}:{topic}"
+        channel = rkey(f"contextbus:{tenant_id}:{topic}")
         await self.redis.publish(channel, json.dumps(entry, ensure_ascii=False))
 
         # 本地订阅者推送 (同一进程)
@@ -223,11 +226,11 @@ class RedisContextBus:
 
         # 确定 Pub/Sub channel
         if tenant_id:
-            channel = f"contextbus:{tenant_id}:{topic}"
+            channel = rkey(f"contextbus:{tenant_id}:{topic}")
         else:
             # 通配符：监听所有租户的该 topic
             # Redis Pub/Sub 支持 glob pattern: contextbus:*:topic
-            channel = f"contextbus:*:{topic}"
+            channel = rkey(f"contextbus:*:{topic}")
 
         if channel not in self._pubsub_channels:
             self._pubsub_channels.add(channel)
@@ -274,6 +277,9 @@ class RedisContextBus:
 
                         # 解析 channel 格式: contextbus:{tenant_id}:{topic}
                         # 或 contextbus:*:{topic} 的通配匹配
+                        # 统一键前缀模式下 channel 以 REDIS_KEY_PREFIX 开头，先剥离再解析
+                        if channel.startswith(settings.redis_key_prefix):
+                            channel = channel[len(settings.redis_key_prefix):]
                         parts = channel.split(":", 2)
                         if len(parts) != 3:
                             continue
@@ -335,9 +341,9 @@ class RedisContextBus:
         # 如果该 topic 已无任何本地订阅者，移除 channel
         if topic in self._local_subs and not self._local_subs[topic]:
             if tenant_id:
-                channel = f"contextbus:{tenant_id}:{topic}"
+                channel = rkey(f"contextbus:{tenant_id}:{topic}")
             else:
-                channel = f"contextbus:*:{topic}"
+                channel = rkey(f"contextbus:*:{topic}")
             self._pubsub_channels.discard(channel)
 
         return removed
@@ -346,7 +352,7 @@ class RedisContextBus:
         self, topic: str, tenant_id: str, limit: int = 10
     ) -> list[ContextMessage]:
         """查询历史消息 (从 Redis Stream)"""
-        stream_key = f"contextbus:{tenant_id}:{topic}"
+        stream_key = rkey(f"contextbus:{tenant_id}:{topic}")
 
         entries = await self.redis.xrange(stream_key, count=limit)
         messages = []
@@ -368,7 +374,7 @@ class RedisContextBus:
 
     async def get_latest(self, topic: str, tenant_id: str) -> ContextMessage | None:
         """获取最新状态 (从 Snapshot)"""
-        snapshot_key = f"contextbus:snapshot:{tenant_id}:{topic}"
+        snapshot_key = rkey(f"contextbus:snapshot:{tenant_id}:{topic}")
 
         data = await self.redis.get(snapshot_key)
         if data:

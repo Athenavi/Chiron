@@ -9,6 +9,8 @@ import logging
 
 import redis.asyncio as aioredis
 
+from app.redis_keys import rkey
+
 logger = logging.getLogger(__name__)
 
 
@@ -34,7 +36,7 @@ class SSEProducer:
         Returns:
             True 表示发布成功，False 表示发布失败（调用方应据此决定是否重试或终止）
         """
-        stream_key = f"sse:{task_id}"
+        stream_key = rkey(f"sse:{task_id}")
 
         try:
             await self._redis.xadd(

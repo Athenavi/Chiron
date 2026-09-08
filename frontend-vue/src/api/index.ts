@@ -232,10 +232,48 @@ export async function uploadFile(file: File): Promise<{
 //   - 后端有 session 所有权校验（events.go:115）防止越权订阅
 //   - 未来可考虑迁移到 WebSocket（ws.go）以消除 URL 暴露
 // 权衡：当前方案用 withCredentials 携带 httpOnly cookie 鉴权，比 JWT 在 URL 中更安全
-export function createSSEConnection(sessionId: string, onMessage: (data: any) => void, onError?: () => void) {
-  const url = `${API_URL}/events?session_id=${encodeURIComponent(sessionId)}`
+//
+// last-event-id 续传（服务端见 internal/broadcast/hub.go + internal/api/events.go）：
+//   - 带 session_id 的会话事件会先写入 Redis 缓冲流（sse:events:{session}，MAXLEN 200 + 滑动 TTL），
+//     SSE 帧带 id: 行，浏览器解析为 event.lastEventId；
+//   - 断线补发有两条通道：
+//     a) autoReconnect=true：onerror 不立即关闭，交给浏览器原生自动重连——重连请求自动携带
+//        Last-Event-ID 头，服务端 XRANGE 补发缺口（覆盖单轮流式中断线抖动，前端无感续传）；
+//     b) 跨轮/手动重建：经 initialLastEventId 传入上一连接的最后事件 id（由 onLastEventId 采集），
+//        服务端同样按 last_event_id 补发。
+export interface SSEConnectionOptions {
+  /** 重建连接时携带的最后事件 id（服务端补发该 id 之后缓冲的事件） */
+  initialLastEventId?: string
+  /** 允许浏览器自动重连（重连自动带 Last-Event-ID）；默认 false = 断线立即报错关闭（兼容旧行为） */
+  autoReconnect?: boolean
+  /** 自动重连的最大连续失败次数，超过后回调 onError 并关闭；默认 3 */
+  maxAutoReconnects?: number
+  /** 收到带 id 的事件时回调最新 last event id（供调用方持久化以跨轮续传） */
+  onLastEventId?: (id: string) => void
+}
+
+export function createSSEConnection(
+  sessionId: string,
+  onMessage: (data: any) => void,
+  onError?: () => void,
+  opts: SSEConnectionOptions = {},
+) {
+  const { initialLastEventId = '', autoReconnect = false, maxAutoReconnects = 3 } = opts
+  const onLastEventId = opts.onLastEventId
+
+  let url = `${API_URL}/events?session_id=${encodeURIComponent(sessionId)}`
+  if (initialLastEventId) {
+    url += `&last_event_id=${encodeURIComponent(initialLastEventId)}`
+  }
 
   const eventSource = new EventSource(url, { withCredentials: true })
+
+  // 连续失败计数：自动重连期间每次 onopen 归零
+  let failedReconnects = 0
+
+  eventSource.onopen = () => {
+    failedReconnects = 0
+  }
 
   eventSource.onmessage = (event) => {
     try {
@@ -244,9 +282,19 @@ export function createSSEConnection(sessionId: string, onMessage: (data: any) =>
     } catch (e) {
       // SSE 解析错误不阻断连接
     }
+    // 服务端输出的 id: 行 → 浏览器解析为 event.lastEventId；记录最新值供跨轮重建续传
+    if (event.lastEventId) {
+      onLastEventId?.(event.lastEventId)
+    }
   }
 
-  eventSource.onerror = (error) => {
+  eventSource.onerror = () => {
+    // 自动重连：单轮流式进行中网络抖动/网关实例切换时，留给浏览器原生重连
+    // （重连请求自动携带 Last-Event-ID，服务端从缓冲流补发缺口）；连续失败超限才判定真断线。
+    if (autoReconnect && failedReconnects < maxAutoReconnects) {
+      failedReconnects++
+      return
+    }
     onError?.()
     eventSource.close()
   }

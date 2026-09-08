@@ -123,7 +123,8 @@ func (h *TraceHandler) ListTraces(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Scan latest trace entries from Redis Stream (tenant isolated)
-	streamKey := "chiron:traces:" + tenantID
+	// 统一键前缀（与引擎侧 rkey("chiron:traces:") 对齐，多环境隔离）
+	streamKey := db.RedisKey("chiron:traces:" + tenantID)
 
 	// 使用 XRevRange 读取最新的 N 条记录（避免 XRANGE 全量扫描）
 	rawEntries, err := h.rdb.XRange(r.Context(), streamKey, "+", "-", int64(limit*10)).Result()
@@ -188,7 +189,7 @@ func (h *TraceHandler) queryTraces(traceID, tenantID string) ([]TraceSpan, error
 		return nil, nil // Redis unavailable 鈫?return empty
 	}
 
-	streamKey := "chiron:traces:" + tenantID
+	streamKey := db.RedisKey("chiron:traces:" + tenantID)
 
 	// 使用 XRevRange 读取最近 1000 条记录（避免 XRANGE 全量扫描）
 	queryCtx, queryCancel := context.WithTimeout(context.Background(), 5*time.Second)

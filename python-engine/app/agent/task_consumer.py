@@ -12,6 +12,7 @@ import os
 import redis.asyncio as aioredis
 
 from app.agent.runtime import AgentRuntime, AgentTask
+from app.redis_keys import rkey
 from app.sse.producer import SSEProducer
 
 logger = logging.getLogger(__name__)
@@ -29,7 +30,7 @@ class AgentTaskConsumer:
         redis: aioredis.Redis,
         runtime: AgentRuntime,
         sse_producer: SSEProducer,
-        stream_key: str = "tasks:agent",
+        stream_key: str = rkey("tasks:agent"),
         group_name: str = "python-workers",
         concurrency: int = 5,
     ):
