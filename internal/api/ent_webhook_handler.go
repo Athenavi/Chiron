@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hmac"
@@ -18,26 +17,22 @@ import (
 
 	"github.com/athenavi/chiron/internal/auth"
 	"github.com/athenavi/chiron/internal/db"
+	"github.com/redis/go-redis/v9"
 )
 
 // ── 企业 Webhook 注册与事件通知 ──────────────────────────────────────────
 
-// EntWebhookHandler 提供企业 Webhook 注册 API 和事件投递能力。
+// EntWebhookHandler 提供企业 Webhook 注册/管理 API 与事件入流。
+// 事件持久化与可靠投递由 WebhookDispatcher（Redis 消费组，多实例共享）负责，
+// 不再使用进程内 chan（实例崩溃不丢事件）。
 type EntWebhookHandler struct {
-	deliveryCh  chan WebhookEvent
-	secretKey   []byte // AES-256 key derived from APP_SECRET
+	secretKey []byte // AES-256 key derived from APP_SECRET
 }
 
-// NewEntWebhookHandler 创建 Webhook handler，启动异步投递协程。
+// NewEntWebhookHandler 创建 Webhook handler（注册/管理 + 事件入流）。
 func NewEntWebhookHandler() *EntWebhookHandler {
 	// P0-S4: 从 APP_SECRET 派生 webhook 加密密钥，避免 secret 明文存储
-	key := deriveWebhookKey()
-	h := &EntWebhookHandler{
-		deliveryCh: make(chan WebhookEvent, 1000),
-		secretKey:  key,
-	}
-	go h.deliveryLoop()
-	return h
+	return &EntWebhookHandler{secretKey: deriveWebhookKey()}
 }
 
 // deriveWebhookKey 从 APP_SECRET 派生 32-byte AES-256 key。
@@ -88,8 +83,10 @@ type webhookRow struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
-// WebhookEvent Python 引擎推送的事件
+// WebhookEvent Python 引擎推送的事件。
+// ID 为引擎生成的事件幂等键（透传 X-Webhook-Event-Id，接收方据此去重）。
 type WebhookEvent struct {
+	ID        string                 `json:"id,omitempty"`
 	TenantID  string                 `json:"tenant_id"`
 	Type      string                 `json:"type"`
 	Payload   map[string]interface{} `json:"payload"`
@@ -336,7 +333,9 @@ func (h *EntWebhookHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 // ── 事件投递 ──
 
-// IngestEvent POST /v1/internal/webhook-event — Python 引擎推送事件入口
+// IngestEvent POST /v1/internal/webhook-event — Python 引擎推送事件入口。
+// 事件先持久化到 Redis Stream webhook:events（MAXLEN 限界），由 WebhookDispatcher
+// 消费组跨实例投递（at-least-once + event_id 幂等）；入口立即 202，投递不依赖本实例存活。
 func (h *EntWebhookHandler) IngestEvent(w http.ResponseWriter, r *http.Request) {
 	var evt WebhookEvent
 	if err := DecodeJSON(w, r, &evt); err != nil {
@@ -347,98 +346,36 @@ func (h *EntWebhookHandler) IngestEvent(w http.ResponseWriter, r *http.Request) 
 		BadRequest(w, "tenant_id and type are required")
 		return
 	}
-	evt.Timestamp = time.Now()
-
-	select {
-	case h.deliveryCh <- evt:
-		OK(w, map[string]string{"status": "queued"})
-	default:
-		slog.Warn("webhook delivery channel full, dropping event", "type", evt.Type, "tenant", evt.TenantID)
-		ServiceUnavailable(w, "delivery channel full")
+	if evt.ID == "" {
+		evt.ID = newUUID() // 兼容旧负载：缺省生成幂等键
 	}
-}
-
-// deliveryLoop 异步投递协程
-func (h *EntWebhookHandler) deliveryLoop() {
-	for evt := range h.deliveryCh {
-		h.deliver(evt)
+	if evt.Timestamp.IsZero() {
+		evt.Timestamp = time.Now()
 	}
-}
-
-func (h *EntWebhookHandler) deliver(evt WebhookEvent) {
-	ctx, cancel := contextWithTimeout(10 * time.Second)
-	defer cancel()
-
-	rows, err := db.GlobalDBManager.Query(ctx,
-		`SELECT `+webhookColumns+` FROM ent_webhooks
-		 WHERE tenant_id = $1 AND enabled = true
-		 AND event_types::jsonb @> to_jsonb($2::text)`,
-		evt.TenantID, evt.Type)
-	if err != nil {
-		slog.Error("webhook deliver: query failed", "error", err)
+	if db.Redis == nil {
+		ServiceUnavailable(w, "redis unavailable")
 		return
 	}
-	defer rows.Close()
-
-	for rows.Next() {
-		wh := scanWebhookRow(rows)
-		if wh == nil {
-			continue
-		}
-		secret := wh["secret"].(string)
-		decrypted, _ := decryptWebhookSecret(secret, string(h.secretKey))
-		h.postWebhook(ctx, evt, wh["url"].(string), decrypted, wh["id"].(string))
+	payloadJSON, _ := json.Marshal(evt.Payload)
+	_, err := db.Redis.XAdd(r.Context(), &redis.XAddArgs{
+		Stream: db.RedisKey("webhook:events"),
+		MaxLen: webhookEventsMaxLen,
+		Approx: true,
+		Values: map[string]interface{}{
+			"event_id":    evt.ID,
+			"tenant_id":   evt.TenantID,
+			"type":        evt.Type,
+			"payload":     string(payloadJSON),
+			"timestamp":   evt.Timestamp.UTC().Format(time.RFC3339Nano),
+			"retry_count": "0",
+		},
+	}).Result()
+	if err != nil {
+		slog.Warn("webhook event xadd failed", "type", evt.Type, "tenant", evt.TenantID, "error", err)
+		InternalError(w, "event persist failed")
+		return
 	}
-}
-
-func (h *EntWebhookHandler) postWebhook(ctx context.Context, evt WebhookEvent, url, secret, whID string) {
-	body, _ := json.Marshal(map[string]interface{}{
-		"event_type": evt.Type,
-		"payload":    evt.Payload,
-		"timestamp":  evt.Timestamp,
-	})
-
-	// 重试：最多3次，指数退避
-	maxRetries := 3
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		req, err := http.NewRequestWithContext(ctx, "POST", url, bytesReader(body))
-		if err != nil {
-			slog.Error("webhook post: create request failed", "webhook_id", whID, "error", err)
-			return
-		}
-		req.Header.Set("Content-Type", "application/json")
-		if secret != "" {
-			req.Header.Set("X-Webhook-Signature", signHMACSHA256(body, secret))
-		}
-
-		resp, err := httpClient.Do(req)
-		if err == nil && resp.StatusCode < 500 {
-			resp.Body.Close()
-			// 记录投递成功
-			_, _ = db.GlobalDBManager.Exec(ctx,
-				`INSERT INTO audit_logs (id, tenant_id, action, resource_type, resource_id, details)
-				 VALUES ($1, $2, $3, $4, $5, $6)`,
-				newUUID(), evt.TenantID, "webhook.delivered", "webhook", whID,
-				map[string]interface{}{"event_type": evt.Type, "status": "success"})
-			return
-		}
-		if resp != nil {
-			resp.Body.Close()
-		}
-
-		backoff := (1 << attempt) * 5 // 5s, 10s, 20s
-		slog.Warn("webhook post failed, retrying",
-			"webhook_id", whID, "attempt", attempt+1, "backoff", backoff, "error", err)
-		time.Sleep(time.Duration(backoff) * time.Second)
-	}
-
-	// 全部重试失败
-	slog.Error("webhook post: all retries exhausted", "webhook_id", whID, "url", url)
-	_, _ = db.GlobalDBManager.Exec(ctx,
-		`INSERT INTO audit_logs (id, tenant_id, action, resource_type, resource_id, details)
-		 VALUES ($1, $2, $3, $4, $5, $6)`,
-		newUUID(), evt.TenantID, "webhook.delivered", "webhook", whID,
-		map[string]interface{}{"event_type": evt.Type, "status": "failed", "error": "max retries exceeded"})
+	OK(w, map[string]string{"status": "queued", "event_id": evt.ID})
 }
 
 // ── 辅助 ──

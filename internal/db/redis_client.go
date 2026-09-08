@@ -36,6 +36,10 @@ type RedisClient interface {
 	// the scan is reversed (latest first). Optional count limits the results.
 	XRange(ctx context.Context, stream, start, stop string, count ...int64) *redis.XMessageSliceCmd
 	XLen(ctx context.Context, stream string) *redis.IntCmd
+	// XPendingExt 返回消费组 pending 明细（含 idle/delivery 计数），崩溃恢复认领用。
+	XPendingExt(ctx context.Context, a *redis.XPendingExtArgs) *redis.XPendingExtCmd
+	// XClaim 把 idle 超阈值的 pending 消息认领到本 consumer（崩溃恢复）。
+	XClaim(ctx context.Context, a *redis.XClaimArgs) *redis.XMessageSliceCmd
 	Exists(ctx context.Context, keys ...string) *redis.IntCmd
 	Publish(ctx context.Context, channel string, message interface{}) *redis.IntCmd
 }
@@ -166,6 +170,14 @@ func (s *SingleRedis) XRange(ctx context.Context, stream, start, stop string, co
 
 func (s *SingleRedis) XLen(ctx context.Context, stream string) *redis.IntCmd {
 	return s.client.XLen(ctx, stream)
+}
+
+func (s *SingleRedis) XPendingExt(ctx context.Context, a *redis.XPendingExtArgs) *redis.XPendingExtCmd {
+	return s.client.XPendingExt(ctx, a)
+}
+
+func (s *SingleRedis) XClaim(ctx context.Context, a *redis.XClaimArgs) *redis.XMessageSliceCmd {
+	return s.client.XClaim(ctx, a)
 }
 
 func (s *SingleRedis) Exists(ctx context.Context, keys ...string) *redis.IntCmd {
@@ -303,6 +315,14 @@ func (c *ClusterRedis) XLen(ctx context.Context, stream string) *redis.IntCmd {
 	return c.client.XLen(ctx, stream)
 }
 
+func (c *ClusterRedis) XPendingExt(ctx context.Context, a *redis.XPendingExtArgs) *redis.XPendingExtCmd {
+	return c.client.XPendingExt(ctx, a)
+}
+
+func (c *ClusterRedis) XClaim(ctx context.Context, a *redis.XClaimArgs) *redis.XMessageSliceCmd {
+	return c.client.XClaim(ctx, a)
+}
+
 func (c *ClusterRedis) Exists(ctx context.Context, keys ...string) *redis.IntCmd {
 	return c.client.Exists(ctx, keys...)
 }
@@ -438,6 +458,14 @@ func (f *FailoverRedis) XRange(ctx context.Context, stream, start, stop string, 
 
 func (f *FailoverRedis) XLen(ctx context.Context, stream string) *redis.IntCmd {
 	return f.client.XLen(ctx, stream)
+}
+
+func (f *FailoverRedis) XPendingExt(ctx context.Context, a *redis.XPendingExtArgs) *redis.XPendingExtCmd {
+	return f.client.XPendingExt(ctx, a)
+}
+
+func (f *FailoverRedis) XClaim(ctx context.Context, a *redis.XClaimArgs) *redis.XMessageSliceCmd {
+	return f.client.XClaim(ctx, a)
 }
 
 func (f *FailoverRedis) Exists(ctx context.Context, keys ...string) *redis.IntCmd {

@@ -444,6 +444,9 @@ func NewGatewayRouter(
 	NewEntModelRouterHandler().RegisterRoutes(mux, authMW)
 
 	// Enterprise webhook（authMW + RequireEntPerm("webhook:manage")）：事件通知
+	// 企业 Webhook 可靠投递器：Redis 消费组跨实例投递（入口 IngestEvent 已持久化入流）
+	whDispatcher := NewWebhookDispatcher(atomicRedis)
+	go whDispatcher.Start(lifecycleCtx)
 	NewEntWebhookHandler().RegisterRoutes(mux, authMW)
 
 	// Enterprise eval（authMW + RequireEntPerm("eval:manage")）：Agent 评估系统

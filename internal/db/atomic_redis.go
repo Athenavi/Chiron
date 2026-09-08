@@ -118,6 +118,14 @@ func (a *AtomicRedis) XLen(ctx context.Context, stream string) *redis.IntCmd {
 	return a.load().XLen(ctx, stream)
 }
 
+func (a *AtomicRedis) XPendingExt(ctx context.Context, args *redis.XPendingExtArgs) *redis.XPendingExtCmd {
+	return a.load().XPendingExt(ctx, args)
+}
+
+func (a *AtomicRedis) XClaim(ctx context.Context, args *redis.XClaimArgs) *redis.XMessageSliceCmd {
+	return a.load().XClaim(ctx, args)
+}
+
 func (a *AtomicRedis) Publish(ctx context.Context, channel string, message interface{}) *redis.IntCmd {
 	return a.load().Publish(ctx, channel, message)
 }
