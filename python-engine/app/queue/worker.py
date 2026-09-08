@@ -429,7 +429,11 @@ class QueueWorker:
         elif task_type == "workflow_run":
             await self._handle_workflow_run(payload)
         else:
-            logger.warning("Unknown task type: %s", task_type)
+            # 未知任务类型：显式失败（回队重投）而非 ACK 丢弃。
+            # 滚动升级期间旧版 worker 收到新版 task_type（tool_job/workflow_run 等）时，
+            # 抛错使消息 retry++ 回队尾，由新版 worker 重取；超 MAX_RETRIES 进 DLQ，
+            # 避免新类型任务在升级窗口被静默确认丢弃。
+            raise ValueError(f"unknown task type: {task_type}")
 
     async def _handle_workflow_run(self, payload: dict) -> None:
         """执行（或续跑）workflow：读 DB checkpoint 跳过已完成节点，终态写回。

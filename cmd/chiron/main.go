@@ -150,7 +150,10 @@ func main() {
 		slog.Info("audit consumer started", "stream", "audit:events")
 	}
 	// 启动审计中间件 worker（受 lifecycleCtx 控制，支持优雅关闭）
-	api.StartAuditWorker(lifecycleCtx)
+	// P1 修复：LoggingMiddleware 审计经 auditLogCh 投递，必须由 StartAuditLogWorker 消费；
+	// 此前误调用了 ent_audit_middleware 的 StartAuditWorker（空转 worker，无人投递其 chan），
+	// 导致所有中间件写请求审计被静默丢弃。
+	api.StartAuditLogWorker(lifecycleCtx)
 
 	// ── Monitor ──
 	monitor.Init()

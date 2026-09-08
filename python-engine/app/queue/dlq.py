@@ -52,8 +52,8 @@ class DeadLetterQueue:
                 message[key] = val
         message["retry_count"] = "0"
 
-        # 重新入队
-        await self._redis.xadd(TASK_STREAM, message)
+        # 重新入队（MAXLEN 限界，防长期运行下流无界增长）
+        await self._redis.xadd(TASK_STREAM, message, maxlen=100000)
         # 从 DLQ 删除
         await self._redis.xdel(DLQ_STREAM, stream_id)
         logger.info("DLQ message requeued: %s", stream_id)
