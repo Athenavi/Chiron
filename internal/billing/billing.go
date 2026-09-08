@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -53,9 +52,19 @@ type BillingObserver interface {
 	OnCreditChange(event CreditEvent)
 }
 
+// balanceCacheTTL：余额读缓存有效期。多实例下其它实例的扣/加不会更新本进程缓存，
+// 短 TTL 强制回源 DB，避免余额展示与预检长期陈旧（扣减/入账本身走 PG 原子语句，不受影响）。
+const balanceCacheTTL = 5 * time.Second
+
+// balanceCacheEntry 余额读缓存条目：余额快照 + 回源时间戳。
+type balanceCacheEntry struct {
+	balance  int64
+	loadedAt time.Time
+}
+
 // Manager handles credit operations with async observer notification.
-// Balance is tracked in-memory via atomic operations; DB persistence is
-// delegated to observers and runs in the background.
+// 写路径（扣/加）以 PG 原子语句为唯一事实源（多副本不超扣/重复扣费）；
+// balances 仅作短 TTL 读缓存，供余额展示与发送前预检。
 type Manager struct {
 	mu        sync.RWMutex
 	config    BillingConfig
@@ -65,19 +74,21 @@ type Manager struct {
 	done      chan struct{}
 	closeOnce sync.Once
 	wg        sync.WaitGroup // waits for dispatch goroutine to exit
-	balances  sync.Map       // userID → *int64 (atomic balance)
+	balances  sync.Map       // userID → *balanceCacheEntry（读缓存，5s TTL）
 }
 
 // Store is the interface for persisting credit data.
+// 余额变更与流水落库必须同事务（AtomicDeductBalance/AtomicAddBalance 自带 reason 流水），
+// 异步路径不再单独写流水，避免"已扣/已加未记流水"窗口。
 type Store interface {
 	GetBalance(ctx context.Context, userID string) (int, error)
 	SetBalance(ctx context.Context, userID string, balance int) error
-	AddTransaction(ctx context.Context, tx *CreditChange) error
 	GetHistory(ctx context.Context, userID string, limit int) ([]CreditChange, error)
 	DailyFreeCount(ctx context.Context, userID string) (int, error)
 	MarkFreeUsage(ctx context.Context, userID string) error
-	AtomicDeductBalance(ctx context.Context, userID string, amount int) (int, error)
-	AtomicAddBalance(ctx context.Context, userID string, amount int) (int, error)
+	AtomicDeductBalance(ctx context.Context, userID string, amount int, reason string) (int, error)
+	AtomicAddBalance(ctx context.Context, userID string, amount int, reason string) (int, error)
+	RecordBillingRecord(ctx context.Context, userID, sessionID string, inputTokens, outputTokens, costCents int) error
 	PaymentStore
 }
 
@@ -151,33 +162,40 @@ func (m *Manager) publish(evt CreditEvent) {
 	}
 }
 
-// getOrLoadBalance returns the cached balance pointer for a user.
-// On first access the balance is loaded from the database.
-// 无外部请求上下文，使用 Background 自建超时上下文（后台缓存加载，不阻塞请求链路）。
-func (m *Manager) getOrLoadBalance(userID string) (*int64, error) {
+// getOrLoadBalance 返回用户余额读缓存条目。
+// 命中且未过期（balanceCacheTTL）直接返回；过期后回源 DB 并刷新缓存。
+// DB 读取失败时回退旧缓存（容忍短时陈旧，避免余额预检误拒/服务不可用）；无缓存才返回错误。
+// 无外部请求上下文，使用 Background 自建超时上下文。
+func (m *Manager) getOrLoadBalance(userID string) (*balanceCacheEntry, error) {
 	if v, ok := m.balances.Load(userID); ok {
-		return v.(*int64), nil
+		e := v.(*balanceCacheEntry)
+		if time.Since(e.loadedAt) < balanceCacheTTL {
+			return e, nil
+		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	balance, err := m.store.GetBalance(ctx, userID)
 	if err != nil {
+		if v, ok := m.balances.Load(userID); ok {
+			// 过期但 DB 不可达：回退旧缓存保证可用性（下次调用仍会尝试回源）
+			return v.(*balanceCacheEntry), nil
+		}
 		return nil, fmt.Errorf("load balance: %w", err)
 	}
-	ptr := new(int64)
-	*ptr = int64(balance)
-	actual, _ := m.balances.LoadOrStore(userID, ptr)
-	return actual.(*int64), nil
+	e := &balanceCacheEntry{balance: int64(balance), loadedAt: time.Now()}
+	m.balances.Store(userID, e)
+	return e, nil
 }
 
-// GetBalance returns the user's current credit balance from the in-memory cache.
-// Loads from DB on first access for a given user.
+// GetBalance returns the user's current credit balance.
+// 读缓存（TTL 5s 回源 DB）；多实例下至多 5s 陈旧，扣减/入账仍以 PG 原子语句为准。
 func (m *Manager) GetBalance(userID string) (int, error) {
-	ptr, err := m.getOrLoadBalance(userID)
+	e, err := m.getOrLoadBalance(userID)
 	if err != nil {
 		return 0, err
 	}
-	return int(atomic.LoadInt64(ptr)), nil
+	return int(e.balance), nil
 }
 
 // Deduct deducts credits from a user's balance. Returns the new balance.
@@ -193,7 +211,7 @@ func (m *Manager) Deduct(userID, reason string, amount int) (int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	newBalance, err := m.store.AtomicDeductBalance(ctx, userID, amount)
+	newBalance, err := m.store.AtomicDeductBalance(ctx, userID, amount, reason)
 	if err != nil {
 		return 0, fmt.Errorf("insufficient credits or user not found: %w", err)
 	}
@@ -221,11 +239,9 @@ func (m *Manager) Deduct(userID, reason string, amount int) (int, error) {
 	return newBalance, nil
 }
 
-// setBalanceCache 安全地更新缓存
+// setBalanceCache 本实例扣/加后立即刷新缓存（时间戳置当前，TTL 窗口内读侧即时新鲜）
 func (m *Manager) setBalanceCache(userID string, balance int) {
-	ptr := new(int64)
-	*ptr = int64(balance)
-	m.balances.Store(userID, ptr)
+	m.balances.Store(userID, &balanceCacheEntry{balance: int64(balance), loadedAt: time.Now()})
 }
 
 // AddCredits adds credits to a user's balance (for recharge or admin grants).
@@ -238,7 +254,7 @@ func (m *Manager) AddCredits(userID, reason string, amount int) (int, error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	newBalance, err := m.store.AtomicAddBalance(ctx, userID, amount)
+	newBalance, err := m.store.AtomicAddBalance(ctx, userID, amount, reason)
 	if err != nil {
 		return 0, fmt.Errorf("add credits failed: %w", err)
 	}
@@ -305,4 +321,16 @@ func (m *Manager) DeductTokens(userID string, inputTokens, outputTokens int) (in
 		cost = 1
 	}
 	return m.Deduct(userID, "llm_token", cost)
+}
+
+// RecordTokenUsage 记录企业成本中心 token 明细（billing_records）。
+// 仅在 DeductTokens 实际扣费成功后调用；余额/流水已由 Deduct 同事务保障，
+// 此处失败仅影响成本中心明细（记录层错误由调用方告警，不影响计费主链路）。
+func (m *Manager) RecordTokenUsage(ctx context.Context, userID, sessionID string, inputTokens, outputTokens int) error {
+	cfg := m.Config()
+	cost := int((int64(inputTokens)*int64(cfg.LLMCostPerToken) + int64(outputTokens)*int64(cfg.LLMCostPerOutput)) / 1000)
+	if cost < 1 {
+		cost = 1
+	}
+	return m.store.RecordBillingRecord(ctx, userID, sessionID, inputTokens, outputTokens, cost)
 }

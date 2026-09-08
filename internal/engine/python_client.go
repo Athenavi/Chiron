@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"log/slog"
 	"math"
@@ -18,6 +19,26 @@ import (
 	"github.com/athenavi/chiron/internal/auth"
 	"go.opentelemetry.io/otel/propagation"
 )
+
+// ctxSessionKey 标记请求的引擎会话路由键（session 亲和）。
+type ctxSessionKey struct{}
+
+// WithSession 把 sessionID 注入 ctx：该 ctx 下的引擎请求按 session 一致性哈希路由到
+// 固定引擎实例——同 session 的持久终端（PersistentTerminal）/后台任务/簿记状态因此连续；
+// 目标实例故障时自动漂移到健康实例（进程内状态丢失，记录日志）。
+func WithSession(ctx context.Context, sessionID string) context.Context {
+	if sessionID == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, ctxSessionKey{}, sessionID)
+}
+
+func sessionFromCtx(ctx context.Context) string {
+	if v, ok := ctx.Value(ctxSessionKey{}).(string); ok {
+		return v
+	}
+	return ""
+}
 
 // PythonClient calls the Python AI engine via HTTP SSE.
 // Supports multiple addresses with round-robin load balancing.
@@ -322,6 +343,41 @@ func (c *PythonClient) pickAddress() string {
 	return c.addresses[earliestIdx]
 }
 
+// addressFor 选择本次请求的引擎地址。
+// ctx 携带 session（WithSession）→ 一致性哈希固定实例（确定性、跨网关一致）；
+// 无 session → round-robin（pickAddress）。目标实例冷却中顺序探测下一健康实例
+// （故障漂移，记录日志）；全部冷却回退最快冷却完成地址。
+func (c *PythonClient) addressFor(ctx context.Context) string {
+	key := sessionFromCtx(ctx)
+	if key == "" || len(c.addresses) == 0 {
+		return c.pickAddress()
+	}
+	now := time.Now().Unix()
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(key))
+	start := int(h.Sum32()) % len(c.addresses)
+	for i := 0; i < len(c.addresses); i++ {
+		idx := (start + i) % len(c.addresses)
+		if atomic.LoadInt64(&c.cooldownUntil[idx]) <= now {
+			if i > 0 {
+				slog.Info("python engine: session affinity drifted",
+					"session", key[:min(len(key), 16)], "from", c.addresses[start], "to", c.addresses[idx])
+			}
+			return c.addresses[idx]
+		}
+	}
+	// 全部冷却中：取最快冷却完成的地址
+	earliestIdx := 0
+	earliest := atomic.LoadInt64(&c.cooldownUntil[0])
+	for i := 1; i < len(c.addresses); i++ {
+		if t := atomic.LoadInt64(&c.cooldownUntil[i]); t < earliest {
+			earliest = t
+			earliestIdx = i
+		}
+	}
+	return c.addresses[earliestIdx]
+}
+
 // PythonRunRequest matches the Python engine's Pydantic RunRequest model.
 type PythonRunRequest struct {
 	SessionID    string           `json:"session_id"`
@@ -373,7 +429,11 @@ func (c *PythonClient) Run(ctx context.Context, req PythonRunRequest) (<-chan Py
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", c.pickAddress()+"/v1/agent/run", bytes.NewReader(body))
+	routeCtx := ctx
+	if req.SessionID != "" {
+		routeCtx = WithSession(ctx, req.SessionID)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", c.addressFor(routeCtx)+"/v1/agent/run", bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -503,7 +563,7 @@ func (c *PythonClient) PostJSON(ctx context.Context, path string, in any, out an
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.pickAddress()+path, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.addressFor(ctx)+path, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -639,7 +699,7 @@ func (c *PythonClient) RunSSE(ctx context.Context, path string, body any, extraH
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", c.pickAddress()+path, bytes.NewReader(data))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", c.addressFor(ctx)+path, bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}

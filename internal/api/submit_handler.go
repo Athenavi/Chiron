@@ -57,7 +57,10 @@ func (h *SubmitHandler) SubmitApproval(w http.ResponseWriter, r *http.Request) {
 	if claims := auth.GetClaims(r.Context()); claims != nil {
 		req.UserID = claims.UserID
 	}
-	if err := h.python.PostJSON(r.Context(), "/v1/agent/approval", req, &out); err != nil {
+	// approval 必须路由到承载该 session 运行的引擎实例（引擎 _ACTIVE_RUNTIMES 为进程内，
+	// round-robin 打到其它实例会返回 "no active agent"）
+	routeCtx := engine.WithSession(r.Context(), req.SessionID)
+	if err := h.python.PostJSON(routeCtx, "/v1/agent/approval", req, &out); err != nil {
 		slog.Error("approval: python proxy failed", "session", req.SessionID, "error", err)
 		InternalError(w, "approval proxy failed")
 		return
@@ -70,6 +73,9 @@ func (h *SubmitHandler) HandleSubmit(ctx context.Context, userID, sessionID, con
 	// P1 修复：与 Python 引擎 5min 客户端超时对齐，避免长任务被 180s 硬超时截断
 	ctx, cancel := context.WithTimeout(ctx, DefaultAgentTimeout)
 	defer cancel()
+	// session 亲和：同 session 的所有流式轮次固定路由到同一引擎实例
+	// （引擎 PersistentTerminal/后台任务/簿记为进程内状态，round-robin 跨实例会断链）
+	ctx = engine.WithSession(ctx, sessionID)
 	if sessionID != "" {
 		sessionCancels.Store(sessionID, sessionCancel{userID: userID, cancel: cancel})
 		defer sessionCancels.Delete(sessionID)
@@ -185,6 +191,13 @@ func (h *SubmitHandler) HandleSubmit(ctx context.Context, userID, sessionID, con
 	}
 	flushText() // 流结束兜底冲刷
 
+	// 可观测性：区分正常结束与中断（前端断开 / 会话取消 / 180s 超时）。
+	// 取消时已产生的事件仍已落库与计费（storeCtx 为 WithoutCancel），此处仅记录原因。
+	if err := ctx.Err(); err != nil {
+		slog.Info("submit stream ended with cancellation",
+			"session_id", sessionID, "error", err)
+	}
+
 	if finalContent != "" || len(turnToolCallIDs) > 0 {
 		// S 修复：纯工具调用轮（无文本）也保存 assistant 消息；
 		// messages.tool_calls 列只存 id 集合（内容在 tool_calls 表，避免重复存储）
@@ -207,6 +220,12 @@ func (h *SubmitHandler) HandleSubmit(ctx context.Context, userID, sessionID, con
 				// 超出免费额度或查询失败：正常扣费
 				if _, err := h.biller.DeductTokens(userID, inputTokens, outputTokens); err != nil {
 					slog.Error("billing: DeductTokens failed", "user", userID, "error", err)
+				} else {
+					// 企业成本中心 token 明细（billing_records）；失败仅告警，不影响已扣费与流水
+					if recErr := h.biller.RecordTokenUsage(storeCtx, userID, sessionID, inputTokens, outputTokens); recErr != nil {
+						slog.Warn("billing: enterprise token usage record failed",
+							"user", userID, "session", sessionID, "error", recErr)
+					}
 				}
 			}
 		}

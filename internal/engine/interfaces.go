@@ -9,4 +9,6 @@ type Biller interface {
 	DailyFreeCount(ctx context.Context, userID string) (int, error)
 	MarkFreeUsage(ctx context.Context, userID string) error
 	DeductTokens(userID string, inputTokens, outputTokens int) (int, error)
+	// RecordTokenUsage 在扣费成功后记录企业成本中心 token 明细（billing_records）。
+	RecordTokenUsage(ctx context.Context, userID, sessionID string, inputTokens, outputTokens int) error
 }

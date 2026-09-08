@@ -764,6 +764,13 @@ async def agent_run(
                 provider_hint=provider_hint,
             ):
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+        except asyncio.CancelledError:
+            # 客户端断开/网关取消：流式生成器被 ASGI 取消 → 中止 agent 循环，不吞取消
+            logger.info(
+                "Agent run stream cancelled (client disconnected)",
+                extra={"session_id": body.get("session_id", "")},
+            )
+            raise
         except Exception as e:
             logger.error("Agent run error: %s", e)
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
@@ -874,6 +881,14 @@ async def agent_submit(
         try:
             async for event in runtime.run(task):
                 yield f"data: {json.dumps({'type': event.type, 'content': event.content or event.error, 'id': event.tool_call_id, 'name': event.tool_name, 'arguments': event.tool_arguments, 'input_tokens': event.input_tokens, 'output_tokens': event.output_tokens}, ensure_ascii=False)}\n\n"
+        except asyncio.CancelledError:
+            # 客户端断开/网关取消：ASGI 取消流式生成器 → 取消传播中止 agent 循环（无 shield）。
+            # 不吞取消：重新抛出，保持 finally（_ACTIVE_RUNTIMES 清理等）正常执行。
+            logger.info(
+                "Agent submit stream cancelled (client disconnected)",
+                extra={"session_id": session_id},
+            )
+            raise
         except Exception as e:
             logger.error("Agent submit error: %s", e)
             yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"

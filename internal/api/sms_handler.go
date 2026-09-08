@@ -27,15 +27,19 @@ import (
 //  4. 验证码尝试次数：错 5 次作废，需重新获取；登录失败计入 IP 失败计数。
 
 const (
-	smsMaxTries       = 5                // 验证码最大尝试次数，超过作废
-	smsCodeKeyPrefix  = "sms:code:"      // 验证码
-	smsTriesKeyPrefix = "sms:tries:"     // 尝试计数
-	smsCoolKeyPrefix  = "sms:cool:"      // 发送冷却标记
-	smsDailyKeyPrefix = "sms:day:"       // 每日发送计数
-	smsCodeDigits     = 6                // 验证码位数
-	smsDailyWindow    = 24 * time.Hour   // 每日计数窗口
-	smsMaxDailyLimit  = 100              // 每日上限配置上限
-	smsMaxCodeTTL     = 15 * time.Minute // 验证码有效期上限
+	smsMaxTries      = 5                // 验证码最大尝试次数，超过作废
+	smsCodeDigits    = 6                // 验证码位数
+	smsDailyWindow   = 24 * time.Hour   // 每日计数窗口
+	smsMaxDailyLimit = 100              // 每日上限配置上限
+	smsMaxCodeTTL    = 15 * time.Minute // 验证码有效期上限
+)
+
+// SMS 验证码/防滥用 Redis 键前缀（统一 RedisKey，多环境隔离；空前缀 = 存量兼容）。
+var (
+	smsCodeKeyPrefix  = db.RedisKey("sms:code:")  // 验证码
+	smsTriesKeyPrefix = db.RedisKey("sms:tries:") // 尝试计数
+	smsCoolKeyPrefix  = db.RedisKey("sms:cool:")  // 发送冷却标记
+	smsDailyKeyPrefix = db.RedisKey("sms:day:")   // 每日发送计数
 )
 
 // smsCodeStore 抽象验证码存取（生产 Redis，测试内存 fake）。

@@ -105,14 +105,6 @@ func (s *PGStore) SetBalance(ctx context.Context, userID string, balance int) er
 	return err
 }
 
-func (s *PGStore) AddTransaction(ctx context.Context, tx *CreditChange) error {
-	_, err := db.GlobalDBManager.Exec(ctx,
-		`INSERT INTO credit_transactions (id, user_id, amount, balance, reason, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6)`,
-		tx.ID, tx.UserID, tx.Amount, tx.Balance, tx.Reason, tx.CreatedAt)
-	return err
-}
-
 func (s *PGStore) GetHistory(ctx context.Context, userID string, limit int) ([]CreditChange, error) {
 	if limit <= 0 {
 		limit = 50
@@ -172,34 +164,83 @@ func (s *PGStore) MarkFreeUsage(ctx context.Context, userID string) error {
 	return err
 }
 
-// AtomicDeductBalance atomically deducts credits using a single SQL statement.
-// Returns the new balance, or an error if insufficient credits or user not found.
-func (s *PGStore) AtomicDeductBalance(ctx context.Context, userID string, amount int) (int, error) {
-	var newBalance int
-	err := db.GlobalDBManager.QueryRow(ctx,
-		`UPDATE users SET credits = credits - $1
-		 WHERE id = $2 AND credits >= $1
-		 RETURNING credits`,
-		amount, userID).Scan(&newBalance)
+// RecordBillingRecord 写入一条企业成本中心记录（billing_records）。
+// tenant_id 取自 users；group_id 取用户主群组（ent_group_members 首条，无则 NULL）。
+// 单语句原子完成；用户不存在返回错误。调用方为扣费成功后的网关（submit 链路）。
+func (s *PGStore) RecordBillingRecord(ctx context.Context, userID, sessionID string, inputTokens, outputTokens, costCents int) error {
+	var sid *string
+	if sessionID != "" {
+		sid = &sessionID
+	}
+	tag, err := db.GlobalDBManager.Exec(ctx,
+		`INSERT INTO billing_records (tenant_id, user_id, session_id, input_tokens, output_tokens, cost_cents, group_id)
+		 SELECT u.tenant_id, u.id, $2, $3, $4, $5,
+		        (SELECT g.group_id FROM ent_group_members g
+		          WHERE g.user_id = u.id ORDER BY g.group_id LIMIT 1)
+		 FROM users u WHERE u.id = $1`,
+		userID, sid, inputTokens, outputTokens, costCents)
 	if err != nil {
-		return 0, fmt.Errorf("atomic deduct failed (insufficient credits or user not found): %w", err)
+		return fmt.Errorf("insert billing record: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("billing record: user %s not found", userID)
+	}
+	return nil
+}
+
+// applyCreditTx 在同一事务内完成余额变更 + 流水落库：
+// 余额以 PG 原子语句为唯一事实源，流水与余额同生共死，杜绝"已扣/已加未记流水"窗口。
+// guardMin>0：仅当余额 >= guardMin 才允许（扣减防负）；否则无条件加减（充值/退款）。
+func (s *PGStore) applyCreditTx(ctx context.Context, userID string, delta int, guardMin int, reason string) (int, error) {
+	var newBalance int
+	txID := fmt.Sprintf("tx_%d", time.Now().UnixNano())
+	err := db.GlobalDBManager.WithTransaction(ctx, func(tx pgx.Tx) error {
+		var q string
+		args := []interface{}{delta, userID}
+		if guardMin > 0 {
+			q = `UPDATE users SET credits = credits + $1 WHERE id = $2 AND credits >= $3 RETURNING credits`
+			args = append(args, guardMin)
+		} else {
+			q = `UPDATE users SET credits = credits + $1 WHERE id = $2 RETURNING credits`
+		}
+		if err := tx.QueryRow(ctx, q, args...).Scan(&newBalance); err != nil {
+			return fmt.Errorf("apply credit balance: %w", err)
+		}
+		_, err := tx.Exec(ctx,
+			`INSERT INTO credit_transactions (id, user_id, amount, balance, reason, created_at)
+			 VALUES ($1, $2, $3, $4, $5, NOW())`,
+			txID, userID, delta, newBalance, reason)
+		if err != nil {
+			return fmt.Errorf("insert credit transaction: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
 	}
 	return newBalance, nil
 }
 
-// AtomicAddBalance atomically adds credits using a single SQL statement.
-// Returns the new balance, or an error if user not found.
-func (s *PGStore) AtomicAddBalance(ctx context.Context, userID string, amount int) (int, error) {
-	var newBalance int
-	err := db.GlobalDBManager.QueryRow(ctx,
-		`UPDATE users SET credits = credits + $1
-		 WHERE id = $2
-		 RETURNING credits`,
-		amount, userID).Scan(&newBalance)
-	if err != nil {
-		return 0, fmt.Errorf("atomic add failed: %w", err)
+// AtomicDeductBalance 在同一事务内扣减余额并写入流水（reason）。
+// 余额不足/用户不存在返回错误。多副本部署下不超扣、不重复扣费、流水不缺失。
+func (s *PGStore) AtomicDeductBalance(ctx context.Context, userID string, amount int, reason string) (int, error) {
+	if amount <= 0 {
+		return 0, fmt.Errorf("invalid deduction amount: %d", amount)
 	}
-	return newBalance, nil
+	b, err := s.applyCreditTx(ctx, userID, -amount, amount, reason)
+	if err != nil {
+		return 0, fmt.Errorf("atomic deduct failed (insufficient credits or user not found): %w", err)
+	}
+	return b, nil
+}
+
+// AtomicAddBalance 在同一事务内增加余额并写入流水（reason）。
+// Returns the new balance, or an error if user not found.
+func (s *PGStore) AtomicAddBalance(ctx context.Context, userID string, amount int, reason string) (int, error) {
+	if amount <= 0 {
+		return 0, fmt.Errorf("invalid add amount: %d", amount)
+	}
+	return s.applyCreditTx(ctx, userID, amount, 0, reason)
 }
 
 // JSON serialization helpers for API responses

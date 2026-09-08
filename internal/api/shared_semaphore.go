@@ -16,8 +16,10 @@ import (
 // 超限 DECR 还原；acquire 成功即续期 TTL），Redis 不可用时回退到进程内 chan
 // 兑底（fail-open + 降级告警，此时多实例下为近似限制，与既有行为一致）。
 
+// semaphoreKeyPrefix 跨实例信号量 Redis 计数键前缀（统一 RedisKey，多环境隔离；空前缀 = 存量兼容）。
+var semaphoreKeyPrefix = db.RedisKey("sem:")
+
 const (
-	semaphoreKeyPrefix = "sem:"
 	// semaphoreTTL Redis 计数键 TTL：持有者崩溃时计数在 TTL 后自动清零，
 	// 避免永久泄漏；正常 release 显式 DECR。取值需远大于单次任务时长。
 	semaphoreTTL = 5 * time.Minute
@@ -48,8 +50,8 @@ type SharedSemaphore struct {
 	local chan struct{} // Redis 不可用时的本地兑底
 	rdb   db.RedisClient
 
-	mu      sync.Mutex
-	warned  bool
+	mu     sync.Mutex
+	warned bool
 }
 
 // NewSharedSemaphore 构造命名信号量。rdb 可为 nil（纯本地模式）。

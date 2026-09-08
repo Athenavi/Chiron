@@ -48,20 +48,10 @@ class WorkflowInstance:
     started_at: float = field(default_factory=time.time)
     finished_at: float | None = None
 
-    def _should_timeout(self) -> bool:
-        """P1-1: 检查是否超时 (>24 小时)"""
-        elapsed = time.time() - self.started_at
-        if elapsed > _INSTANCE_TIMEOUT_SECONDS:
-            return True
-        return False
-
 
 _instances: dict[str, WorkflowInstance] = {}
 _MAX_INSTANCES = 500  # 最大实例数，防止内存泄漏
 _instance_order: list[str] = []  # FIFO 顺序
-
-# P1-1: Workflow 实例超时清理（生产安全检查 2026-08-17）
-_INSTANCE_TIMEOUT_SECONDS = 3600 * 24  # 24 小时超时
 
 
 def _topological_sort(nodes: list[dict], edges: list[dict]) -> list[dict]:
@@ -292,11 +282,22 @@ async def run_workflow(
     gateway: GatewayRouter,
     initial_state: dict[str, Any] | None = None,
     instance_id: str | None = None,
+    resume_state: dict[str, Any] | None = None,
+    resume_done: set[str] | None = None,
+    on_node_done: Callable[[dict[str, Any], list[str]], Awaitable[None]] | None = None,
 ) -> WorkflowInstance:
+    """执行 Workflow（DAG 按拓扑序）。
+
+    断点续跑（多实例/崩溃恢复）：
+    - resume_state / resume_done：从 DB checkpoint 恢复的累积 state 与已完成节点集合，
+      主循环跳过已完成节点、从断点继续（节点为纯函数，state 含 __out_<id>__ 可重放）；
+    - on_node_done(state, done_nodes)：每完成一个节点回调一次，供调用方持久化 checkpoint
+      （如写 workflow_instances.checkpoint）；回调失败仅影响恢复粒度，不阻断执行。
+    """
     instance = WorkflowInstance(
         instance_id=instance_id or f"wf_{uuid.uuid4().hex[:10]}",
         graph_name=graph_json.get("name", "workflow"),
-        state=dict(initial_state or {}),
+        state=dict(resume_state if resume_state is not None else (initial_state or {})),
     )
     # 兜底设置工具会话上下文（幂等：不覆盖调用方已设置的 user/tenant）
     from app.tools.context import set_tool_context
@@ -310,6 +311,7 @@ async def run_workflow(
         oldest = _instance_order.pop(0)
         _instances.pop(oldest, None)
 
+    done: set[str] = set(resume_done or ())
     try:
         node_fns = _build_node_fns(graph_json, gateway)
         state = dict(instance.state)
@@ -319,6 +321,8 @@ async def run_workflow(
             graph_json.get("nodes", []), graph_json.get("edges", [])
         ):
             node_id = node["id"]
+            if node_id in done:
+                continue  # 断点续跑：已完成节点跳过（其输出已在 resume_state 中）
             update = await node_fns[node_id](state, node_id)
             state.update(update)
             instance.results[node_id] = NodeResult(
@@ -326,6 +330,14 @@ async def run_workflow(
                 status="completed",
                 output=str(state.get(f"__out_{node_id}__", "")),
             )
+            done.add(node_id)
+            if on_node_done is not None:
+                try:
+                    await on_node_done(state, sorted(done))
+                except Exception as e:  # noqa: BLE001
+                    logger.warning(
+                        "workflow checkpoint persist failed (recovery granularity only): %s", e
+                    )
         instance.state.update(state)
         instance.status = "completed"
     except Exception as e:
@@ -334,14 +346,8 @@ async def run_workflow(
         instance.error = str(e)
     finally:
         instance.finished_at = time.time()
-
-        # P1-1: 检查超时并持久化（如果 DB 可用）
-        if instance._should_timeout():
-            logger.info(
-                "Workflow instance timed out (%.1fh), cleaning up",
-                (time.time() - instance.started_at) / 3600,
-            )
-            _persist_workflow_instance(instance)  # type: ignore
+        # 断点/终态持久化交由 on_node_done 与调用方（execute 侧队列 worker）负责；
+        # 超时判定（_should_timeout）由调用方按 updated_at/created_at 巡检执行。
 
     return instance
 

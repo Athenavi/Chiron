@@ -11,9 +11,11 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// permsCacheKeyPrefix 是有效权限缓存键前缀（统一 RedisKey，多环境隔离），
+// 完整键为 ent:rbac:perms:{userID}；空前缀 = 存量兼容。
+var permsCacheKeyPrefix = db.RedisKey("ent:rbac:perms:")
+
 const (
-	// permsCacheKeyPrefix 是有效权限缓存键前缀，完整键为 ent:rbac:perms:{userID}
-	permsCacheKeyPrefix = "ent:rbac:perms:"
 	// permsCacheTTL 权限缓存过期时间
 	permsCacheTTL = 5 * time.Minute
 )

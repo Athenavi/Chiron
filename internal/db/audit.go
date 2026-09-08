@@ -2,6 +2,8 @@ package db
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -202,7 +204,10 @@ func (c *AuditConsumer) Start(ctx context.Context) error {
 		}
 	}
 
-	consumerID := "audit-worker-" + time.Now().Format("20060102150405")
+	// 随机后缀：多实例同秒启动时 consumer 名仍唯一（同消费组内同名 consumer 会造成重复投递窗口）
+	var rb [4]byte
+	_, _ = rand.Read(rb[:])
+	consumerID := "audit-worker-" + time.Now().Format("20060102150405") + "-" + hex.EncodeToString(rb[:])
 
 	for {
 		select {

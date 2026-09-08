@@ -30,6 +30,14 @@ GATE_TTL = 300
 GATE_WAIT_SECS = 3.0
 GATE_RETRY_INTERVAL = 0.5
 
+# ── PEL 崩溃恢复（XCLAIM 认领）─────────────────────────────────────────────
+# worker 崩溃后其未 ACK 消息停留在消费组 PEL；本实例周期认领 idle 超阈值的
+# pending 消息重投（workflow_run 依 checkpoint 幂等续跑；tool_job 重执行）。
+# idle 阈值须大于单任务处理上限(1h)+余量，避免误抢其它实例正在执行的长任务。
+CLAIM_MIN_IDLE_MS = (3600 + 180) * 1000
+CLAIM_LOOP_SECS = 60
+CLAIM_BATCH = 50
+
 _GATE_ACQUIRE_LUA = """
 local v = redis.call('INCR', KEYS[1])
 redis.call('EXPIRE', KEYS[1], ARGV[1])
@@ -80,6 +88,7 @@ class QueueWorker:
         self._semaphore = asyncio.Semaphore(concurrency)
         self._in_flight: set[asyncio.Task] = set()
         self._consumer_name = f"{CONSUMER_PREFIX}-{id(self):x}"
+        self._reclaim_task: asyncio.Task | None = None
 
     async def start(self) -> None:
         """启动消费者"""
@@ -105,6 +114,10 @@ class QueueWorker:
             self._concurrency,
         )
 
+        # PEL 崩溃恢复：后台认领循环（worker 崩溃后由其它实例接管其 pending 任务）
+        self._reclaim_task = asyncio.create_task(self._reclaim_loop())
+        logger.info("Queue worker reclaim loop started (idle=%ds)", CLAIM_MIN_IDLE_MS // 1000)
+
         while self._running:
             try:
                 await self._consume_batch()
@@ -117,6 +130,9 @@ class QueueWorker:
     async def stop(self) -> None:
         """P1-2: 优雅停止（带超时保护）"""
         self._running = False
+        if self._reclaim_task is not None:
+            self._reclaim_task.cancel()
+            self._reclaim_task = None
         logger.info(
             "Queue worker stopping, waiting for %d in-flight tasks...",
             len(self._in_flight),
@@ -173,18 +189,90 @@ class QueueWorker:
 
         for stream, messages in results:
             for stream_id, fields in messages:
-                # 等待本地信号量（每实例）
-                await self._semaphore.acquire()
-                # 跨实例全局门控：超限等待上限后把消息放回队尾并 ACK，
-                # 避免 XCLAIM(30s) 期间被其它实例重复处理。
-                if not await self._try_acquire_gate(stream_id, fields):
-                    self._semaphore.release()
-                    continue
-                task = asyncio.create_task(self._process_message(stream_id, fields))
-                # 设置超时保护，防止 task 永久挂起
-                timeout_task = asyncio.create_task(asyncio.wait_for(task, timeout=3600))
-                self._in_flight.add(timeout_task)
-                timeout_task.add_done_callback(self._task_done)
+                await self._spawn_message(stream_id, fields)
+
+    async def _spawn_message(self, stream_id: str, fields: dict) -> None:
+        """把一条消息投入本地处理：本地信号量 + 跨实例全局门控 + 超时保护。"""
+        # 等待本地信号量（每实例）
+        await self._semaphore.acquire()
+        # 跨实例全局门控：超限等待上限后把消息放回队尾并 ACK（避免认领窗口重复处理）
+        if not await self._try_acquire_gate(stream_id, fields):
+            self._semaphore.release()
+            return
+        task = asyncio.create_task(self._process_message(stream_id, fields))
+        # 设置超时保护，防止 task 永久挂起
+        timeout_task = asyncio.create_task(asyncio.wait_for(task, timeout=3600))
+        self._in_flight.add(timeout_task)
+        timeout_task.add_done_callback(self._task_done)
+
+    async def _reclaim_loop(self) -> None:
+        """PEL 崩溃恢复认领循环：周期接管 idle 超阈值的 pending 消息。"""
+        while self._running:
+            try:
+                await asyncio.sleep(CLAIM_LOOP_SECS)
+                await self._reclaim_pending()
+            except asyncio.CancelledError:
+                return
+            except Exception as e:  # noqa: BLE001
+                logger.warning("worker reclaim loop error: %s", e)
+
+    async def _reclaim_pending(self) -> None:
+        """认领本组内 idle 超过 CLAIM_MIN_IDLE_MS 的 pending 消息并重新处理。
+
+        覆盖场景：worker 崩溃/被杀后其未 ACK 消息滞留 PEL；其它实例接管后
+        workflow_run 依 DB checkpoint 幂等续跑、tool_job 重新执行（retry_count 递增，
+        超过 MAX_RETRIES 进 DLQ）。正在其它实例执行的长任务（idle < 阈值）不会被抢。
+        """
+        try:
+            pend = await self._redis.xpending_range(
+                TASK_STREAM,
+                GROUP_NAME,
+                min="-",
+                max="+",
+                count=CLAIM_BATCH,
+                idle=CLAIM_MIN_IDLE_MS,
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.warning("worker pending scan failed: %s", e)
+            return
+        if not pend:
+            return
+        ids = []
+        for p in pend:
+            mid = p.get("message_id") if isinstance(p, dict) else p.message_id
+            if mid:
+                ids.append(mid)
+        if not ids:
+            return
+        try:
+            claimed = await self._redis.xclaim(
+                TASK_STREAM, GROUP_NAME, self._consumer_name, CLAIM_MIN_IDLE_MS, ids
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.warning("worker xclaim failed: %s", e)
+            return
+        for item in claimed:
+            if isinstance(item, (tuple, list)) and len(item) >= 2:
+                await self._spawn_claimed(item[0], item[1])
+
+    async def _spawn_claimed(self, msg_id: str, fields: dict) -> None:
+        """认领到的消息：retry_count 递增后重新进入处理；超限进 DLQ。"""
+        raw = fields.get(b"retry_count", fields.get("retry_count", 0))
+        try:
+            retry = int(raw) + 1
+        except (TypeError, ValueError):
+            retry = 1
+        fields[b"retry_count"] = str(retry).encode()
+        if retry > MAX_RETRIES:
+            try:
+                await self._redis.xadd(DLQ_STREAM, fields, maxlen=10000)
+                await self._redis.xack(TASK_STREAM, GROUP_NAME, msg_id)
+                QUEUE_DLQ_TOTAL.inc()
+                logger.warning("reclaimed message exceeded retries, moved to DLQ: %s", msg_id)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("reclaimed DLQ move failed: %s", e)
+            return
+        await self._spawn_message(msg_id, fields)
 
     async def _try_acquire_gate(self, stream_id: str, fields: dict) -> bool:
         """全局并发门控：抢到槽位返回 True；等待 GATE_WAIT_SECS 仍满则放回队尾返回 False。
@@ -336,8 +424,50 @@ class QueueWorker:
             await self._handle_memory_rollup(payload, tenant_id)
         elif task_type == "embed_batch":
             await self._handle_embed_batch(payload)
+        elif task_type == "tool_job":
+            await self._handle_tool_job(payload)
+        elif task_type == "workflow_run":
+            await self._handle_workflow_run(payload)
         else:
             logger.warning("Unknown task type: %s", task_type)
+
+    async def _handle_workflow_run(self, payload: dict) -> None:
+        """执行（或续跑）workflow：读 DB checkpoint 跳过已完成节点，终态写回。
+
+        payload: {instance_id, user_id, graph_json, initial_state}
+        """
+        from app.workflow.executor import execute_with_checkpoint
+
+        instance_id = payload.get("instance_id") or ""
+        if not instance_id:
+            logger.warning("workflow_run payload 缺失: %s", payload)
+            return
+        await execute_with_checkpoint(
+            instance_id,
+            payload.get("graph_json") or {},
+            payload.get("initial_state") or {},
+            payload.get("user_id", ""),
+            self._gateway,
+        )
+        logger.info("workflow_run done: instance=%s", instance_id)
+
+    async def _handle_tool_job(self, payload: dict) -> None:
+        """处理后台命令任务（run_in_background 队列化）：独立子进程执行 + 结果写 Redis。
+
+        payload: {job_id, command, shell_key}（shell_key 仅保留信息，执行与持久 shell 解耦）
+        """
+        from app.tools.job_runner import execute_tool_job
+
+        job_id = payload.get("job_id") or ""
+        command = payload.get("command") or ""
+        if not job_id or not command:
+            logger.warning("tool_job payload 缺失: %s", payload)
+            return
+        res = await execute_tool_job(self._redis, job_id, command)
+        logger.info(
+            "tool_job done: job=%s status=%s exit_code=%s",
+            job_id, res.get("status"), res.get("exit_code"),
+        )
 
     async def _handle_rag_index(self, payload: dict) -> None:
         """处理 RAG 文档索引任务：读库取内容 → RAGBuilder 构建 → 更新文档/KB 状态与扣费

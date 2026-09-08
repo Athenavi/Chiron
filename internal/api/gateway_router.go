@@ -267,9 +267,10 @@ func NewGatewayRouter(
 	billingStore := billing.NewPGStore()
 	billingStore.EnsureTables(context.Background())
 	billingMgr := billing.NewManager(billingStore)
-	billingMgr.Subscribe(billing.NewTransactionRecorder(billingStore))
 	// P0-P1 修复：余额已由 Deduct/AddCredits 同步写库（PG 原子 UPDATE），
 	// 移除 BalanceSyncer 异步落库订阅，避免多副本 split-brain 与重复扣费。
+	// 2026-09 增强：扣减/入账与 credit_transactions 流水已同 PG 事务落库
+	// （pgstore.applyCreditTx），异步 TransactionRecorder 随之移除，杜绝"已扣未记流水"。
 
 	// Agent execution semaphore — global concurrency limit
 	agentSem := NewSharedSemaphore(atomicRedis, "agent", cfg.AgentMaxConcurrency)
@@ -490,7 +491,7 @@ func registerPublicEndpoints(
 	// 引擎配置下发（X-Internal-Token 保护，Python 引擎启动拉取）
 	mux.Handle("GET /v1/internal/engine-config", rlMW(internalTokenMW(cfg, EngineConfig(cfg))))
 
-		// 模型路由配置同步（X-Internal-Token 保护，Python 引擎启动时拉取）
+	// 模型路由配置同步（X-Internal-Token 保护，Python 引擎启动时拉取）
 	mux.Handle("GET /v1/internal/model-routes", rlMW(internalTokenMW(cfg, http.HandlerFunc(NewEntModelRouterHandler().SyncRoutes))))
 
 	// Python 引擎数据库/Redis 统一访问端点（X-Internal-Token 保护）
@@ -736,7 +737,7 @@ func registerMediaRoutes(
 	// Media file serving（P0 安全修复：禁止目录遍历，仅允许签名URL访问）
 	// 原代码允许通过 /media/ 直接浏览所有用户文件，现已移除
 	// 所有媒体访问必须通过签名URL (/media/s/{assetID}) 或 API端点 (/v1/media/{id}/download)
-	
+
 	// 签名 URL（P0 修复）：签发 + 校验后服务
 	mux.Handle("POST /v1/media/{id}/sign", authMW(rlMW(http.HandlerFunc(mediaHandler.SignMedia))))
 	mux.Handle("GET /media/s/{assetID}", rlMW(http.HandlerFunc(mediaHandler.ServeSignedMedia)))

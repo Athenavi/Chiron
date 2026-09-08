@@ -40,11 +40,11 @@ func (h *AdminHandler) GetQueueStats(w http.ResponseWriter, r *http.Request) {
 		WaitingTasks: []QueueTask{},
 	}
 
-	// 从 Redis 获取队列长度
+	// 从 Redis 获取队列长度（统一键前缀）
 	if db.Redis != nil {
 		ctx := r.Context()
-		taskLen, _ := db.Redis.Get(ctx, "queue:tasks:length").Int64()
-		vipLen, _ := db.Redis.Get(ctx, "queue:vip:length").Int64()
+		taskLen, _ := db.Redis.Get(ctx, db.RedisKey("queue:tasks:length")).Int64()
+		vipLen, _ := db.Redis.Get(ctx, db.RedisKey("queue:vip:length")).Int64()
 		stats.TaskQueueLength = int(taskLen)
 		stats.VIPQueueLength = int(vipLen)
 	}
@@ -61,8 +61,8 @@ func (h *AdminHandler) FlushQueue(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	// 通过设置标志通知 worker 清空队列
-	db.Redis.Set(ctx, "queue:flush", "1", 10*time.Second)
+	// 通过设置标志通知 worker 清空队列（统一键前缀）
+	db.Redis.Set(ctx, db.RedisKey("queue:flush"), "1", 10*time.Second)
 
 	OK(w, map[string]string{"status": "flush_requested"})
 }
@@ -78,13 +78,13 @@ func (h *AdminHandler) PauseQueue(w http.ResponseWriter, r *http.Request) {
 
 	queuePaused.Store(body.Pause)
 
-	// 通过 Redis 通知所有 worker
+	// 通过 Redis 通知所有 worker（统一键前缀）
 	if db.Redis != nil {
 		ctx := r.Context()
 		if body.Pause {
-			db.Redis.Set(ctx, "queue:paused", "1", 0)
+			db.Redis.Set(ctx, db.RedisKey("queue:paused"), "1", 0)
 		} else {
-			db.Redis.Del(ctx, "queue:paused")
+			db.Redis.Del(ctx, db.RedisKey("queue:paused"))
 		}
 	}
 

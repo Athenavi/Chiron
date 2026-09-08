@@ -14,7 +14,9 @@ from pydantic import BaseModel
 
 from app.db import get_pool
 from app.main import get_gateway
-from app.workflow.engine import get_instance, run_workflow
+from app.redis_keys import rkey
+from app.workflow.engine import get_instance
+from app.workflow.executor import execute_with_checkpoint
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +38,46 @@ class GraphExecuteRequest(BaseModel):
     nodes: list[dict[str, Any]] = []
     edges: list[dict[str, Any]] = []
     initial_state: dict[str, Any] = {}
+
+
+async def _enqueue_workflow_run(
+    instance_id: str, user_id: str, graph_json: dict, initial_state: dict
+) -> bool:
+    """投递 workflow_run 到 engine:tasks（跨实例消费组，断点续跑执行）。失败返回 False。"""
+    from app.redis_client import get_redis
+
+    try:
+        redis = await get_redis()
+    except Exception:  # noqa: BLE001
+        redis = None
+    if redis is None:
+        return False
+    msg = {
+        "task_id": instance_id,
+        "task_type": "workflow_run",
+        "tenant_id": "",
+        "payload": json.dumps(
+            {
+                "instance_id": instance_id,
+                "user_id": user_id,
+                "graph_json": graph_json,
+                "initial_state": initial_state,
+            },
+            ensure_ascii=False,
+        ),
+        "created_at": datetime.datetime.now(datetime.timezone.utc).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        ),
+        "retry_count": "0",
+        "trace_id": "",
+        "priority": "0",
+    }
+    try:
+        await redis.xadd(rkey("engine:tasks"), msg, maxlen=100000)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("workflow_run enqueue failed: %s", exc)
+        return False
 
 
 @router.get("/v1/graphs")
@@ -218,64 +260,19 @@ async def execute_graph(
     except Exception as e:
         logger.warning("workflow instance insert failed: %s", e)
 
-    task = asyncio.create_task(
-        _run_and_store(instance_id, graph_json, gateway, body.initial_state, user_id)
-    )
-    _background_tasks.add(task)
-    task.add_done_callback(_background_tasks.discard)
+    # 断点续跑：投递 engine:tasks 由队列 worker 消费执行（executor 幂等 + checkpoint 续跑）；
+    # Redis/队列不可达回退本进程执行，保证可用性。
+    if not await _enqueue_workflow_run(instance_id, user_id, graph_json, body.initial_state):
+        logger.warning("workflow enqueue failed, running in-process: %s", instance_id)
+        task = asyncio.create_task(
+            execute_with_checkpoint(
+                instance_id, graph_json, body.initial_state, user_id, gateway
+            )
+        )
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
 
     return {"instance_id": instance_id, "status": "running", "workflow": graph_name}
-
-
-async def _run_and_store(
-    instance_id: str,
-    graph_json: dict,
-    gateway: Any,
-    initial_state: dict[str, Any],
-    user_id: str = "",
-) -> None:
-    """后台执行工作流并把最终结果写回 workflow_instances。"""
-    # 工具沙箱上下文：create_task 不继承 contextvars，必须在任务内显式设置
-    # （MCP 插件工具/技能等按当前用户过滤，S 安全修复）
-    from app.tools.context import set_tool_context
-
-    set_tool_context(
-        session_id=instance_id, user_id=user_id or "", tenant_id=user_id or ""
-    )
-
-    status = "error"
-    results_json = "{}"
-    error_text = ""
-    try:
-        instance = await run_workflow(
-            graph_json, gateway, initial_state, instance_id=instance_id
-        )
-        if instance.status == "completed":
-            status = "completed"
-        else:
-            error_text = "workflow execution failed"
-        results_json = json.dumps(
-            {
-                nid: {"status": nr.status, "output": nr.output}
-                for nid, nr in instance.results.items()
-            }
-        )
-    except Exception as e:  # noqa: BLE001
-        logger.error("workflow background execution failed: %s", e)
-        error_text = str(e)
-
-    try:
-        pool = get_pool()
-        await pool.execute(
-            """UPDATE workflow_instances SET status = $1, results = $2, error = $3, updated_at = NOW()
-               WHERE id = $4""",
-            status,
-            results_json,
-            error_text or None,
-            instance_id,
-        )
-    except Exception as e:
-        logger.warning("workflow instance update failed: %s", e)
 
 
 @router.get("/v1/workflows/instances")

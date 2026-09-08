@@ -92,6 +92,11 @@ func (c *RPAClient) SendMessage(msg RPAMessage) error {
 }
 
 // ── RPAHub ──
+//
+// ⚠️ 单实例拓扑限制：clients/pending 均为进程内注册表，不做跨实例共享。
+// 多实例部署时，浏览器插件与 UI 的 WebSocket 必须落在同一网关实例（依赖 LB 会话亲和），
+// 否则命令在目标实例的 hub 中找不到对端连接。如需跨实例 RPA，应把该 hub 桥接升级为
+// Redis Pub/Sub（同 broadcast.Hub 模式）或独立 RPA 网关。
 
 type RPAHub struct {
 	mu      sync.RWMutex
@@ -259,7 +264,7 @@ func (h *RPAHub) ConnectedClientIDs() []string {
 var rpaUpgrader = websocket.Upgrader{
 	ReadBufferSize:  4096,
 	WriteBufferSize: 4096,
-	CheckOrigin: checkWebSocketOrigin,
+	CheckOrigin:     checkWebSocketOrigin,
 }
 
 const (

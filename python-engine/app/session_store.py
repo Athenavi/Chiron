@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from collections import OrderedDict
 from typing import Optional
 
@@ -27,6 +28,8 @@ logger = logging.getLogger(__name__)
 
 REDIS_KEY_PREFIX = rkey("session_cache:")
 REDIS_TTL_SECONDS = 7200  # 2 小时
+# 降级后 Redis 重探间隔：Redis 抖动恢复后自愈回共享后端
+REDIS_RETRY_AFTER_SECS = 5.0
 
 
 class SessionStore:
@@ -35,9 +38,25 @@ class SessionStore:
     def __init__(self, redis_client=None, max_sessions: int = 200):
         self._redis = redis_client
         self._redis_enabled = redis_client is not None
+        # 降级后重探窗口：Redis 抖动恢复后自动回到共享后端，避免实例永久“假降级”
+        self._redis_retry_at = 0.0
         self._max_sessions = max_sessions
         # 内存降级后端（仅 Redis 不可用时使用）
         self._local: OrderedDict[str, list[dict]] = OrderedDict()
+
+    def _redis_usable(self) -> bool:
+        """是否尝试 Redis：正常启用，或降级后已到重探窗口（重开一次，失败会再次禁用）。"""
+        if self._redis_enabled:
+            return True
+        if time.monotonic() >= self._redis_retry_at:
+            self._redis_enabled = True
+            logger.info("SessionStore re-probing Redis after degraded window")
+        return self._redis_enabled
+
+    def _disable_redis(self) -> None:
+        """降级到本地，并安排一段时间后的重探（当前实例级标记，不修改共享 self._redis）。"""
+        self._redis_enabled = False
+        self._redis_retry_at = time.monotonic() + REDIS_RETRY_AFTER_SECS
 
     # ── 公共接口 ──
 
@@ -53,15 +72,13 @@ class SessionStore:
             )
             return self._local_get_or_init(session_id, history)
 
-        # 尝试 Redis 后端
-        if self._redis_enabled:
+        # 尝试 Redis 后端（降级后到窗口自动重探一次）
+        if self._redis_usable():
             try:
                 return await self._redis_get_or_init(session_id, history)
             except Exception as e:
                 logger.warning("Redis session get failed, fallback to local: %s", e)
-                self._redis_enabled = (
-                    False  # 降级（仅降级当前实例，不修改共享 self._redis）
-                )
+                self._disable_redis()
 
         # 内存降级
         return self._local_get_or_init(session_id, history)
@@ -79,25 +96,25 @@ class SessionStore:
             self._local_set(session_id, messages)
             return
 
-        if self._redis_enabled:
+        if self._redis_usable():
             try:
                 await self._redis_set(session_id, messages)
                 return
             except Exception:
-                self._redis_enabled = False
+                self._disable_redis()
 
         self._local_set(session_id, messages)
 
     async def get(self, session_id: str) -> Optional[list[dict]]:
-        if self._redis_enabled:
+        if self._redis_usable():
             try:
                 return await self._redis_get(session_id)
             except Exception:
-                self._redis_enabled = False
+                self._disable_redis()
         return self._local.get(session_id)
 
     async def remove(self, session_id: str) -> None:
-        if self._redis_enabled:
+        if self._redis_usable():
             try:
                 await self._redis.delete(REDIS_KEY_PREFIX + session_id)
             except Exception:
@@ -106,7 +123,7 @@ class SessionStore:
 
     async def clear(self) -> None:
         self._local.clear()
-        if self._redis_enabled:
+        if self._redis_usable():
             try:
                 cursor = 0
                 while True:

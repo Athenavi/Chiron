@@ -52,7 +52,7 @@ type jobRow struct {
 // StartCronScheduler 启动调度器（goroutine 内运行）。
 func StartCronScheduler(ctx context.Context, python *engine.PythonClient) {
 	s := &CronScheduler{
-		cron:    cron.New(),
+		cron:    cron.New(cron.WithLocation(time.UTC)), // 各网关实例调度基准统一 UTC（租约防重不变）
 		entries: map[string]cronEntry{},
 		python:  python,
 	}

@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"context"
@@ -186,11 +186,11 @@ func quotaPeriodKey(tenantID, period string, now time.Time) (key string, start, 
 	now = now.UTC()
 	if period == "daily" {
 		start = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-		return fmt.Sprintf("ent:quota:tokens:%s:%s", tenantID, now.Format("20060102")),
+		return db.RedisKey(fmt.Sprintf("ent:quota:tokens:%s:%s", tenantID, now.Format("20060102"))),
 			start, start.AddDate(0, 0, 1)
 	}
 	start = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
-	return fmt.Sprintf("ent:quota:tokens:%s:%s", tenantID, now.Format("200601")),
+	return db.RedisKey(fmt.Sprintf("ent:quota:tokens:%s:%s", tenantID, now.Format("200601"))),
 		start, start.AddDate(0, 1, 0)
 }
 
