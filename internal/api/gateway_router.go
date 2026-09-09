@@ -450,7 +450,11 @@ func NewGatewayRouter(
 	NewMarketHandler().RegisterRoutes(mux, authMW)
 
 	// Enterprise model router（authMW + RequireEntPerm("model:route")）：租户模型路由配置
-	NewEntModelRouterHandler().RegisterRoutes(mux, authMW)
+	// 修复：InitTable 原设计"服务启动时调用"但缺失调用点，导致引擎启动拉取
+	// /v1/internal/model-routes 时 500（ent_model_routes 表不存在）。此处建表后再注册。
+	modelRouter := NewEntModelRouterHandler()
+	modelRouter.InitTable()
+	modelRouter.RegisterRoutes(mux, authMW)
 
 	// Enterprise webhook（authMW + RequireEntPerm("webhook:manage")）：事件通知
 	// 企业 Webhook 可靠投递器：Redis 消费组跨实例投递（入口 IngestEvent 已持久化入流）

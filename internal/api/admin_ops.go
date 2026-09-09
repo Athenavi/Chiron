@@ -776,34 +776,9 @@ func (h *AdminHandler) DeleteModel(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListUserModels 用户侧可用模型（仅 enabled）：GET /v1/models
+// 动态发现实现见 model_discovery.go（按已配置 provider 的 keyset 实时拉取并缓存到 llm_models）。
 func ListUserModels(w http.ResponseWriter, r *http.Request) {
-	pool := db.ReadPool()
-	if pool == nil {
-		ServiceUnavailable(w, "database not available")
-		return
-	}
-	rows, err := pool.Query(r.Context(),
-		`SELECT provider, name, display_name, context_window FROM llm_models
-		 WHERE enabled = true ORDER BY provider, name`)
-	if err != nil {
-		logAndRespond(w, err, http.StatusInternalServerError, "list models failed")
-		return
-	}
-	defer rows.Close()
-	type model struct {
-		Provider      string `json:"provider"`
-		Name          string `json:"name"`
-		DisplayName   string `json:"display_name"`
-		ContextWindow int    `json:"context_window"`
-	}
-	out := []model{}
-	for rows.Next() {
-		var m model
-		if rows.Scan(&m.Provider, &m.Name, &m.DisplayName, &m.ContextWindow) == nil {
-			out = append(out, m)
-		}
-	}
-	OK(w, map[string]interface{}{"models": out})
+	ListModelsForUser(w, r)
 }
 
 // ── 定时任务 ──
