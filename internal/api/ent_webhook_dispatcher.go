@@ -30,7 +30,7 @@ const (
 	webhookEventsMaxLen = 100000 // 入流/重投 MAXLEN
 	webhookDLQMaxLen    = 10000
 	webhookGroup        = "webhook-workers"
-	webhookMaxRetries   = 3            // 消息级 requeue 上限（每次 requeue 内部含 3 次退避投递）
+	webhookMaxRetries   = 3                // 消息级 requeue 上限（每次 requeue 内部含 3 次退避投递）
 	webhookClaimIdle    = 90 * time.Second // 崩溃认领阈值
 	webhookClaimEvery   = 60 * time.Second // 认领扫描周期
 )

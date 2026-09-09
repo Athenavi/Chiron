@@ -869,9 +869,28 @@ async def agent_submit(
         _ACTIVE_RUNTIMES[session_id] = (runtime, task.user_id)
 
     async def event_generator():
+        total_in = 0
+        total_out = 0
+        started = time.monotonic()
         try:
             async for event in runtime.run(task):
+                if event.input_tokens:
+                    total_in += event.input_tokens
+                if event.output_tokens:
+                    total_out += event.output_tokens
                 yield f"data: {json.dumps({'type': event.type, 'content': event.content or event.error, 'id': event.tool_call_id, 'name': event.tool_name, 'arguments': event.tool_arguments, 'input_tokens': event.input_tokens, 'output_tokens': event.output_tokens}, ensure_ascii=False)}\n\n"
+            # 正常收尾 → Webhook agent.complete（主对话收尾统一出口；失败不影响主流程）
+            if session_id:
+                try:
+                    from app.event_bus import emit_agent_complete
+
+                    await emit_agent_complete(
+                        session_id, task.user_id or "", task.tenant_id or "default",
+                        tokens_used=total_in + total_out,
+                        duration_ms=int((time.monotonic() - started) * 1000),
+                    )
+                except Exception as wh_err:  # noqa: BLE001
+                    logger.debug("agent webhook emit failed: %s", wh_err)
         except asyncio.CancelledError:
             # 客户端断开/网关取消：ASGI 取消流式生成器 → 取消传播中止 agent 循环（无 shield）。
             # 不吞取消：重新抛出，保持 finally（_ACTIVE_RUNTIMES 清理等）正常执行。
@@ -883,6 +902,19 @@ async def agent_submit(
         except Exception as e:
             logger.error("Agent submit error: %s", e)
             yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+            # 异常收尾 → Webhook agent.error
+            if session_id:
+                try:
+                    from app.event_bus import emit_agent_error
+
+                    await emit_agent_error(
+                        session_id, task.user_id or "", task.tenant_id or "default",
+                        error=str(e),
+                        tokens_used=total_in + total_out,
+                        duration_ms=int((time.monotonic() - started) * 1000),
+                    )
+                except Exception as wh_err:  # noqa: BLE001
+                    logger.debug("agent webhook emit failed: %s", wh_err)
         finally:
             if session_id:
                 _ACTIVE_RUNTIMES.pop(session_id, None)

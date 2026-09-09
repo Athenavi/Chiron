@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 from typing import Any
 
 from app.config import settings
@@ -41,6 +42,7 @@ async def emit_event(event_type: str, payload: dict[str, Any], tenant_id: str = 
 
     tenant = tenant_id or payload.get("tenant_id", "default")
     body = {
+        "id": uuid.uuid4().hex[:16],  # 事件幂等键（网关透传 X-Webhook-Event-Id，接收方去重）
         "tenant_id": tenant,
         "type": event_type,
         "payload": payload,

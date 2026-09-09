@@ -179,7 +179,7 @@ func (h *AdminHandler) AddLLMKey(w http.ResponseWriter, r *http.Request) {
 
 	if _, err := db.Pool.Exec(r.Context(),
 		`INSERT INTO llm_provider_keys (id, provider, encrypted_key, key_hash, status, remark, created_at, updated_at)
-		 VALUES (gen_random_uuid(), $1, $2, $3, 'active', $4, NOW(), NOW())`,
+		 VALUES (gen_random_uuid()::text, $1, $2, $3, 'active', $4, NOW(), NOW())`,
 		body.Provider, cipher, keyHash, nullIfEmpty(body.Remark)); err != nil {
 		slog.Error("insert llm key", "error", err)
 		InternalError(w, "failed to add api key")

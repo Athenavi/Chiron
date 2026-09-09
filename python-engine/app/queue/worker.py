@@ -583,6 +583,28 @@ class QueueWorker:
         if errors:
             logger.warning("rag_index 部分文档失败，KB 置 error: %s", errors)
 
+        # Webhook 事件（knowledge.ingest/ingest_error）：跨实例统一出口（队列 worker）
+        try:
+            from app.event_bus import emit_event
+
+            kb_payload = {
+                "kb_id": kb_id,
+                "user_id": user_id,
+                "documents": [d.get("doc_id") for d in documents],
+                "doc_count": len(documents),
+            }
+            if errors:
+                kb_payload["errors"] = errors[:20]
+                await emit_event(
+                    "knowledge.ingest_error", kb_payload, tenant_id=user_id or "default"
+                )
+            else:
+                await emit_event(
+                    "knowledge.ingest", kb_payload, tenant_id=user_id or "default"
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("knowledge webhook emit failed: %s", exc)
+
     async def _handle_memory_save(self, payload: dict, tenant_id: str = "") -> None:
         """处理记忆持久化任务
 

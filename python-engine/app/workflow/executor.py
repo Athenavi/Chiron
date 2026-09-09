@@ -116,3 +116,20 @@ async def execute_with_checkpoint(
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning("workflow instance final update failed: %s", exc)
+
+    # Webhook 事件（workflow.complete/error）：统一出口在队列 executor（跨实例一致）
+    try:
+        from app.event_bus import emit_event
+
+        wf_payload = {
+            "instance_id": instance_id,
+            "user_id": user_id,
+            "status": final_status,
+            "graph_name": (graph_json or {}).get("name", ""),
+            "results": json.loads(results_json) if results_json and results_json != "{}" else {},
+            "error": error_text or "",
+        }
+        event_type = "workflow.complete" if final_status == "completed" else "workflow.error"
+        await emit_event(event_type, wf_payload, tenant_id=user_id or "default")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("workflow webhook emit failed: %s", exc)

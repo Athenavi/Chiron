@@ -199,8 +199,8 @@ func (h *EntWebhookHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	retryRaw, _ := json.Marshal(map[string]interface{}{
-		"max_retries":      3,
-		"backoff_seconds":  5,
+		"max_retries":     3,
+		"backoff_seconds": 5,
 	})
 	eventTypesRaw, _ := json.Marshal(body.EventTypes)
 	id := newUUID()
