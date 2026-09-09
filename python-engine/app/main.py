@@ -177,27 +177,38 @@ async def lifespan(app: FastAPI):
             "deepseek": [settings.deepseek_api_key] if settings.deepseek_api_key else [],
         },
     )
-    if settings.anthropic_api_key:
+    # DR 集中派(管理端 /v1/admin/api-keys 添加的 key 经网关写入 Redis keyset
+    # llm:keys:{provider}):provider 注册条件 = env 种子非空 或 keyset 已存在该 provider 的 key。
+    # 仅凭 keyset 时以占位 key 构造(调用时 _resolve_client 会用 keyset 活跃 key 建真实 client)。
+    placeholder = "sk-chiron-keyset-managed"
+
+    async def _keyset_has(provider: str) -> bool:
+        try:
+            return len(await _key_ring.active_keys(provider)) > 0
+        except Exception:
+            return False
+
+    if settings.anthropic_api_key or await _keyset_has("anthropic"):
         from app.providers.anthropic import AnthropicProvider
 
         providers["anthropic"] = AnthropicProvider(
-            api_key=settings.anthropic_api_key,
+            api_key=settings.anthropic_api_key or placeholder,
             base_url=settings.anthropic_base_url,
             key_ring=_key_ring,
         )
-    if settings.openai_api_key or settings.llm_api_key:
+    if (settings.openai_api_key or settings.llm_api_key) or await _keyset_has("openai"):
         from app.providers.openai import OpenAIProvider
 
         providers["openai"] = OpenAIProvider(
-            api_key=settings.openai_api_key or settings.llm_api_key,
+            api_key=(settings.openai_api_key or settings.llm_api_key) or placeholder,
             base_url=settings.openai_base_url or settings.llm_base_url,
             key_ring=_key_ring,
         )
-    if settings.deepseek_api_key:
+    if settings.deepseek_api_key or await _keyset_has("deepseek"):
         from app.providers.deepseek import DeepSeekProvider
 
         providers["deepseek"] = DeepSeekProvider(
-            api_key=settings.deepseek_api_key,
+            api_key=settings.deepseek_api_key or placeholder,
             base_url=settings.deepseek_base_url,
             key_ring=_key_ring,
         )
