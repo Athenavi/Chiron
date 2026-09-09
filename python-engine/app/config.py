@@ -152,6 +152,9 @@ class Settings(BaseSettings):
     # ── 实例标识（K8s 注入）──
     pod_name: str = ""
     instance_id: str = ""
+    # 引擎对外可达地址（批 E1 动态发现）：如 http://engine-0:8000;
+    # 为空则引擎不向 Redis 注册,网关回退静态 PYTHON_ENGINE_ADDRESS。
+    engine_advertise_url: str = ""
 
     # extra="ignore"：项目根 .env 混有 Go 网关变量（PORT/CORS_ORIGINS 等），
     # Python 引擎只取自己声明的字段，其余忽略

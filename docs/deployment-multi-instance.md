@@ -68,6 +68,7 @@ docker compose up -d --scale gateway=2 --scale python-engine=2
 | `HTTP_HOST` | `0.0.0.0`(引擎) | 引擎必须对外监听供网关访问 |
 | `MCP_POOL_ENABLED` | `true` | 每启用副本对活跃用户各持 MCP 连接;副本增多后按需关闭部分实例 |
 | `INSTANCE_ID` | 空 | K8s 注入;compose 留空由引擎自生成 |
+| `ENGINE_ADVERTISE_URL` | 空(批 E1) | 引擎对外可达地址(如 `http://engine-0:8000`),设置后引擎向 Redis 自注册、网关 15s 内动态感知扩缩容;为空则不注册,网关回退 `PYTHON_ENGINE_ADDRESS` 静态列表 |
 
 ## 3. 存储分层(定案)
 
@@ -93,17 +94,19 @@ K8s/云部署等价物:沙箱与插件用 PVC 或 EFS(同区);本地起步可用
 4. **实时通道统一为 SSE(批 B-3′)**:`GET /ws/{sessionId}` 与 WebSocketHub 已下线
    (Vue 前端仅使用 EventSource);SSE 经 Redis Stream + Pub/Sub 跨副本一致,并支持
    Last-Event-ID 断线重放。RPA 插件通道 `GET /ws/rpa` 不受影响。
-5. **引擎横向扩展**:会话消息 Redis 化、后台任务 Redis Streams 消费组分摊;
-   但**agent 进行中 run 的现场状态在进程内**——会话亲和路由是尽力而为,
-   实例故障时该 run 会失败(批 E 将做 checkpoint)。文件工具结果依赖共享沙箱卷。
+5. **引擎横向扩展(批 E1/E2 已落地)**:会话消息 Redis 化、后台任务 Redis Streams 消费组分摊;
+   引擎配 `ENGINE_ADVERTISE_URL` 即向 Redis 自注册,网关每 15s 动态感知扩缩容
+   (注册表为空时回退静态 `PYTHON_ENGINE_ADDRESS`);
+   **注意**:agent 进行中 run 的现场状态仍在进程内——会话亲和为尽力而为,实例故障时
+   该 run 中断;会话 run 锁已改为 5min TTL + 60s 心跳续期(批 E2),用户 ≤5min 后可
+   重试(历史消息已持久化)。文件工具结果依赖共享沙箱卷。
 6. **RPA 浏览器桥(批 D)**:插件 WS 与 `/v1/rpa/exec` 可落在不同网关副本,
    经 Redis 注册中心路由(通道 `rpa:cmd` / `rpa:res`,key `rpa:client:*`)。
    Redis 不可用时网关自动退回单机模式(`localOnly`),此时仍需单实例/粘性。
-7. 扩容引擎后记得更新所有网关的 `PYTHON_ENGINE_ADDRESS`(当前为静态清单)。
+7. 扩容引擎:启用 E1(`ENGINE_ADVERTISE_URL`)后网关自动感知,无需再改静态清单。
 
 ## 5. 已知剩余项(后续批次,不影响上述基线运行)
 
-- 批 E:引擎实例自动注册/发现;agent run 现场 checkpoint。
 - 批 F:迁移收敛为发布流程单点执行;RLS 逐表核查。
 
 ## 6. 验证冒烟

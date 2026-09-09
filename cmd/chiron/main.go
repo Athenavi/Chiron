@@ -213,6 +213,10 @@ func main() {
 				return
 			}
 			api.StartCronScheduler(lifecycleCtx, pythonClient)
+			// 批 E1：引擎 Redis 动态发现——注册表非空则动态优先，为空/Redis 不可用回退静态地址
+			if db.Redis != nil {
+				engine.StartEngineDiscovery(lifecycleCtx, db.Redis, pythonClient)
+			}
 			slog.Info("python engine configured", "addresses", addrs)
 		}
 	} else if !setupMode {

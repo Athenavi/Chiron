@@ -12,7 +12,9 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -40,17 +42,26 @@ func sessionFromCtx(ctx context.Context) string {
 	return ""
 }
 
+// pyAddrEntry 单个引擎地址及其熔断冷却状态（Unix 秒，0=正常）。
+type pyAddrEntry struct {
+	url           string
+	cooldownUntil int64
+}
+
 // PythonClient calls the Python AI engine via HTTP SSE.
 // Supports multiple addresses with round-robin load balancing.
+// 地址表（批 E1）：由 mu 保护的动态列表——StartEngineDiscovery 每 15s 从 Redis
+// 引擎注册表刷新（动态优先）；注册表为空/Redis 不可用时回退 staticAddrs
+// （PYTHON_ENGINE_ADDRESS 构造值），扩容缩容无需手工改配置。
 type PythonClient struct {
-	addresses     []string
-	counter       uint64
+	mu          sync.RWMutex
+	addrs       []pyAddrEntry // 当前地址表
+	staticAddrs []string      // 构造时的静态地址（发现回退）
+	counter     uint64
+
 	client        *http.Client // 同步 JSON/管理请求（允许慢响应头：编排任务可能数十秒才返回）
 	streamClient  *http.Client // SSE 流式请求（引擎 StreamingResponse 秒级发头，故可用短响应头超时快速失败）
 	internalToken string       // Go↔Python 共享内部 token，用于网关代理身份校验
-
-	// 熔断：每个地址的冷却截止时间（Unix 秒），0 = 正常
-	cooldownUntil []int64
 }
 
 // RetryConfig 请求重试配置
@@ -72,13 +83,7 @@ var defaultRetryConfig = RetryConfig{
 // Accepts one or more base URLs (comma-separated or variadic).
 // Requests are distributed across addresses using round-robin.
 func NewPythonClient(addresses ...string) *PythonClient {
-	addrs := make([]string, 0, len(addresses))
-	for _, a := range addresses {
-		a = strings.TrimSpace(a)
-		if a != "" {
-			addrs = append(addrs, a)
-		}
-	}
+	addrs := normalizeURLs(addresses)
 	if len(addrs) == 0 {
 		addrs = []string{"http://localhost:8000"}
 	}
@@ -111,12 +116,86 @@ func NewPythonClient(addresses ...string) *PythonClient {
 		Transport: newTransport(true),
 	}
 
-	return &PythonClient{
-		addresses:     addrs,
-		client:        syncClient,
-		streamClient:  streamClient,
-		cooldownUntil: make([]int64, len(addrs)),
+	c := &PythonClient{
+		client:       syncClient,
+		streamClient: streamClient,
+		staticAddrs:  append([]string(nil), addrs...),
+		addrs:        make([]pyAddrEntry, len(addrs)),
 	}
+	for i, a := range addrs {
+		c.addrs[i] = pyAddrEntry{url: a}
+	}
+	return c
+}
+
+// normalizeURLs 清洗地址列表：去空白、补 http:// 前缀、去重保序。
+func normalizeURLs(in []string) []string {
+	seen := make(map[string]struct{}, len(in))
+	out := make([]string, 0, len(in))
+	for _, raw := range in {
+		a := strings.TrimSpace(raw)
+		if a == "" {
+			continue
+		}
+		if !strings.HasPrefix(a, "http://") && !strings.HasPrefix(a, "https://") {
+			a = "http://" + a
+		}
+		if _, dup := seen[a]; dup {
+			continue
+		}
+		seen[a] = struct{}{}
+		out = append(out, a)
+	}
+	return out
+}
+
+// snapshot 返回地址表当前快照（锁内复制）。
+func (c *PythonClient) snapshot() []pyAddrEntry {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	out := make([]pyAddrEntry, len(c.addrs))
+	copy(out, c.addrs)
+	return out
+}
+
+// StaticAddresses 返回构造时的静态地址列表（发现回退用）。
+func (c *PythonClient) StaticAddresses() []string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return append([]string(nil), c.staticAddrs...)
+}
+
+// SetAddresses 全量替换引擎地址表（StartEngineDiscovery 调用）。
+// 保留仍存在地址的冷却状态；地址顺序即优先级顺序。返回是否发生变化。
+func (c *PythonClient) SetAddresses(urls []string) bool {
+	list := normalizeURLs(urls)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// 与当前表比较
+	if len(list) == len(c.addrs) {
+		same := true
+		for i := range list {
+			if c.addrs[i].url != list[i] {
+				same = false
+				break
+			}
+		}
+		if same {
+			return false
+		}
+	}
+
+	old := make(map[string]int64, len(c.addrs))
+	for _, e := range c.addrs {
+		old[e.url] = e.cooldownUntil
+	}
+	next := make([]pyAddrEntry, len(list))
+	for i, u := range list {
+		next[i] = pyAddrEntry{url: u, cooldownUntil: old[u]}
+	}
+	c.addrs = next
+	return true
 }
 
 // HealthCheck 对 Python 引擎执行健康检查（GET /healthz），
@@ -130,9 +209,11 @@ func (c *PythonClient) HealthCheck(ctx context.Context) map[string]interface{} {
 		LatencyMs int64  `json:"latency_ms,omitempty"`
 		Error     string `json:"error,omitempty"`
 	}
-	addrs := make(map[string]addrStatus, len(c.addresses))
+	entries := c.snapshot()
+	addrs := make(map[string]addrStatus, len(entries))
 
-	for _, addr := range c.addresses {
+	for _, e := range entries {
+		addr := e.url
 		status := addrStatus{Status: "down"}
 		start := time.Now()
 		req, err := http.NewRequestWithContext(ctx, "GET", addr+"/healthz", nil)
@@ -166,8 +247,8 @@ func (c *PythonClient) HealthCheck(ctx context.Context) map[string]interface{} {
 
 	result["addresses"] = addrs
 	result["healthy"] = allUp
-	result["total_addresses"] = len(c.addresses)
-	if len(c.addresses) == 0 {
+	result["total_addresses"] = len(entries)
+	if len(entries) == 0 {
 		result["healthy"] = false
 		result["error"] = "no addresses configured"
 	}
@@ -207,9 +288,11 @@ const pythonResponseHeaderTimeout = 10 * time.Second
 // markFailure 记录地址失败，进入冷却
 func (c *PythonClient) markFailure(addr string) {
 	until := time.Now().Add(pythonCooldown).Unix()
-	for i, a := range c.addresses {
-		if a == addr {
-			atomic.StoreInt64(&c.cooldownUntil[i], until)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for i := range c.addrs {
+		if c.addrs[i].url == addr {
+			c.addrs[i].cooldownUntil = until
 			return
 		}
 	}
@@ -217,9 +300,11 @@ func (c *PythonClient) markFailure(addr string) {
 
 // markSuccess 清除地址冷却
 func (c *PythonClient) markSuccess(addr string) {
-	for i, a := range c.addresses {
-		if a == addr {
-			atomic.StoreInt64(&c.cooldownUntil[i], 0)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for i := range c.addrs {
+		if c.addrs[i].url == addr {
+			c.addrs[i].cooldownUntil = 0
 			return
 		}
 	}
@@ -320,27 +405,26 @@ func (c *PythonClient) doWith(httpClient *http.Client, req *http.Request) (*http
 
 // pickAddress returns the next address using round-robin.
 func (c *PythonClient) pickAddress() string {
-	if len(c.addresses) == 0 {
+	entries := c.snapshot()
+	if len(entries) == 0 {
 		return "http://localhost:8000"
 	}
 	now := time.Now().Unix()
-	start := int(atomic.AddUint64(&c.counter, 1)) % len(c.addresses)
-	for i := 0; i < len(c.addresses); i++ {
-		idx := (start + i) % len(c.addresses)
-		if atomic.LoadInt64(&c.cooldownUntil[idx]) <= now {
-			return c.addresses[idx]
+	start := int(atomic.AddUint64(&c.counter, 1)) % len(entries)
+	for i := 0; i < len(entries); i++ {
+		idx := (start + i) % len(entries)
+		if entries[idx].cooldownUntil <= now {
+			return entries[idx].url
 		}
 	}
 	// 全部地址冷却中：选择最快冷却完成的地址，避免选到不可用地址
 	earliestIdx := 0
-	earliestTime := atomic.LoadInt64(&c.cooldownUntil[0])
-	for i := 1; i < len(c.addresses); i++ {
-		if t := atomic.LoadInt64(&c.cooldownUntil[i]); t < earliestTime {
-			earliestTime = t
+	for i := 1; i < len(entries); i++ {
+		if entries[i].cooldownUntil < entries[earliestIdx].cooldownUntil {
 			earliestIdx = i
 		}
 	}
-	return c.addresses[earliestIdx]
+	return entries[earliestIdx].url
 }
 
 // addressFor 选择本次请求的引擎地址。
@@ -348,34 +432,51 @@ func (c *PythonClient) pickAddress() string {
 // 无 session → round-robin（pickAddress）。目标实例冷却中顺序探测下一健康实例
 // （故障漂移，记录日志）；全部冷却回退最快冷却完成地址。
 func (c *PythonClient) addressFor(ctx context.Context) string {
+	entries := c.snapshot()
+	if len(entries) == 0 {
+		return c.pickAddress()
+	}
 	key := sessionFromCtx(ctx)
-	if key == "" || len(c.addresses) == 0 {
+	if key == "" {
 		return c.pickAddress()
 	}
 	now := time.Now().Unix()
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(key))
-	start := int(h.Sum32()) % len(c.addresses)
-	for i := 0; i < len(c.addresses); i++ {
-		idx := (start + i) % len(c.addresses)
-		if atomic.LoadInt64(&c.cooldownUntil[idx]) <= now {
+	start := int(h.Sum32()) % len(entries)
+	for i := 0; i < len(entries); i++ {
+		idx := (start + i) % len(entries)
+		if entries[idx].cooldownUntil <= now {
 			if i > 0 {
 				slog.Info("python engine: session affinity drifted",
-					"session", key[:min(len(key), 16)], "from", c.addresses[start], "to", c.addresses[idx])
+					"session", key[:min(len(key), 16)], "from", entries[start].url, "to", entries[idx].url)
 			}
-			return c.addresses[idx]
+			return entries[idx].url
 		}
 	}
 	// 全部冷却中：取最快冷却完成的地址
 	earliestIdx := 0
-	earliest := atomic.LoadInt64(&c.cooldownUntil[0])
-	for i := 1; i < len(c.addresses); i++ {
-		if t := atomic.LoadInt64(&c.cooldownUntil[i]); t < earliest {
-			earliest = t
+	for i := 1; i < len(entries); i++ {
+		if entries[i].cooldownUntil < entries[earliestIdx].cooldownUntil {
 			earliestIdx = i
 		}
 	}
-	return c.addresses[earliestIdx]
+	return entries[earliestIdx].url
+}
+
+// sortStrings 排序去重辅助（discovery 用）。
+func sortUnique(in []string) []string {
+	if len(in) == 0 {
+		return nil
+	}
+	sort.Strings(in)
+	out := in[:1]
+	for _, s := range in[1:] {
+		if s != out[len(out)-1] {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // PythonRunRequest matches the Python engine's Pydantic RunRequest model.

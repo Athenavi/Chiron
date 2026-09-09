@@ -18,6 +18,13 @@ import (
 //  1. 同 session Redis 运行锁(agent:run-lock:<sid>,SET NX + TTL),杜绝重复执行;
 //  2. 取消经 Redis 广播(agent:cancel),持有该 session 的实例执行真实取消。
 // Redis 不可用时均兑底为本地行为并告警(与 SharedSemaphore 一致)。
+//
+// 批 E2（run 锁可恢复性）：
+//   - 锁值改为每次 run 的唯一 token(调用方生成),release 用 Lua compare-and-del
+//     (防旧 run 误删新 run 的锁);
+//   - TTL 收紧为 5min,持有者通过 RefreshSessionRunLock 每 60s 续期;
+//     实例崩溃后锁在 ≤5min 自动过期,同一 session 可重试(历史消息已持久化);
+//   - 续期同样校验 token,防止已易主的锁被旧持有者无限续期。
 
 var (
 	agentRunLockPrefix = db.RedisKey("agent:run-lock:")
@@ -25,12 +32,27 @@ var (
 )
 
 const (
-	agentRunLockTTL = 12 * time.Minute // 长任务兜底；正常结束显式释放
+	agentRunLockTTL = 5 * time.Minute // 崩溃后锁自动过期上限;持有者 60s 心跳续期
 )
 
-const sessionRunLockLua = `
+const sessionRunLockAcquireLua = `
 if redis.call('SET', KEYS[1], ARGV[1], 'NX', 'EX', ARGV[2]) then
   return 1
+end
+return 0
+`
+
+const sessionRunLockRefreshLua = `
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+  redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+  return 1
+end
+return 0
+`
+
+const sessionRunLockReleaseLua = `
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+  return redis.call('DEL', KEYS[1])
 end
 return 0
 `
@@ -38,14 +60,17 @@ return 0
 var errRedisUnavailable = errors.New("redis unavailable")
 
 // AcquireSessionRunLock 为 session 抢占跨实例运行锁（原子 SET NX + TTL）。
+// runToken 必须为本次 run 的唯一标识（由调用方生成，如 userID+随机 hex），
+// 用于续期与释放时的归属校验，避免旧 run 误删/续期新 run 的锁。
 // 返回：release（Redis 获锁时非 nil，任务结束/取消必须调用）、ok=是否持有、
 // err!=nil 表示 Redis 不可用——调用方应兑底为进程内 sessionCancels。
-func AcquireSessionRunLock(ctx context.Context, sessionID, owner string) (release func(), ok bool, err error) {
+func AcquireSessionRunLock(ctx context.Context, sessionID, runToken string) (release func(), ok bool, err error) {
 	if db.Redis == nil {
 		return nil, false, errRedisUnavailable
 	}
-	res := db.Redis.Eval(ctx, sessionRunLockLua,
-		[]string{agentRunLockPrefix + sessionID}, owner, int(agentRunLockTTL.Seconds()))
+	key := agentRunLockPrefix + sessionID
+	res := db.Redis.Eval(ctx, sessionRunLockAcquireLua,
+		[]string{key}, runToken, int(agentRunLockTTL.Seconds()))
 	if resErr := res.Err(); resErr != nil {
 		return nil, false, resErr
 	}
@@ -56,9 +81,32 @@ func AcquireSessionRunLock(ctx context.Context, sessionID, owner string) (releas
 	var once sync.Once
 	return func() {
 		once.Do(func() {
-			_ = db.Redis.Del(context.Background(), agentRunLockPrefix+sessionID).Err()
+			_ = releaseSessionRunLock(context.Background(), key, runToken)
 		})
 	}, true, nil
+}
+
+// RefreshSessionRunLock 续期运行锁 TTL（持有者心跳；值仍为本次 runToken 才续期）。
+// 返回是否续期成功（锁已易主或已过期时返回 false）。
+func RefreshSessionRunLock(ctx context.Context, sessionID, runToken string) bool {
+	if db.Redis == nil {
+		return false
+	}
+	key := agentRunLockPrefix + sessionID
+	res := db.Redis.Eval(ctx, sessionRunLockRefreshLua,
+		[]string{key}, runToken, int(agentRunLockTTL.Seconds()))
+	if resErr := res.Err(); resErr != nil {
+		slog.Debug("refresh session run lock failed", "session_id", sessionID, "error", resErr)
+		return false
+	}
+	n, _ := res.Int()
+	return n == 1
+}
+
+// releaseSessionRunLock compare-and-del 释放（仅当锁仍属于本次 runToken）。
+func releaseSessionRunLock(ctx context.Context, key, runToken string) error {
+	res := db.Redis.Eval(ctx, sessionRunLockReleaseLua, []string{key}, runToken)
+	return res.Err()
 }
 
 // CancelSessionBroadcast 把取消请求广播给所有网关实例（本实例未命中时调用）。

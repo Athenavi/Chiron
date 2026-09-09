@@ -370,8 +370,18 @@ async def lifespan(app: FastAPI):
     _metrics_task = asyncio.create_task(metrics_collector())
     logger.info("Process metrics collector started (interval=10s)")
 
-    # ── 8. 实例注册 ──（已移除：instance:{id} 注册无消费方且 60s 无续期即失效，
-    # 属误导性死功能；实例标识仍经 _get_instance_id 用于日志/info）
+    # ── 8. 实例注册（批 E1：引擎动态发现）──
+    # 网关 StartEngineDiscovery 每 15s 消费本注册表并动态更新引擎地址（替代静态清单）。
+    # 需 ENGINE_ADVERTISE_URL（引擎网络可达地址）;Redis 不可用/未配置时跳过,网关回退静态地址。
+    from app.engine_registry import EngineRegistry
+
+    _engine_registry = EngineRegistry(
+        redis=_redis,
+        instance_id=_get_instance_id(),
+        advertise_url=settings.engine_advertise_url,
+        version="3.0.0",
+    )
+    await _engine_registry.start()
 
     logger.info("=" * 60)
     logger.info("Ready. HTTP port: %d", settings.http_port)
@@ -407,6 +417,10 @@ async def lifespan(app: FastAPI):
     from app.db import close_pool
 
     await close_pool()
+
+    # 停止实例注册心跳（批 E1；优雅退出时主动注销）
+    if "_engine_registry" in locals() and _engine_registry:
+        await _engine_registry.stop()
 
     # 关闭 MCP 插件池
     if _plugin_pool:

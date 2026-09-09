@@ -579,7 +579,11 @@ func registerAgentRoutes(
 
 		// Reject concurrent submits within the same session（跨实例：Redis 运行锁）
 		ctx, cancel := context.WithTimeout(r.Context(), 180*time.Second)
-		releaseRun, runLocked, lockErr := AcquireSessionRunLock(r.Context(), body.SessionID, userID)
+		// 批 E2：每次 run 唯一 token（锁归属校验：续期/释放均需匹配，防旧 run 误删新锁）
+		var rnd [12]byte
+		_, _ = rand.Read(rnd[:])
+		runToken := userID + "-" + hex.EncodeToString(rnd[:])
+		releaseRun, runLocked, lockErr := AcquireSessionRunLock(r.Context(), body.SessionID, runToken)
 		if lockErr != nil {
 			// Redis 不可用：兑底进程内防重（多实例下退化为近似限制）
 			slog.Warn("session run lock degraded to in-process (redis unavailable)",
@@ -606,10 +610,36 @@ func registerAgentRoutes(
 			return
 		}
 
+		// 批 E2：run 锁心跳续期（60s/次，TTL=5min）。随 submit ctx 结束/run 完成自动停止；
+		// 持有实例崩溃后无续期，锁 ≤5min 自动过期，用户可重试（历史消息已持久化）。
+		var stopHeartbeat chan struct{}
+		if releaseRun != nil {
+			stopHeartbeat = make(chan struct{})
+			go func() {
+				ticker := time.NewTicker(60 * time.Second)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case <-stopHeartbeat:
+						return
+					case <-ticker.C:
+						if !RefreshSessionRunLock(ctx, body.SessionID, runToken) {
+							return // 锁已易主/过期：停止续期
+						}
+					}
+				}
+			}()
+		}
+
 		Accepted(w, map[string]string{"status": "accepted", "session_id": body.SessionID})
 		go func() {
 			if releaseRun != nil {
 				defer releaseRun()
+			}
+			if stopHeartbeat != nil {
+				defer close(stopHeartbeat)
 			}
 			defer releaseSem()
 			defer func() {
