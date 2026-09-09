@@ -386,6 +386,20 @@ func (h *AdminHandler) SaveSettings(w http.ResponseWriter, r *http.Request) {
 		h.hotReloadRedis(body.Config)
 	}
 
+	// cors：本实例立即生效（跨副本由下方广播的订阅者同步）
+	if body.Category == "cors" {
+		if v, ok := body.Config["origins"].(string); ok {
+			SetCORSAllowOrigin(v)
+			slog.Info("cors allowlist hot-reloaded", "origins", v)
+		}
+	}
+
+	// 跨副本广播（批 B-2′）：rate_limit / cors 由各副本订阅者即时热更；
+	// 其余分类（redis/storage/s3/payment/agent）在副本侧告警提示滚动重启。
+	if err := PublishSettingsChanged(ctx, body.Category, body.Config); err != nil {
+		slog.Warn("publish settings changed failed", "category", body.Category, "error", err)
+	}
+
 	slog.Info("settings saved", "category", body.Category, "keys", len(body.Config))
 	OK(w, map[string]interface{}{"status": "saved", "category": body.Category})
 }

@@ -72,7 +72,15 @@ func (h *BillingHandler) wechatNotifyURL() string {
 }
 
 func (h *BillingHandler) firstOrigin() string {
-	parts := strings.SplitN(h.cfg.CORSOrigins, ",", 2)
+	allow := currentCORSAllowOrigin()
+	if allow == "" && h.cfg != nil {
+		// 兜底：启动注入前的构造期值（正常路径 gateway_router 会先 SetCORSAllowOrigin）
+		allow = h.cfg.CORSOrigins
+	}
+	parts := strings.SplitN(allow, ",", 2)
+	if len(parts) == 0 {
+		return ""
+	}
 	return strings.TrimRight(parts[0], "/ ")
 }
 

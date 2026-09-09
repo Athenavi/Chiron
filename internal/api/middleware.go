@@ -33,8 +33,8 @@ type auditLogTask struct {
 }
 
 var (
-	auditLogCh     = make(chan auditLogTask, 4096) // 缓冲通道，防背压时丢弃
-	auditLogOnce   sync.Once
+	auditLogCh   = make(chan auditLogTask, 4096) // 缓冲通道，防背压时丢弃
+	auditLogOnce sync.Once
 )
 
 // StartAuditLogWorker 启动审计日志 worker（main.go 中调用一次）
@@ -310,20 +310,16 @@ func RecoverMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// CORSMiddleware 处理 CORS。allowOrigin 是逗号分隔白名单；"*" 在 AllowCredentials=true
-// 下违反 CORS 规范且高危，显式拒绝。
-func CORSMiddleware(allowOrigin string) func(http.Handler) http.Handler {
+// CORSMiddleware 处理 CORS。白名单取自进程内运行时共享源（cors_runtime.go）：
+// 启动由 gateway_router 注入 cfg.CORSOrigins，后台保存 cors 分类后本实例与
+// 跨副本订阅者热更新；"*" 在 AllowCredentials=true 下违反 CORS 规范且高危，显式拒绝。
+func CORSMiddleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			origin := r.Header.Get("Origin")
 			allowed := false
-			if allowOrigin != "*" && origin != "" {
-				for _, o := range strings.Split(allowOrigin, ",") {
-					if strings.TrimSpace(o) == origin {
-						allowed = true
-						break
-					}
-				}
+			if origin != "" && corsOriginAllowed(origin) {
+				allowed = true
 			}
 			if allowed {
 				w.Header().Set("Access-Control-Allow-Origin", origin)

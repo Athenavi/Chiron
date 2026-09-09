@@ -131,13 +131,16 @@ func realIPHeader(trustedCIDRs []string) func(http.Handler) http.Handler {
 func NewSetupRouter(cfg *config.Config) http.Handler {
 	mux := http.NewServeMux()
 
+	// 安装模式也注入运行时 CORS 白名单（批 B-2′：与业务路由共享同一来源）
+	SetCORSAllowOrigin(cfg.CORSOrigins)
+
 	publicMW := func(next http.Handler) http.Handler {
 		return middlewareChain(next,
 			RecoverMiddleware,
 			TracingMiddleware,
 			LoggingMiddleware,
 			SecurityHeadersMiddleware,
-			CORSMiddleware(cfg.CORSOrigins),
+			CORSMiddleware(),
 			MonitoringMiddleware,
 			requestIDHeader,
 			realIPHeader(cfg.TrustedProxyCIDRs),
@@ -181,8 +184,12 @@ func NewGatewayRouter(
 ) http.Handler {
 	mux := http.NewServeMux()
 
+	// 运行时 CORS 白名单注入（批 B-2′）：CORSMiddleware / checkWebSocketOrigin / billing 统一读该共享源
+	SetCORSAllowOrigin(cfg.CORSOrigins)
+
 	// Rate limiter — 当 Redis 可用时使用分布式限流器。
-	// P1-2: 单实例内存限流在多副本部署下计数独立，等于限流失效。
+	// 批 B-1′（令牌桶重构）：global/tenant/user 三级桶均为“每分钟配额（总量）”，
+	// 与网关副本数无关——不再按 RATE_LIMIT_INSTANCES 放大，天然适配多副本。
 	// 生产策略：
 	//   - Redis 可用：用分布式限流器（推荐）
 	//   - Redis 不可用 + 生产环境（cfg.RateLimitFailClose=true）：写操作拒绝
@@ -194,26 +201,28 @@ func NewGatewayRouter(
 		slog.Warn("RateLimitRPM is 0 or unset, using default 60 RPM")
 		rateLimitRPM = 60
 	}
+	// 缺省上限（总量语义）：global = RATE_LIMIT_GLOBAL（后台 rate_limit.global 保存后覆盖），
+	// tenant = global/10（下限不高于 rateLimitRPM），user = rateLimitRPM。
+	globalLimit := cfg.RateLimitGlobal
+	if globalLimit <= 0 {
+		globalLimit = rateLimitRPM
+	}
+	tenantLimit := globalLimit / 10
+	if tenantLimit < rateLimitRPM {
+		tenantLimit = rateLimitRPM
+	}
 	if atomicRedis != nil {
-		instances := cfg.RateLimitInstances
-		if instances < 1 {
-			instances = 1
-		}
-		// 分布式限流按实际网关实例数线性放大 global/tenant 上限；
-		// user 级上限固定为单实例 RPM（用户请求通常落在单一实例会话内）。
-		tenantLimit := rateLimitRPM * instances / 2
-		if tenantLimit < rateLimitRPM {
-			tenantLimit = rateLimitRPM
-		}
 		distLimiter = NewDistributedRateLimiter(
 			atomicRedis.LoadRaw(),
-			rateLimitRPM*instances, // 全局：单实例限制 × 实例数
-			tenantLimit,            // 租户：单实例限制 × 实例数 / 2
-			rateLimitRPM,           // 用户：单实例限制
+			globalLimit,  // 全局：每分钟配额（总量）
+			tenantLimit,  // 租户：每分钟配额
+			rateLimitRPM, // 用户：每分钟配额
 		)
 		rlMW = DistributedRateLimitMiddleware(distLimiter)
-		slog.Info("distributed rate limiter enabled",
-			"global", rateLimitRPM*instances, "instances", instances)
+		slog.Info("distributed token-bucket rate limiter enabled",
+			"global", globalLimit, "tenant", tenantLimit, "user", rateLimitRPM)
+		// 系统设置变更订阅（批 B-2′）：rate_limit / cors 跨副本即时热更
+		StartSettingsSubscriber(lifecycleCtx, atomicRedis, distLimiter)
 	} else if cfg.RateLimitFailClose {
 		// 生产 fail-close：只读放行，写操作拒绝
 		rlMW = func(next http.Handler) http.Handler {
@@ -244,7 +253,7 @@ func NewGatewayRouter(
 			TracingMiddleware,
 			LoggingMiddleware,
 			SecurityHeadersMiddleware,
-			CORSMiddleware(cfg.CORSOrigins),
+			CORSMiddleware(),
 			MonitoringMiddleware,
 			requestIDHeader,
 			realIPHeader(cfg.TrustedProxyCIDRs),
@@ -627,11 +636,11 @@ func registerAgentRoutes(
 	mux.Handle("POST /cancel", cancelMW)
 	mux.Handle("POST /v1/agent/cancel", cancelMW)
 
-	// SSE + WebSocket
+	// 实时通道统一为 SSE（events.go：Redis Stream + Pub/Sub 跨实例、Last-Event-ID 断线重放）。
+	// 批 B-3′：下线 /ws/{sessionId} 与 WebSocketHub（前端仅 EventSource）；RPA 插件通道 /ws/rpa 保留。
 	sseHandler := SSEHandler(eventHub, sessionMgr)
 	mux.Handle("GET /events", authMW(rlMW(sseHandler)))
 	mux.Handle("GET /v1/events", authMW(rlMW(sseHandler)))
-	mux.HandleFunc("GET /ws/{sessionId}", WebSocketHandler(NewWebSocketHub(), eventHub, authenticator, sessionMgr))
 	mux.HandleFunc("GET /ws/rpa", RPAWebSocketHandler(rpaHub, authenticator))
 	// 浏览器 RPA 桥（Python engine → 网关 → 插件；仅共享 internal token 可调）
 	mux.Handle("POST /v1/rpa/exec", rlMW(http.HandlerFunc(RPAExecHandler(rpaHub, internalToken))))
