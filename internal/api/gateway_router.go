@@ -578,7 +578,11 @@ func registerAgentRoutes(
 		}
 
 		// Reject concurrent submits within the same session（跨实例：Redis 运行锁）
-		ctx, cancel := context.WithTimeout(r.Context(), 180*time.Second)
+		// 修复：后台任务不得挂在 r.Context() 上——202 响应返回后客户端连接可关闭/断开，
+		// 会立即取消整条 submit 链路（曾致 "request cancelled before attempt 1" 的
+		// "Service temporarily unavailable"）。WithoutCancel 保留 ctx 携带值（trace 等），
+		// 仅剥离取消/超时；下方 180s 独立超时兜底。
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 180*time.Second)
 		// 批 E2：每次 run 唯一 token（锁归属校验：续期/释放均需匹配，防旧 run 误删新锁）
 		var rnd [12]byte
 		_, _ = rand.Read(rnd[:])

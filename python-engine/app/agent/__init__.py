@@ -2,7 +2,7 @@
 Agent 模块
 """
 
-from app.agent.engine import AgentEngine, AgentSession, ContextManager
+from app.agent.engine import AgentEngine, ContextManager
 from app.agent.multi_agent import (BUILTIN_AGENTS, AgentDispatcher, SubAgent,
                                    SubAgentResult,
                                    create_dispatcher_with_builtins)
@@ -17,7 +17,6 @@ __all__ = [
     "AgentTaskConsumer",
     "PromptEngine",
     "AgentEngine",
-    "AgentSession",
     "ContextManager",
     "SubAgent",
     "SubAgentResult",

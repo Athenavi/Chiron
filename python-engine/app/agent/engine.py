@@ -10,7 +10,6 @@ from __future__ import annotations
 from app.agent.runtime import (
     AgentEvent,
     AgentRuntime as AgentEngine,
-    AgentSession,
     AgentTask,
     CompactionConfig,
     _compact_messages as compress_messages,
@@ -19,7 +18,7 @@ from app.agent.runtime import (
     _truncate_text,
     _truncate_tool_result,
 )
-from app.prompts import PromptEngine
+from app.agent.prompt_engine import PromptEngine
 
 # 旧版 ContextManager 由 CompactionConfig 替代
 ContextManager = CompactionConfig
