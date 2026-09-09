@@ -11,7 +11,10 @@ import (
 	"time"
 
 	"github.com/athenavi/chiron/internal/auth"
+	"github.com/athenavi/chiron/internal/db"
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/redis/go-redis/v9"
 )
 
 // ── RPA 消息类型 ──
@@ -91,39 +94,225 @@ func (c *RPAClient) SendMessage(msg RPAMessage) error {
 	return c.Conn.WriteJSON(msg)
 }
 
-// ── RPAHub ──
+// ── RPA 跨实例桥接（批 D：多网关副本）──
 //
-// ⚠️ 单实例拓扑限制：clients/pending 均为进程内注册表，不做跨实例共享。
-// 多实例部署时，浏览器插件与 UI 的 WebSocket 必须落在同一网关实例（依赖 LB 会话亲和），
-// 否则命令在目标实例的 hub 中找不到对端连接。如需跨实例 RPA，应把该 hub 桥接升级为
-// Redis Pub/Sub（同 broadcast.Hub 模式）或独立 RPA 网关。
+// 背景：clients/pending 均为进程内注册表。多实例部署时，浏览器插件 WebSocket
+// 可能落在网关副本 A，而 python engine 的 POST /v1/rpa/exec 经负载均衡落到
+// 副本 B —— 原实现会在 B 的 hub 中找不到对端连接。
+//
+// 方案（与 broadcast.Hub 同款 Redis Pub/Sub 模式，见 internal/broadcast/hub.go）：
+//   - 每实例持有自己进程内的 WS 连接（物理连接不可迁移），并维护 Redis 注册中心：
+//     key = {REDIS_KEY_PREFIX}rpa:client:{clientID}，value = {instance_id,user_id}，
+//     TTL = rpaRegistryTTL，由 WS ping/pong（30s 间隔）滑动续期；
+//   - 跨实例命令：exec 落在副本 B 时按注册中心定位目标副本 A，把命令 publish 到
+//     Redis channel "rpa:cmd"（envelope 带 To=目标实例），A 的订阅者写本地 WS；
+//   - 结果回传：插件回 result 时 A 的本地 pending 未命中 → publish 到 Redis channel
+//     "rpa:res"，B 按 msg.ID 命中本地 pending 并返回（与广播 Hub 的 origin 去重同思路）。
+//   - Redis 不可用（rdb == nil）时保持单机进程内行为（localOnly=true）。
 
-type RPAHub struct {
-	mu      sync.RWMutex
-	clients map[string]*RPAClient      // clientID → client
-	pending map[string]chan *RPAResult // msgID → result channel
+const (
+	rpaRegistryTTL       = 90 * time.Second // client 注册 TTL；WS ping 间隔 30s，留 3 倍余量
+	rpaCrossInstanceWait = 15 * time.Second // 远端实例命令等待上限（远端离线/无订阅时快速失败）
+)
+
+// rpaCmdEnvelope Redis "rpa:cmd" 通道负载：跨实例投递的命令。
+type rpaCmdEnvelope struct {
+	From     string     `json:"from"` // 发起实例 ID
+	To       string     `json:"to"`   // 目标实例 ID（持有该 client WS 连接的实例）
+	ClientID string     `json:"client_id"`
+	Msg      RPAMessage `json:"msg"`
 }
 
-func NewRPAHub() *RPAHub {
-	return &RPAHub{
-		clients: make(map[string]*RPAClient),
-		pending: make(map[string]chan *RPAResult),
+// rpaResEnvelope Redis "rpa:res" 通道负载：跨实例命令的结果回传。
+type rpaResEnvelope struct {
+	From string     `json:"from"` // 执行实例 ID（日志/审计用）
+	Msg  RPAMessage `json:"msg"`
+}
+
+// RPAHub 管理本实例进程内的 RPA 插件连接，并桥接跨网关副本的命令/结果。
+type RPAHub struct {
+	mu      sync.RWMutex
+	clients map[string]*RPAClient      // clientID → client（本实例持有）
+	pending map[string]chan *RPAResult // msgID → result channel（本实例发起）
+
+	// Redis 跨实例桥接（rdb == nil 时为单机模式，localOnly=true）
+	rdb               db.RedisClient
+	localOnly         bool
+	instanceID        string
+	registryKeyPrefix string
+	cmdChannel        string
+	resChannel        string
+	startOnce         sync.Once
+	psub              *redis.PubSub
+}
+
+func NewRPAHub(rdb db.RedisClient) *RPAHub {
+	h := &RPAHub{
+		clients:           make(map[string]*RPAClient),
+		pending:           make(map[string]chan *RPAResult),
+		rdb:               rdb,
+		localOnly:         rdb == nil,
+		instanceID:        uuid.NewString(),
+		registryKeyPrefix: db.RedisKey("rpa:client:"),
+		cmdChannel:        db.RedisKey("rpa:cmd"),
+		resChannel:        db.RedisKey("rpa:res"),
+	}
+	if h.localOnly {
+		slog.Info("rpa hub running in local-only mode (no Redis); cross-instance commands disabled")
+	}
+	return h
+}
+
+// Start 启动跨实例订阅者（幂等），由 NewGatewayRouter 调用一次。
+// localOnly 时为空操作；进程退出时订阅随进程回收，无需显式 Close。
+func (h *RPAHub) Start(ctx context.Context) {
+	if h.localOnly {
+		return
+	}
+	h.startOnce.Do(func() {
+		h.psub = h.rdb.Subscribe(context.Background(), h.cmdChannel, h.resChannel)
+		go h.crossInstanceLoop(ctx)
+		slog.Info("rpa hub cross-instance bridge started", "instance_id", h.instanceID[:8])
+	})
+}
+
+// crossInstanceLoop 消费 Redis channel：远程命令投递 + 远程结果回填。
+func (h *RPAHub) crossInstanceLoop(ctx context.Context) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("rpa cross-instance loop panic", "panic", r)
+		}
+	}()
+	ch := h.psub.Channel()
+	for msg := range ch {
+		switch msg.Channel {
+		case h.cmdChannel:
+			var env rpaCmdEnvelope
+			if err := json.Unmarshal([]byte(msg.Payload), &env); err != nil {
+				slog.Warn("rpa cmd envelope unmarshal", "error", err)
+				continue
+			}
+			h.handleRemoteCmd(&env)
+		case h.resChannel:
+			var env rpaResEnvelope
+			if err := json.Unmarshal([]byte(msg.Payload), &env); err != nil {
+				slog.Warn("rpa res envelope unmarshal", "error", err)
+				continue
+			}
+			h.handleRemoteRes(&env)
+		}
+	}
+}
+
+// handleRemoteCmd 目标实例收到跨实例命令：写本地 WS 连接。
+// 结果由插件回传后走 HandleResult（本地 pending 未命中 → 转发到 rpa:res）。
+func (h *RPAHub) handleRemoteCmd(env *rpaCmdEnvelope) {
+	if env.To != h.instanceID {
+		return
+	}
+	client, ok := h.GetClient(env.ClientID)
+	if !ok {
+		slog.Warn("rpa remote cmd: client not connected on this instance",
+			"client_id", env.ClientID, "from", env.From)
+		return
+	}
+	if err := client.SendMessage(env.Msg); err != nil {
+		slog.Warn("rpa remote cmd send failed", "client_id", env.ClientID, "error", err)
+	}
+}
+
+// handleRemoteRes 发起实例收到跨实例结果：按 msg.ID 回填本地 pending。
+func (h *RPAHub) handleRemoteRes(env *rpaResEnvelope) {
+	h.mu.RLock()
+	ch, ok := h.pending[env.Msg.ID]
+	h.mu.RUnlock()
+	if !ok {
+		return // 非本实例发起（或已超时清理），静默忽略
+	}
+	result := &RPAResult{Result: env.Msg.Result}
+	if env.Msg.Error != nil {
+		result.Error = env.Msg.Error
+	}
+	select {
+	case ch <- result:
+	default:
+		slog.Warn("rpa remote res channel full", "id", env.Msg.ID)
+	}
+}
+
+// ── Redis 注册中心 ──
+
+// putRegistry 写/续期 client 注册记录（滑动 TTL）。
+func (h *RPAHub) putRegistry(ctx context.Context, clientID, userID string) {
+	payload, err := json.Marshal(map[string]interface{}{
+		"instance_id": h.instanceID,
+		"user_id":     userID,
+	})
+	if err != nil {
+		return
+	}
+	if err := h.rdb.Set(ctx, h.registryKeyPrefix+clientID, payload, rpaRegistryTTL).Err(); err != nil {
+		slog.Debug("rpa registry set failed", "client_id", clientID, "error", err)
+	}
+}
+
+// RefreshRegistry WS pong 心跳续期注册（防止活跃连接被 TTL 误清理）。
+func (h *RPAHub) RefreshRegistry(clientID, userID string) {
+	if h.localOnly {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	h.putRegistry(ctx, clientID, userID)
+}
+
+// registryOwner 返回注册中心记录的 client 所在实例 ID；无记录返回 ""。
+func (h *RPAHub) registryOwner(clientID string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	data, err := h.rdb.Get(ctx, h.registryKeyPrefix+clientID).Bytes()
+	if err != nil {
+		return ""
+	}
+	var rec struct {
+		InstanceID string `json:"instance_id"`
+		UserID     string `json:"user_id"`
+	}
+	if err := json.Unmarshal(data, &rec); err != nil {
+		return ""
+	}
+	return rec.InstanceID
+}
+
+// dropRegistry 移除 client 注册记录（连接断开时调用）。
+func (h *RPAHub) dropRegistry(clientID string) {
+	if h.localOnly {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := h.rdb.Del(ctx, h.registryKeyPrefix+clientID).Err(); err != nil {
+		slog.Debug("rpa registry del failed", "client_id", clientID, "error", err)
 	}
 }
 
 // Register 注册一个插件连接
 func (h *RPAHub) Register(client *RPAClient) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	h.clients[client.ID] = client
-	slog.Info("rpa client registered", "client_id", client.ID, "user_id", client.UserID)
+	h.mu.Unlock()
+	if !h.localOnly {
+		h.RefreshRegistry(client.ID, client.UserID)
+	}
+	slog.Info("rpa client registered", "client_id", client.ID, "user_id", client.UserID, "instance", h.instanceID[:8])
 }
 
 // Unregister 注销一个插件连接
 func (h *RPAHub) Unregister(clientID string) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	delete(h.clients, clientID)
+	h.mu.Unlock()
+	h.dropRegistry(clientID)
 	slog.Info("rpa client unregistered", "client_id", clientID)
 }
 
@@ -150,14 +339,27 @@ func (h *RPAHub) GetClientByUser(userID string) (*RPAClient, bool) {
 	return latest, latest != nil
 }
 
-// SendCommand 发送命令并等待结果（带超时）
+// SendCommand 发送命令并等待结果（带超时）。
+// 本地未命中时若 Redis 注册中心指示对端在其它网关副本，则跨实例投递并等待结果。
 func (h *RPAHub) SendCommand(ctx context.Context, clientID string, cmd *RPACommand) (*RPAResult, error) {
-	client, ok := h.GetClient(clientID)
-	if !ok {
+	if client, ok := h.GetClient(clientID); ok {
+		return h.sendLocal(ctx, client, cmd)
+	}
+	if h.localOnly {
 		return nil, fmt.Errorf("rpa client not connected: %s", clientID)
 	}
+	// 跨实例：查注册中心定位持有该 client 的网关副本
+	owner := h.registryOwner(clientID)
+	if owner == "" || owner == h.instanceID {
+		// 无记录 = 未连接；记录在本实例但本地已断 = 清理窗口，与未连接等价
+		return nil, fmt.Errorf("rpa client not connected: %s", clientID)
+	}
+	return h.sendRemote(ctx, clientID, owner, cmd)
+}
 
-	msgID := fmt.Sprintf("cmd_%d", time.Now().UnixNano())
+// sendLocal 本实例持有连接：原同步请求-响应路径。
+func (h *RPAHub) sendLocal(ctx context.Context, client *RPAClient, cmd *RPACommand) (*RPAResult, error) {
+	msgID := fmt.Sprintf("cmd_%s_%d", h.instanceID[:8], time.Now().UnixNano())
 	msg := RPAMessage{
 		Type:   RPAMsgCommand,
 		ID:     msgID,
@@ -192,14 +394,64 @@ func (h *RPAHub) SendCommand(ctx context.Context, clientID string, cmd *RPAComma
 	}
 }
 
-// HandleResult 处理从插件返回的结果
+// sendRemote 跨实例投递：命令发到目标实例，结果经 rpa:res 回填本地 pending。
+func (h *RPAHub) sendRemote(ctx context.Context, clientID, owner string, cmd *RPACommand) (*RPAResult, error) {
+	msgID := fmt.Sprintf("cmd_%s_%d", h.instanceID, time.Now().UnixNano())
+	msg := RPAMessage{
+		Type:   RPAMsgCommand,
+		ID:     msgID,
+		Method: cmd.Method,
+		Params: cmd.Params,
+		TabID:  cmd.TabID,
+	}
+
+	ch := make(chan *RPAResult, 1)
+	h.mu.Lock()
+	h.pending[msgID] = ch
+	h.mu.Unlock()
+
+	defer func() {
+		h.mu.Lock()
+		delete(h.pending, msgID)
+		h.mu.Unlock()
+	}()
+
+	env := rpaCmdEnvelope{From: h.instanceID, To: owner, ClientID: clientID, Msg: msg}
+	data, err := json.Marshal(env)
+	if err != nil {
+		return nil, fmt.Errorf("marshal rpa cmd: %w", err)
+	}
+	pctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := h.rdb.Publish(pctx, h.cmdChannel, data).Err(); err != nil {
+		return nil, fmt.Errorf("publish rpa command: %w", err)
+	}
+
+	// 等待远端结果；超时（目标实例离线/插件无响应）则失败，语义与本地一致
+	waitCtx, waitCancel := context.WithTimeout(ctx, rpaCrossInstanceWait)
+	defer waitCancel()
+	select {
+	case result := <-ch:
+		return result, nil
+	case <-waitCtx.Done():
+		return nil, fmt.Errorf("rpa command timeout (target instance %s): %s", owner, cmd.Method)
+	}
+}
+
+// HandleResult 处理从插件返回的结果。
+// 本地 pending 未命中且启用了 Redis 桥接时，把结果转发回发起实例（跨实例请求）。
 func (h *RPAHub) HandleResult(msg *RPAMessage) {
 	h.mu.RLock()
 	ch, ok := h.pending[msg.ID]
 	h.mu.RUnlock()
 
 	if !ok {
-		slog.Warn("rpa result for unknown msg", "id", msg.ID)
+		if h.localOnly {
+			slog.Warn("rpa result for unknown msg", "id", msg.ID)
+			return
+		}
+		// 跨实例请求的结果：转发给发起实例（其本地 pending 持有该 msgID）
+		h.forwardResult(msg)
 		return
 	}
 
@@ -208,6 +460,20 @@ func (h *RPAHub) HandleResult(msg *RPAMessage) {
 		result.Error = msg.Error
 	}
 	ch <- result
+}
+
+// forwardResult 把本地未匹配的插件结果发布到 rpa:res，供发起实例回填。
+func (h *RPAHub) forwardResult(msg *RPAMessage) {
+	env := rpaResEnvelope{From: h.instanceID, Msg: *msg}
+	data, err := json.Marshal(env)
+	if err != nil {
+		return
+	}
+	pctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := h.rdb.Publish(pctx, h.resChannel, data).Err(); err != nil {
+		slog.Debug("rpa res publish failed", "id", msg.ID, "error", err)
+	}
 }
 
 // BroadcastToUser 向指定用户的所有客户端广播事件
@@ -232,6 +498,49 @@ func (h *RPAHub) ConnectedClients() []*RPAClient {
 		clients = append(clients, c)
 	}
 	return clients
+}
+
+// AllClientIDs 返回全量已连接客户端（本实例 + Redis 注册中心）。
+// 供跨实例的 /v1/rpa/clients 使用：python engine 无论请求落在哪个副本都能看到全部插件。
+func (h *RPAHub) AllClientIDs() []string {
+	set := make(map[string]struct{})
+	for _, c := range h.ConnectedClients() {
+		set[c.ID] = struct{}{}
+	}
+	if !h.localOnly {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		var cursor uint64
+		for {
+			keys, next, err := h.rdb.Scan(ctx, cursor, h.registryKeyPrefix+"*", 100).Result()
+			if err != nil {
+				slog.Debug("rpa registry scan failed", "error", err)
+				break
+			}
+			for _, k := range keys {
+				if id, ok := registryIDFromKey(k, h.registryKeyPrefix); ok {
+					set[id] = struct{}{}
+				}
+			}
+			cursor = next
+			if cursor == 0 {
+				break
+			}
+		}
+	}
+	ids := make([]string, 0, len(set))
+	for id := range set {
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+// registryIDFromKey 从注册 key（prefix+clientID）解析 clientID。
+func registryIDFromKey(key, prefix string) (string, bool) {
+	if len(key) <= len(prefix) || key[:len(prefix)] != prefix {
+		return "", false
+	}
+	return key[len(prefix):], true
 }
 
 // ExecCommand sends a command to a connected browser extension and returns the result map.
@@ -320,6 +629,8 @@ func RPAWebSocketHandler(hub *RPAHub, authenticator *auth.Authenticator) http.Ha
 		conn.SetPongHandler(func(string) error {
 			conn.SetReadDeadline(time.Now().Add(rpaReadTimeout))
 			client.TouchLastSeen()
+			// 续期 Redis 注册（多副本下防 TTL 误清理活跃连接）
+			hub.RefreshRegistry(client.ID, client.UserID)
 			return nil
 		})
 
@@ -394,6 +705,7 @@ func rpaInternalTokenOK(r *http.Request, internalToken string) bool {
 
 // RPAExecHandler 供 Python engine 的 GatewayBrowserHub 把浏览器命令发给
 // 已连接插件(Chrome Extension /ws/rpa)。要求共享 internal token，防止直连滥用。
+// 多副本下命令可跨实例投递：本实例未持有该 client 时经 Redis 注册中心路由到目标副本。
 func RPAExecHandler(hub *RPAHub, internalToken string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !rpaInternalTokenOK(r, internalToken) {
@@ -418,14 +730,14 @@ func RPAExecHandler(hub *RPAHub, internalToken string) http.HandlerFunc {
 	}
 }
 
-// RPAClientsHandler 返回已连接浏览器插件客户端列表。
+// RPAClientsHandler 返回已连接浏览器插件客户端列表（本实例 + Redis 注册中心的全量）。
 func RPAClientsHandler(hub *RPAHub, internalToken string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !rpaInternalTokenOK(r, internalToken) {
 			Unauthorized(w, "invalid internal token")
 			return
 		}
-		OK(w, map[string]interface{}{"client_ids": hub.ConnectedClientIDs()})
+		OK(w, map[string]interface{}{"client_ids": hub.AllClientIDs()})
 	}
 }
 

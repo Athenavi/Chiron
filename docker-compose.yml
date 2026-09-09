@@ -1,4 +1,13 @@
-﻿services:
+﻿# Chiron — 企业多实例部署编排
+#
+# 本 compose 面向"多副本可横向扩展"组织配置:
+#   gateway / python-engine 均可 `docker compose up -d --scale gateway=2 --scale python-engine=2`;
+#   副本之间无本地状态依赖(会话/任务/事件均走 Redis/PG),共享卷仅承载:
+#     - agent 沙箱 SANDBOX_ROOT(引擎)
+#     - 插件数据 PLUGIN_DATA_DIR(网关与引擎同卷)
+#     - 本地存储兜底 STORAGE_ROOT=/app/workspace(媒体默认走 MinIO/S3)
+# 详细多实例要求见 docs/deployment-multi-instance.md(新增引擎副本时须同步 PYTHON_ENGINE_ADDRESS 并滚动重启网关)。
+services:
 
   postgres:
     image: pgvector/pgvector:pg16-alpine
@@ -65,9 +74,36 @@
       temporal:
         condition: service_started
     environment:
+      # 多副本一致性要求:所有 gateway/python-engine 副本注入完全相同的
+      # APP_SECRET / JWT_SECRET / INTERNAL_TOKEN / REDIS_KEY_PREFIX(见 docs/deployment-multi-instance.md)。
       INTERNAL_TOKEN: ${INTERNAL_TOKEN:?INTERNAL_TOKEN is required — set to same value as python-engine's INTERNAL_TOKEN}
+      APP_SECRET: ${APP_SECRET:?APP_SECRET is required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      POSTGRES_DSN: ${POSTGRES_DSN:?POSTGRES_DSN is required — point at postgres:5432/chiron0827}
+      # Redis(键空间前缀必须与引擎一致)
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      REDIS_DB: ${REDIS_DB:-0}
+      REDIS_KEY_PREFIX: ${REDIS_KEY_PREFIX:-}
+      # 引擎地址:逗号分隔支持多引擎实例(如 http://python-engine:8000,http://python-engine-2:8000)
+      PYTHON_ENGINE_ADDRESS: ${PYTHON_ENGINE_ADDRESS:-http://python-engine:8000}
+      # 媒体/对象存储:默认走本 compose 的 MinIO(S3)。local 兜底见 STORAGE_ROOT。
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-s3}
+      STORAGE_ROOT: ${STORAGE_ROOT:-/app/workspace}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      S3_BUCKET: ${S3_BUCKET:-chiron}
+      S3_ACCESS_KEY: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}
+      S3_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
+      S3_USE_SSL: "false"
+      # 插件数据目录:与 python-engine 共享同一卷(plugins 卷)
+      PLUGIN_DATA_DIR: ${PLUGIN_DATA_DIR:-/srv/chiron/plugins}
+      # 分布式限流:多副本时必须与实际副本数一致(批 B 将自动化)
+      RATE_LIMIT_INSTANCES: ${RATE_LIMIT_INSTANCES:-1}
+      # 前置负载均衡器时填写真实来源网段(如 "10.0.0.0/8,172.16.0.0/12")
+      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-}
     volumes:
       - workspace:/app/workspace
+      - plugindata:/srv/chiron/plugins
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "wget", "-qO-", "http://localhost:8080/health" ]
@@ -85,15 +121,45 @@
     expose:
       - "8000"
     environment:
+      # 多副本一致性要求:所有副本注入完全相同的
+      # APP_SECRET / JWT_SECRET / INTERNAL_TOKEN / REDIS_KEY_PREFIX(见 docs/deployment-multi-instance.md)。
       INTERNAL_TOKEN: ${INTERNAL_TOKEN:?INTERNAL_TOKEN is required — set to same value as gateway's INTERNAL_TOKEN}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       POSTGRES_DSN: ${POSTGRES_DSN:?POSTGRES_DSN is required}
       APP_SECRET: ${APP_SECRET:?APP_SECRET is required}
+      # 必须监听 0.0.0.0 供 gateway 容器访问(默认 127.0.0.1 会令网关连不上引擎)
+      HTTP_HOST: "0.0.0.0"
+      HTTP_PORT: "8000"
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379/${REDIS_DB:-0}
+      REDIS_KEY_PREFIX: ${REDIS_KEY_PREFIX:-}
+      # 引擎回调网关的地址(webhook/事件/config 下发)
+      GATEWAY_INTERNAL_URL: http://gateway:8080
+      RPA_GATEWAY_URL: http://gateway:8080
+      # 共享卷:agent 沙箱 + 插件数据(与网关 plugins 卷一致)
+      SANDBOX_ROOT: /srv/chiron/sandbox
+      PLUGIN_DATA_DIR: ${PLUGIN_DATA_DIR:-/srv/chiron/plugins}
+      # 向量库(Milvus 已在本 compose 提供;pgvector 时改 VECTOR_DB_TYPE=pgvector)
+      MILVUS_ADDRESS: ${MILVUS_ADDRESS:-milvus:19530}
+      VECTOR_DB_TYPE: ${VECTOR_DB_TYPE:-milvus}
+      # 多实例注意:每个启用 MCP 的引擎副本都会对活跃用户持有 MCP 连接(连接数 N×),
+      # 副本数增长后按需关闭部分副本的 MCP 池(MCP_POOL_ENABLED=false)。
+      MCP_POOL_ENABLED: ${MCP_POOL_ENABLED:-true}
+      # K8s 注入实例标识;compose 下留空由引擎自生成
+      INSTANCE_ID: ${INSTANCE_ID:-}
+      # 模型密钥(ANTHROPIC_API_KEY/OPENAI_API_KEY/DEEPSEEK_API_KEY/LLM_API_KEY 等)
+      # 在 .env 中配置并在此透传,或经后台「系统设置」下发;详见 docs/deployment-multi-instance.md。
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
     depends_on:
       redis:
         condition: service_healthy
       postgres:
         condition: service_healthy
+    volumes:
+      - sandboxdata:/srv/chiron/sandbox
+      - plugindata:/srv/chiron/plugins
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')" ]
@@ -189,8 +255,9 @@ volumes:
   redisdata:
   miniodata:
   workspace:
+  sandboxdata:
+  plugindata:
   etcddata:
   milvusdata:
   prometheusdata:
   alertmanagerdata:
-

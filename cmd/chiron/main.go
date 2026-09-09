@@ -220,7 +220,8 @@ func main() {
 	}
 
 	// ── RPA Browser Hub ──
-	rpaHub := api.NewRPAHub()
+	// 传入 db.Redis 以启用跨网关副本桥接（批 D）;Redis 不可用时自动退回单机模式。
+	rpaHub := api.NewRPAHub(db.Redis)
 
 	// ── Storage / Session Manager / HTTP（安装模式：跳过存储与会话，仅提供安装向导） ──
 	var sessionMgr *session.Manager
