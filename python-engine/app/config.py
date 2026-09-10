@@ -35,6 +35,11 @@ class Settings(BaseSettings):
     # 必须与 Go 网关 REDIS_KEY_PREFIX 同值（约定含尾冒号，如 "dev:" / "prod:"）；默认空 = 存量兼容。
     redis_key_prefix: str = ""
 
+    # ── 依赖门禁 ──
+    # 默认 false：Redis 未配置或连接失败时直接拒绝启动（启动失败而非就绪降级），
+    # 避免副本间会话/限流/队列不一致；仅单机开发显式 DEGRADED_MODE=true 才允许进程内降级。
+    degraded_mode: bool = False
+
     # ── MCP 插件池（按节点开关）──
     # 多实例部署时仅需要的实例启用（每实例对活跃用户各持有 MCP 连接，全开会 N×连接放大）；
     # 默认开 = 保持单实例现状。关闭的实例不建 MCP 连接，相关工具调用会报不可用。

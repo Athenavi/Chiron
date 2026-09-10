@@ -1,5 +1,5 @@
 """
-SQLAlchemy 模型定义 - BillingRecord
+SQLAlchemy 模型定义 - Turn
 由代码生成器自动生成 (基于 models.yaml / routes.yaml) - 请勿手动修改
 生成时间：2026-09-10 21:30:34
 """
@@ -11,22 +11,23 @@ from . import Base  # 使用统一的 Base
 
 
 
-class BillingRecord(Base):
-    """计费记录模型"""
-    __tablename__ = 'billing_records'
+class Turn(Base):
+    """对话回合（turn）状态机模型"""
+    __tablename__ = 'turns'
 
 
 
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()), doc='记录 ID')
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()), doc='回合 ID')
 
-    tenant_id = Column(String(36), ForeignKey('tenants.id'), doc='租户 ID')
-
-
-    user_id = Column(String(36), ForeignKey('users.id'), doc='用户 ID')
+    session_id = Column(String(36), ForeignKey('sessions.id'), doc='会话 ID')
 
 
-    session_id = Column(String(36), ForeignKey('sessions.id'), nullable=True, doc='会话 ID')
+    user_id = Column(String(36), nullable=True, doc='用户 ID')
+
+    status = Column(String(16), default='created', doc='状态（created/running/completed/failed/cancelled）')
+
+    error = Column(Text, nullable=True, doc='失败原因（不静默）')
 
 
     input_tokens = Column(BigInteger, default=0, doc='输入 Tokens')
@@ -35,14 +36,11 @@ class BillingRecord(Base):
     output_tokens = Column(BigInteger, default=0, doc='输出 Tokens')
 
 
-    cost_cents = Column(Integer, default=0, doc='费用（分）')
+    started_at = Column(String(255), default='now()', doc='开始时间')
 
+    finished_at = Column(String(255), nullable=True, doc='结束时间')
 
     created_at = Column(String(255), default='now()', doc='创建时间')
-
-    group_id = Column(String(36), nullable=True, doc='分组 ID')
-
-    turn_id = Column(String(36), nullable=True, doc='所属回合 ID（turn 一致性：消息/工具/计费同回合可幂等叙事）')
 
 
     def to_dict(self, exclude_sensitive=True):
@@ -53,15 +51,15 @@ class BillingRecord(Base):
         """
         data = {
             'id': self.id,
-            'tenant_id': self.tenant_id,
-            'user_id': self.user_id,
             'session_id': self.session_id,
+            'user_id': self.user_id,
+            'status': self.status,
+            'error': self.error,
             'input_tokens': self.input_tokens,
             'output_tokens': self.output_tokens,
-            'cost_cents': self.cost_cents,
+            'started_at': self.started_at,
+            'finished_at': self.finished_at,
             'created_at': self.created_at,
-            'group_id': self.group_id,
-            'turn_id': self.turn_id,
         }
 
         if not exclude_sensitive:
@@ -73,6 +71,6 @@ class BillingRecord(Base):
 
     def __repr__(self):
         """字符串表示"""
-        return f'<BillingRecord id={self.id}>'
+        return f'<Turn id={self.id}>'
 
 

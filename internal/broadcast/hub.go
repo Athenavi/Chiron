@@ -19,6 +19,9 @@ import (
 const (
 	sseEventsMaxLen = 200
 	sseEventsTTL    = time.Hour
+	// sseRedisOpTimeout 单次 Redis 操作超时：Publish（XADD/EXPIRE/PUBLISH）在请求
+	// 处理路径上同步执行，Redis 慢或抖动时必须快速失败，避免拖慢 Agent 流式输出。
+	sseRedisOpTimeout = 200 * time.Millisecond
 )
 
 // slowSubSem 限制慢订阅者重试 goroutine 数量（P1 修复：事件风暴下防止
@@ -141,7 +144,10 @@ func (h *Hub) Publish(event Event) {
 			slog.Error("publish: failed to marshal envelope", "error", err)
 			return
 		}
-		if err := h.rdb.Publish(context.Background(), h.channel, data).Err(); err != nil {
+		pctx, cancel := context.WithTimeout(context.Background(), sseRedisOpTimeout)
+		err = h.rdb.Publish(pctx, h.channel, data).Err()
+		cancel()
+		if err != nil {
 			slog.Error("redis publish failed", "error", err)
 		}
 	}
@@ -160,6 +166,10 @@ func (h *Hub) appendSessionEvent(ctx context.Context, ev Event) string {
 		slog.Error("sse buffer: marshal event failed", "error", err)
 		return ""
 	}
+	// 单次 Redis 操作超时：Publish 在请求处理路径上被同步调用，Redis 慢/抖动时
+	// 不能让 token 输出被无限期拖住。写失败只是失去重放能力，实时 fanout 照常。
+	ctx, cancel := context.WithTimeout(ctx, sseRedisOpTimeout)
+	defer cancel()
 	key := sessionEventsKey(ev.SessionID)
 	id, err := h.rdb.XAdd(ctx, &redis.XAddArgs{
 		Stream: key,

@@ -673,6 +673,12 @@ models:
         format: date-time
         description: 创建时间
         default: now()
+      turn_id:
+        type: string
+        format: uuid
+        maxLength: 36
+        description: 所属回合 ID（turn 一致性：消息/工具/计费同回合可幂等叙事）
+        nullable: true
 
   User:
     table: users
@@ -1304,6 +1310,12 @@ models:
         maxLength: 36
         description: 分组 ID
         nullable: true
+      turn_id:
+        type: string
+        format: uuid
+        maxLength: 36
+        description: 所属回合 ID（turn 一致性：消息/工具/计费同回合可幂等叙事）
+        nullable: true
 
   Message:
     table: messages
@@ -1336,6 +1348,73 @@ models:
       tool_calls:
         type: object
         description: 工具调用（JSONB）
+        nullable: true
+      created_at:
+        type: string
+        format: date-time
+        description: 创建时间
+        default: now()
+      turn_id:
+        type: string
+        format: uuid
+        maxLength: 36
+        description: 所属回合 ID（turn 一致性：消息/工具/计费同回合可幂等叙事）
+        nullable: true
+
+  Turn:
+    table: turns
+    orm: true
+    description: 对话回合（turn）状态机
+    properties:
+      id:
+        type: string
+        format: uuid
+        maxLength: 36
+        description: 回合 ID
+        primary_key: true
+        default: gen_random_uuid()
+      session_id:
+        type: string
+        format: uuid
+        maxLength: 36
+        description: 会话 ID
+        foreign_key: true
+        fk_table: sessions
+        fk_column: id
+      user_id:
+        type: string
+        format: uuid
+        maxLength: 36
+        description: 用户 ID
+        nullable: true
+      status:
+        type: string
+        maxLength: 16
+        description: 状态（created/running/completed/failed/cancelled）
+        default: created
+      error:
+        type: text
+        description: 失败原因（不静默）
+        nullable: true
+      input_tokens:
+        type: integer
+        description: 输入 Tokens
+        db_type: bigint
+        default: 0
+      output_tokens:
+        type: integer
+        description: 输出 Tokens
+        db_type: bigint
+        default: 0
+      started_at:
+        type: string
+        format: date-time
+        description: 开始时间
+        default: now()
+      finished_at:
+        type: string
+        format: date-time
+        description: 结束时间
         nullable: true
       created_at:
         type: string

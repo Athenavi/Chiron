@@ -31,6 +31,7 @@ class QueueProducer:
         tenant_id: str,
         payload: dict,
         priority: int = 0,
+        deadline_seconds: int = 900,
     ) -> str:
         """
         发布任务到 Redis Streams
@@ -56,6 +57,13 @@ class QueueProducer:
             "retry_count": "0",
             "trace_id": trace_id,
             "priority": str(priority),
+            # 幂等键(000.md 第 15 条):worker 执行前 claim,已完成的任务重投被直接丢弃;
+            # 显式写出便于上游按业务键定制(缺省回退 {task_type}:{task_id})。
+            "idempotency_key": f"{task_type}:{task_id}",
+            # 截止时间:超过后 worker 直接 ACK 丢弃,避免堆积后执行早已无意义的任务。
+            "deadline": time.strftime(
+                "%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + deadline_seconds)
+            ),
         }
 
         stream_id = await self._redis.xadd(TASK_STREAM, message, maxlen=100000)

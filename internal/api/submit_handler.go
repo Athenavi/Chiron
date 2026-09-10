@@ -13,6 +13,7 @@ import (
 	"github.com/athenavi/chiron/internal/billing"
 	"github.com/athenavi/chiron/internal/broadcast"
 	"github.com/athenavi/chiron/internal/engine"
+	"github.com/athenavi/chiron/internal/id"
 	"github.com/athenavi/chiron/internal/session"
 )
 
@@ -42,6 +43,9 @@ func (h *SubmitHandler) SubmitApproval(w http.ResponseWriter, r *http.Request) {
 		Approved   bool   `json:"approved"`
 		Reason     string `json:"reason"`
 		UserID     string `json:"user_id,omitempty"`
+		// RunToken 由网关从 Redis 归属映射（engine:run:{session}）读出后注入，
+		// 供引擎拒绝「陈旧 run」的审批（批次 4）。
+		RunToken string `json:"run_token,omitempty"`
 	}
 	if err := DecodeJSON(w, r, &req); err != nil {
 		BadRequest(w, "invalid request")
@@ -57,9 +61,15 @@ func (h *SubmitHandler) SubmitApproval(w http.ResponseWriter, r *http.Request) {
 	if claims := auth.GetClaims(r.Context()); claims != nil {
 		req.UserID = claims.UserID
 	}
-	// approval 必须路由到承载该 session 运行的引擎实例（引擎 _ACTIVE_RUNTIMES 为进程内，
-	// round-robin 打到其它实例会返回 "no active agent"）
+	// approval 必须路由到承载该 session 运行的引擎实例：路由优先按 Redis 归属映射
+	// （engine:run:{session}，见 engine.RunOwnerURL），一致性哈希仅作回退；否则
+	// round-robin/哈希漂移会打到没有该 run 的实例并返回 "no active agent"。
 	routeCtx := engine.WithSession(r.Context(), req.SessionID)
+	// 顺带取出当前 run 的 token：引擎据此拒绝陈旧 run 的审批（映射不可用时留空，
+	// 引擎只在「带上了且不匹配」时拒绝，兼容未启用归属映射的部署）。
+	if rec, ok := engine.RunOwner(routeCtx, req.SessionID); ok {
+		req.RunToken = rec.RunToken
+	}
 	if err := h.python.PostJSON(routeCtx, "/v1/agent/approval", req, &out); err != nil {
 		slog.Error("approval: python proxy failed", "session", req.SessionID, "error", err)
 		InternalError(w, "approval proxy failed")
@@ -87,8 +97,18 @@ func (h *SubmitHandler) HandleSubmit(ctx context.Context, userID, sessionID, con
 	storeCtx, storeCancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer storeCancel()
 
+	// turn 一致性（000.md 第 14 条）：本轮回合 ID，贯穿消息/工具调用/计费落库，
+	// 收尾时收敛 turns 状态（completed/failed/cancelled），不再"只记日志"。
+	turnID, turnIDErr := id.UUID()
+	if turnIDErr != nil {
+		slog.Warn("turn: generate id failed, turn tracking disabled", "error", turnIDErr)
+		turnID = ""
+	}
 	// S 修复：上下文丢失 — 提交时立即持久化用户消息（SSE 中断/停止也不丢历史）
-	h.sessionMgr.SaveUserMessage(storeCtx, sessionID, userID, content)
+	h.sessionMgr.SaveUserMessage(storeCtx, sessionID, userID, content, turnID)
+	if turnID != "" {
+		h.sessionMgr.CreateTurn(storeCtx, turnID, sessionID, userID)
+	}
 
 	histMsgs := make([]map[string]string, 0)
 	if hist, err := h.sessionMgr.GetMessages(ctx, sessionID, 50); err == nil && len(hist) > 0 {
@@ -133,6 +153,7 @@ func (h *SubmitHandler) HandleSubmit(ctx context.Context, userID, sessionID, con
 	}
 
 	var finalContent string
+	var streamErr string // 引擎回传的 error 事件内容（用于 turns.status=failed）
 	var inputTokens, outputTokens int
 	turnToolCallIDs := []string{} // S 修复：messages.tool_calls 列只存 tool_call id 集合（内容在 tool_calls 表）
 
@@ -170,17 +191,20 @@ func (h *SubmitHandler) HandleSubmit(ctx context.Context, userID, sessionID, con
 		// S 修复：工具调用过程落库（tool_call 记录 + tool_result 回填），刷新后显示一致
 		switch evt.Type {
 		case "tool_call":
-			h.sessionMgr.SaveToolCall(storeCtx, sessionID, evt.ID, evt.Name, evt.Arguments)
+			h.sessionMgr.SaveToolCall(storeCtx, sessionID, evt.ID, evt.Name, evt.Arguments, turnID)
 			if evt.ID != "" {
 				turnToolCallIDs = append(turnToolCallIDs, evt.ID)
 			}
 		case "tool_result":
-			h.sessionMgr.UpdateToolCall(storeCtx, evt.ID, evt.Content, strings.Contains(evt.Content, `"error"`))
+			h.sessionMgr.UpdateToolCall(storeCtx, evt.ID, evt.Content, strings.Contains(evt.Content, `"error"`), turnID)
 		case "guardrail_blocked":
 			// SaaS 合规：栅栏拒绝留痕（输入注入/输出泄露/工具 block 审计）
 			h.sessionMgr.SaveToolCall(storeCtx, sessionID,
 				"guard_"+evt.ID, "guardrail",
-				fmt.Sprintf(`{"reason":%q}`, evt.Content))
+				fmt.Sprintf(`{"reason":%q}`, evt.Content), turnID)
+		case "error":
+			// 引擎侧异常：记录原因，回合终态判为 failed（000.md 第 14 条：失败不再静默）
+			streamErr = evt.Content
 		}
 		if evt.InputTokens > 0 {
 			inputTokens += evt.InputTokens
@@ -202,7 +226,7 @@ func (h *SubmitHandler) HandleSubmit(ctx context.Context, userID, sessionID, con
 		// S 修复：纯工具调用轮（无文本）也保存 assistant 消息；
 		// messages.tool_calls 列只存 id 集合（内容在 tool_calls 表，避免重复存储）
 		toolCallsJSON, _ := json.Marshal(turnToolCallIDs)
-		h.sessionMgr.SaveAssistantMessage(storeCtx, sessionID, finalContent, string(toolCallsJSON))
+		h.sessionMgr.SaveAssistantMessage(storeCtx, sessionID, finalContent, string(toolCallsJSON), turnID)
 	} else {
 		// 无文本无工具：仅用户消息已由 SaveUserMessage 持久化
 	}
@@ -229,6 +253,18 @@ func (h *SubmitHandler) HandleSubmit(ctx context.Context, userID, sessionID, con
 				}
 			}
 		}
+	}
+
+	// 回合终态收敛：取消(断开/超时) -> cancelled；引擎报错 -> failed；否则 completed。
+	turnStatus := "completed"
+	switch {
+	case ctx.Err() != nil:
+		turnStatus = "cancelled"
+	case streamErr != "":
+		turnStatus = "failed"
+	}
+	if turnID != "" {
+		h.sessionMgr.FinishTurn(storeCtx, turnID, turnStatus, streamErr, inputTokens, outputTokens)
 	}
 
 	h.eventHub.Publish(broadcast.Event{Type: "turn_done", SessionID: sessionID, Data: map[string]string{"session_id": sessionID}})

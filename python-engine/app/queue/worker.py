@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import datetime
 import json
 import logging
+import os
 import signal
 import time
 
@@ -33,8 +35,13 @@ GATE_RETRY_INTERVAL = 0.5
 # ── PEL 崩溃恢复（XCLAIM 认领）─────────────────────────────────────────────
 # worker 崩溃后其未 ACK 消息停留在消费组 PEL；本实例周期认领 idle 超阈值的
 # pending 消息重投（workflow_run 依 checkpoint 幂等续跑；tool_job 重执行）。
-# idle 阈值须大于单任务处理上限(1h)+余量，避免误抢其它实例正在执行的长任务。
-CLAIM_MIN_IDLE_MS = (3600 + 180) * 1000
+# 处理中的消息由 _heartbeat_lease 周期刷新 idle（lease），所以阈值不必再大于
+# 单任务处理上限——只有真正失联（崩溃/被杀/网络分区）的消息才会 idle 超时。
+# 原值 (3600+180)s 使崩溃任务最长滞留约 1 小时才被恢复；现默认 600s。
+CLAIM_MIN_IDLE_SECS = int(os.getenv("QUEUE_CLAIM_MIN_IDLE_SECS", "600"))
+CLAIM_MIN_IDLE_MS = CLAIM_MIN_IDLE_SECS * 1000
+# lease 心跳周期：阈值 1/3（下限 30s），保证阈值窗口内至少刷新两次。
+HEARTBEAT_SECS = max(30, CLAIM_MIN_IDLE_SECS // 3)
 CLAIM_LOOP_SECS = 60
 CLAIM_BATCH = 50
 
@@ -204,6 +211,33 @@ class QueueWorker:
         timeout_task = asyncio.create_task(asyncio.wait_for(task, timeout=3600))
         self._in_flight.add(timeout_task)
         timeout_task.add_done_callback(self._task_done)
+        # lease 心跳：处理期间周期刷新该消息的 PEL idle，使其它实例的 reclaim
+        # 不会把仍在执行的长任务当作崩溃残留抢走（阈值因此可下调到分钟级）。
+        lease_task = asyncio.create_task(self._heartbeat_lease(stream_id, timeout_task))
+        timeout_task.add_done_callback(lambda _t: lease_task.cancel())
+
+    async def _heartbeat_lease(self, stream_id: str, owner: asyncio.Task) -> None:
+        """处理期间刷新 PEL idle（XCLAIM ... JUSTID），充当任务 lease 心跳。"""
+        while not owner.done():
+            try:
+                await asyncio.sleep(HEARTBEAT_SECS)
+            except asyncio.CancelledError:
+                return
+            if owner.done():
+                return
+            try:
+                await self._redis.xclaim(
+                    TASK_STREAM,
+                    GROUP_NAME,
+                    self._consumer_name,
+                    0,
+                    [stream_id],
+                    justid=True,
+                )
+            except asyncio.CancelledError:
+                return
+            except Exception as e:  # noqa: BLE001 - 心跳失败不应打断任务本身
+                logger.debug("worker lease heartbeat failed for %s: %s", stream_id, e)
 
     async def _reclaim_loop(self) -> None:
         """PEL 崩溃恢复认领循环：周期接管 idle 超阈值的 pending 消息。"""
@@ -355,11 +389,47 @@ class QueueWorker:
             if isinstance(fields.get(b"tenant_id"), bytes)
             else fields.get("tenant_id", "")
         )
+        # 幂等键：消息显式提供优先，否则回退 {task_type}:{task_id}
+        from app.queue import idempotency
+
+        idem_raw = fields.get(b"idempotency_key", fields.get("idempotency_key", ""))
+        idem_key = idempotency.key_for(
+            task_type,
+            task_id,
+            idem_raw.decode() if isinstance(idem_raw, bytes) else (idem_raw or ""),
+        )
+
+        # 过期任务直接 ACK 丢弃:deadline 由投递方写入(RFC3339 UTC,见 producer/jobs/workflows)。
+        # 缺省/解析失败视为无期限,保持既有行为。
+        deadline_raw = (
+            fields.get(b"deadline", b"").decode()
+            if isinstance(fields.get(b"deadline"), bytes)
+            else fields.get("deadline", "")
+        )
+        if deadline_raw:
+            try:
+                dl = datetime.datetime.strptime(
+                    deadline_raw, "%Y-%m-%dT%H:%M:%SZ"
+                ).replace(tzinfo=datetime.timezone.utc)
+            except ValueError:
+                dl = None
+            if dl is not None and dl < datetime.datetime.now(datetime.timezone.utc):
+                logger.warning(
+                    "Task skipped (deadline exceeded): id=%s type=%s", task_id, task_type
+                )
+                await self._redis.xack(TASK_STREAM, GROUP_NAME, stream_id)
+                return
 
         start = time.monotonic()
         try:
             payload = json.loads(payload_raw)
+            # 幂等闸门：该键已 completed 说明是重复投递（执行后 ACK 前崩溃被 reclaim），
+            # 直接 ACK 丢弃，避免 workflow_run/tool_job 等副作用任务重复执行。
+            if not await idempotency.claim(idem_key, task_id, task_type, tenant_id):
+                await self._redis.xack(TASK_STREAM, GROUP_NAME, stream_id)
+                return
             await self._dispatch(task_type, payload, tenant_id)
+            await idempotency.complete(idem_key)
 
             # 成功 → ACK
             await self._redis.xack(TASK_STREAM, GROUP_NAME, stream_id)
@@ -371,6 +441,8 @@ class QueueWorker:
 
         except Exception as e:
             logger.error("Task failed: id=%s type=%s error=%s", task_id, task_type, e)
+            # 标记失败：幂等键仍可重试（claim 只拒绝 completed）
+            await idempotency.fail(idem_key)
 
             if retry_count >= MAX_RETRIES:
                 # 移入死信队列

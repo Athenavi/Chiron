@@ -440,6 +440,18 @@ func (c *PythonClient) addressFor(ctx context.Context) string {
 	if key == "" {
 		return c.pickAddress()
 	}
+	// 归属优先（批次 4）：引擎把 session 的 run owner 写进 Redis（engine:run:{session}，
+	// TTL 300s）。命中且该实例在当前地址表中健康时直连——一致性哈希在扩缩容/副本
+	// 上下线后会漂移，会把审批与取消送到并不持有该 run 的实例。
+	// 查询失败（无映射/Redis 抖动）一律走下方哈希回退，不改变原有行为。
+	if url, rec, ok := RunOwnerURL(ctx, key); ok {
+		if c.isKnownHealthy(url) {
+			return url
+		}
+		slog.Info("python engine: run owner instance unavailable, falling back to hash",
+			"session", key[:min(len(key), 16)],
+			"owner_instance", rec.InstanceID, "owner_url", url)
+	}
 	now := time.Now().Unix()
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(key))

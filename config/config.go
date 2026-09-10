@@ -38,6 +38,11 @@ type Config struct {
 	RedisSentinelAddrs []string // for sentinel mode
 	RedisPoolSize      int
 
+	// DegradedMode 显式允许依赖降级（仅单机开发用）。默认 false：
+	// 生产模式下 Redis 不可用直接拒绝启动——进程内降级会让副本看到不同的
+	// 会话/限流/事件（限流按副本放大、run 锁退化为本地锁），破坏一致性。
+	DegradedMode bool
+
 	// Auth
 	JWTSecret     string
 	JWTExpiration time.Duration
@@ -193,6 +198,7 @@ func loadConfig() *Config {
 		RateLimitInstances:  getInt("RATE_LIMIT_INSTANCES", 1),
 		TrustedProxyCIDRs:   getStringSlice("TRUSTED_PROXY_CIDRS", []string{}),
 		MetricsToken:        getEnv("METRICS_TOKEN", ""),
+		DegradedMode:        isTruthy(getEnv("DEGRADED_MODE", "")),
 		LogLevel:            getEnv("LOG_LEVEL", "info"),
 
 		// 支付（支付宝/微信）

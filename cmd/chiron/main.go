@@ -134,6 +134,15 @@ func main() {
 	}
 	redisClient, redisErr := db.NewRedisClient(redisCfg)
 	if redisErr != nil {
+		// 依赖门禁：安装模式不需要 Redis（见上方注释）；其余情况下 Redis 是必需依赖，
+		// 未显式 DEGRADED_MODE=true 时直接拒绝启动——进程内降级会让多副本看到不同的
+		// 限流/会话/事件（限流被按副本放大、run 锁退化为本地锁）。
+		if !setupMode && !cfg.DegradedMode {
+			slog.Error("FATAL: Redis is required but unavailable — refusing to start "+
+				"(fix REDIS_ADDR/REDIS_PASSWORD, or set DEGRADED_MODE=true for single-instance development)",
+				"error", redisErr)
+			return
+		}
 		slog.Warn("Redis unavailable — degraded mode (no distributed rate limit / session cache / broadcast / audit stream)", "error", redisErr)
 	} else {
 		atomicRedis = db.NewAtomicRedis(redisClient)

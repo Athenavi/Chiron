@@ -37,3 +37,15 @@ migration(新建表/回退旧迁移)、网关(管理 API + settings 加密 + Red
 - **env 保底**:settings.xxx_api_key 仍作为引擎启动种子注入 KeyRing(管理端配置为空时可直连)。
 - **实施顺序**:①migration+网关加密 CRUD+keyset/pub;②引擎 KeyRing+provider 多 key+删除引擎 admin;③去 APP_SECRET 与启动器注入;④联调验证(多实例增删/停用/冷却收敛、Redis 故障降级按 docs/redis-failure-semantics.md)。
 
+## 当前实现状态(2026-02 核对)
+
+| 项 | 状态 |
+|---|---|
+| 密钥事实源 | **已是 KeyRing**(`python-engine/app/gateway/key_ring.py`):Redis keyset `llm:keys:{provider}` 镜像 + env 种子兜底;provider 调用链走 KeyRing 轮换与失败上报 |
+| 网关管理端 | 已迁 Go:`/v1/admin/api-keys`(list/stats/add/status/delete)在网关本地实现 |
+| `SmartAPIKeyPool` | **已物理删除(批次 8)**:`app/gateway/smart_key_pool.py`、`main.py` 的 `_key_pool` 初始化/`get_key_pool`/四个未注册 `admin_*` handler/`_require_gateway_internal`,以及两个专属测试文件均已移除;全仓无残留引用,密钥单源 = KeyRing |
+| P1(取 key 接口) | 已完成 —— provider 经 KeyRing 取活跃 key |
+
+**已完成(批次 8)**:实施步骤 ② 的"删除引擎 admin"已落地——000.md 第 7 条的"两套密钥状态来源"物理消除(仅 KeyRing 一处事实源)。
+注:R8 里"合并 `smart_key_pool` 内嵌熔断"随该文件删除,只剩 `gateway/circuit_breaker.py` 一侧待统一。
+

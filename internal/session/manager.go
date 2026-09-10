@@ -53,11 +53,11 @@ func (m *Manager) GetSession(ctx context.Context, id string) (*model.Session, er
 	if m.rdb != nil {
 		data, err := m.rdb.Get(ctx, redisKeyPrefix+id).Bytes()
 		if err == nil {
-			var s model.Session
-			if json.Unmarshal(data, &s) == nil {
-				return &s, nil
+			var entry sessionCacheEntry
+			if json.Unmarshal(data, &entry) == nil && entry.D != nil {
+				return entry.D, nil
 			}
-			// Corrupt cache entry — delete so next read falls through to PG
+			// 旧格式（升级前的裸 Session JSON）或损坏条目：删除后回退 PG 自愈
 			m.rdb.Del(ctx, redisKeyPrefix+id)
 		}
 	}
@@ -271,7 +271,7 @@ func (m *Manager) SaveMessage(ctx context.Context, sessionID, role, content stri
 
 // SaveUserMessage persists the user message immediately at submit time
 // (S 修复：上下文丢失 — SSE 中断/停止时不再丢失用户消息，历史可续).
-func (m *Manager) SaveUserMessage(ctx context.Context, sessionID, userID, userContent string) {
+func (m *Manager) SaveUserMessage(ctx context.Context, sessionID, userID, userContent, turnID string) {
 	if m.pool == nil || userContent == "" {
 		return
 	}
@@ -290,10 +290,12 @@ func (m *Manager) SaveUserMessage(ctx context.Context, sessionID, userID, userCo
 		return
 	}
 	_, err = m.pool.Exec(ctx,
-		`INSERT INTO messages (id, session_id, role, content, created_at) VALUES ($1, $2, 'user', $3, NOW())`,
-		msgID, sessionID, userContent)
+		`INSERT INTO messages (id, session_id, role, content, turn_id, created_at)
+		 VALUES ($1, $2, 'user', $3, NULLIF($4, ''), NOW())`,
+		msgID, sessionID, userContent, turnID)
 	if err != nil {
-		slog.Warn("save user message", "error", err)
+		// 失败不再静默（000.md 第 14 条）：用户消息丢失会导致刷新后对话缺头
+		slog.Error("save user message", "session", sessionID, "turn", turnID, "error", err)
 	}
 	_, err = m.pool.Exec(ctx,
 		`UPDATE sessions SET title = LEFT($1, 255), updated_at = NOW()
@@ -307,7 +309,7 @@ func (m *Manager) SaveUserMessage(ctx context.Context, sessionID, userID, userCo
 
 // SaveAssistantMessage persists the assistant reply (with optional OpenAI-format
 // tool_calls JSON) after streaming completes.
-func (m *Manager) SaveAssistantMessage(ctx context.Context, sessionID, assistantContent, toolCallsJSON string) {
+func (m *Manager) SaveAssistantMessage(ctx context.Context, sessionID, assistantContent, toolCallsJSON, turnID string) {
 	if m.pool == nil {
 		return
 	}
@@ -324,41 +326,92 @@ func (m *Manager) SaveAssistantMessage(ctx context.Context, sessionID, assistant
 		return
 	}
 	_, err = m.pool.Exec(ctx,
-		`INSERT INTO messages (id, session_id, role, content, tool_calls, created_at)
-		 VALUES ($1, $2, 'assistant', $3, $4::jsonb, NOW())`,
-		msgID, sessionID, assistantContent, toolCallsJSON)
+		`INSERT INTO messages (id, session_id, role, content, tool_calls, turn_id, created_at)
+		 VALUES ($1, $2, 'assistant', $3, $4::jsonb, NULLIF($5, ''), NOW())`,
+		msgID, sessionID, assistantContent, toolCallsJSON, turnID)
 	if err != nil {
-		slog.Warn("save assistant message", "error", err)
+		// 失败不再静默（000.md 第 14 条）：模型已输出但不落库 => 历史与计费不一致
+		slog.Error("save assistant message", "session", sessionID, "turn", turnID, "error", err)
 	}
 	m.evictCache(ctx, sessionID)
 }
 
+// CreateTurn 记录一次回合的开始（000.md 第 14 条）：turns.created -> running。
+// turnID 由调用方生成并贯穿该回合的消息/工具调用/计费落库，便于幂等与故障排查。
+// 会话不存在时先补建（与 SaveUserMessage 相同的 upsert），避免 FK 失败。
+func (m *Manager) CreateTurn(ctx context.Context, turnID, sessionID, userID string) {
+	if m.pool == nil || turnID == "" || sessionID == "" {
+		return
+	}
+	_, err := m.pool.Exec(ctx,
+		`INSERT INTO sessions (id, tenant_id, user_id, title, created_at, updated_at)
+		 VALUES ($1, $2, NULLIF($3, '')::uuid, '', NOW(), NOW())
+		 ON CONFLICT (id) DO UPDATE SET updated_at = NOW()`,
+		sessionID, DefaultTenantID, userID)
+	if err != nil {
+		slog.Error("ensure session for turn", "session", sessionID, "error", err)
+	}
+	_, err = m.pool.Exec(ctx,
+		`INSERT INTO turns (id, session_id, user_id, status, started_at, created_at)
+		 VALUES ($1, NULLIF($2, '')::uuid, NULLIF($3, '')::uuid, 'running', NOW(), NOW())
+		 ON CONFLICT (id) DO UPDATE SET status = 'running', started_at = NOW()`,
+		turnID, sessionID, userID)
+	if err != nil {
+		// 回合状态写失败不阻断对话（SSE 照常），但必须可见（不再静默）
+		slog.Error("create turn", "turn", turnID, "session", sessionID, "error", err)
+	}
+}
+
+// FinishTurn 收敛回合终态：completed / failed / cancelled，并记录 token 用量。
+// status 为非法值时回退 completed；失败原因写入 turns.error 便于排查。
+func (m *Manager) FinishTurn(ctx context.Context, turnID, status, errMsg string, inputTokens, outputTokens int) {
+	if m.pool == nil || turnID == "" {
+		return
+	}
+	switch status {
+	case "completed", "failed", "cancelled":
+	default:
+		status = "completed"
+	}
+	_, err := m.pool.Exec(ctx,
+		`UPDATE turns
+		 SET status = $2, error = NULLIF($3, ''), input_tokens = $4, output_tokens = $5,
+		     finished_at = NOW()
+		 WHERE id = $1`,
+		turnID, status, errMsg, inputTokens, outputTokens)
+	if err != nil {
+		slog.Error("finish turn", "turn", turnID, "status", status, "error", err)
+	}
+}
+
 // SaveToolCall persists a tool call record (S 修复：工具调用过程落库，刷新后显示一致).
-func (m *Manager) SaveToolCall(ctx context.Context, sessionID, toolCallID, toolName, inputJSON string) {
+func (m *Manager) SaveToolCall(ctx context.Context, sessionID, toolCallID, toolName, inputJSON, turnID string) {
 	if m.pool == nil || toolCallID == "" {
 		return
 	}
 	_, err := m.pool.Exec(ctx,
-		`INSERT INTO tool_calls (id, session_id, tool_name, input, created_at)
-		 VALUES ($1, $2, $3, $4::jsonb, NOW())
-		 ON CONFLICT (id) DO UPDATE SET tool_name = EXCLUDED.tool_name, input = EXCLUDED.input`,
-		toolCallID, sessionID, toolName, inputJSON)
+		`INSERT INTO tool_calls (id, session_id, tool_name, input, turn_id, created_at)
+		 VALUES ($1, $2, $3, $4::jsonb, NULLIF($5, ''), NOW())
+		 ON CONFLICT (id) DO UPDATE SET tool_name = EXCLUDED.tool_name, input = EXCLUDED.input,
+		   turn_id = COALESCE(EXCLUDED.turn_id, tool_calls.turn_id)`,
+		toolCallID, sessionID, toolName, inputJSON, turnID)
 	if err != nil {
-		slog.Warn("save tool call", "error", err)
+		slog.Error("save tool call", "session", sessionID, "turn", turnID, "error", err)
 	}
 }
 
 // UpdateToolCall stores the tool result on the matching record (S 修复).
-func (m *Manager) UpdateToolCall(ctx context.Context, toolCallID, output string, isError bool) {
+func (m *Manager) UpdateToolCall(ctx context.Context, toolCallID, output string, isError bool, turnID string) {
 	if m.pool == nil || toolCallID == "" {
 		return
 	}
 	_, err := m.pool.Exec(ctx,
-		`UPDATE tool_calls SET output = $2, is_error = $3
+		`UPDATE tool_calls
+		 SET output = $2, is_error = $3, turn_id = COALESCE(NULLIF($4, ''), turn_id)
 		 WHERE id = $1`,
-		toolCallID, output, isError)
+		toolCallID, output, isError, turnID)
 	if err != nil {
-		slog.Warn("update tool call", "error", err)
+		slog.Error("update tool call", "call", toolCallID, "error", err)
 	}
 }
 
@@ -623,16 +676,51 @@ func (m *Manager) GetMessages(ctx context.Context, sessionID string, limit ...in
 
 // ── Cache helpers ─────────────────────────────────────────────────────────
 
+// sessionCacheEntry 缓存条目：带版本（updated_at 纳秒）以便写入时比较。
+// 目的：并发交错下「读路径回填的旧快照」不应覆盖新值（000.md 第 13 条）。
+type sessionCacheEntry struct {
+	V int64          `json:"v"`
+	D *model.Session `json:"d"`
+}
+
+// sessionCacheSetLua 带版本比较的写入：缓存缺失、或新值版本不早于缓存值时写入。
+// 返回 1=已写入，0=拒绝（缓存中已有更新的版本）。旧格式条目（无 v 字段）视为可覆盖。
+const sessionCacheSetLua = `
+local cur = redis.call('GET', KEYS[1])
+if cur then
+  local ok, old = pcall(cjson.decode, cur)
+  if ok and old['v'] then
+    local oldv = tonumber(old['v'])
+    local newv = tonumber(ARGV[2])
+    if oldv and newv and newv < oldv then
+      return 0
+    end
+  end
+end
+redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[3])
+return 1
+`
+
 func (m *Manager) cacheSession(ctx context.Context, s *model.Session) {
 	if m.rdb == nil {
 		return
 	}
-	data, err := json.Marshal(s)
+	payload, err := json.Marshal(sessionCacheEntry{V: s.UpdatedAt.UnixNano(), D: s})
 	if err != nil {
 		return
 	}
-	if err := m.rdb.Set(ctx, redisKeyPrefix+s.ID, data, redisTTL).Err(); err != nil {
+	res, err := m.rdb.Eval(ctx, sessionCacheSetLua,
+		[]string{redisKeyPrefix + s.ID},
+		payload,
+		strconv.FormatInt(s.UpdatedAt.UnixNano(), 10),
+		int(redisTTL.Seconds()),
+	).Result()
+	if err != nil {
 		slog.Warn("session cache set", "error", err)
+		return
+	}
+	if n, ok := res.(int64); ok && n == 0 {
+		slog.Debug("session cache set skipped (cached version is newer)", "session", s.ID)
 	}
 }
 

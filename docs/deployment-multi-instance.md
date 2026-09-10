@@ -32,15 +32,19 @@
 cp .env.example .env   # 然后填写全部 required 变量
 
 # 2) 启动基础件
-docker compose up -d postgres redis minio etcd milvus temporal
+docker compose up -d postgres redis minio etcd milvus
 
 # 3) 启动多副本应用层(示例:网关 2 副本、引擎 2 副本)
 docker compose up -d --scale gateway=2 --scale python-engine=2
 ```
 
-> 单机 `docker compose` 不带 LB:`gateway:8080` 服务名做 DNS 轮询,
-> 应用层已验证无状态,可直接多副本。生产建议前置真实负载均衡器
-> (并设置 `TRUSTED_PROXY_CIDRS` 为 LB 网段)。
+> 单机 `docker compose` 不带 LB:对外入口只有 frontend 容器的 nginx(宿主机 `:3000`),
+> 它用 `resolver` + 变量式 `proxy_pass` 每次请求重新解析服务名 `gateway`,
+> 因此能跟随 `--scale gateway=N` 的副本变化并轮转转发。但这**不是**负载均衡:
+> 没有健康检查摘除、没有连接级调度算法,某个 gateway 副本故障或重启期间,
+> 仍会有请求被转发到不可用的副本。应用层已验证无状态,可直接多副本;
+> 生产必须前置真实负载均衡器(`gateway` 在 compose 中不发布宿主机端口,
+> 仅内部网络可达),并设置 `TRUSTED_PROXY_CIDRS` 为 LB 网段。
 
 ### 必填环境变量(required,缺失则 compose 拒绝启动)
 
@@ -67,6 +71,7 @@ docker compose up -d --scale gateway=2 --scale python-engine=2
 | `TRUSTED_PROXY_CIDRS` | 空 | 前置 LB 时填真实来源网段 |
 | `HTTP_HOST` | `0.0.0.0`(引擎) | 引擎必须对外监听供网关访问 |
 | `MCP_POOL_ENABLED` | `true` | 每启用副本对活跃用户各持 MCP 连接;副本增多后按需关闭部分实例 |
+| `DEGRADED_MODE` | `false` | **依赖门禁**:默认 Redis 未配置/不可用时网关与引擎拒绝启动;仅单机开发设 `true` 才允许进程内降级(限流/会话/事件退化为单实例语义) |
 | `INSTANCE_ID` | 空 | K8s 注入;compose 留空由引擎自生成 |
 | `ENGINE_ADVERTISE_URL` | 空(批 E1) | 引擎对外可达地址(如 `http://engine-0:8000`),设置后引擎向 Redis 自注册、网关 15s 内动态感知扩缩容;为空则不注册,网关回退 `PYTHON_ENGINE_ADDRESS` 静态列表 |
 
@@ -97,25 +102,47 @@ K8s/云部署等价物:沙箱与插件用 PVC 或 EFS(同区);本地起步可用
 5. **引擎横向扩展(批 E1/E2 已落地)**:会话消息 Redis 化、后台任务 Redis Streams 消费组分摊;
    引擎配 `ENGINE_ADVERTISE_URL` 即向 Redis 自注册,网关每 15s 动态感知扩缩容
    (注册表为空时回退静态 `PYTHON_ENGINE_ADDRESS`);
-   **注意**:agent 进行中 run 的现场状态仍在进程内——会话亲和为尽力而为,实例故障时
-   该 run 中断;会话 run 锁已改为 5min TTL + 60s 心跳续期(批 E2),用户 ≤5min 后可
-   重试(历史消息已持久化)。文件工具结果依赖共享沙箱卷。
+   **run 归属映射(批 4)**:引擎把「哪个实例持有该 session 的 run」写入 Redis
+   `engine:run:{session_id}`(TTL 300s + 100s 心跳续期,见
+   `python-engine/app/run_registry.py`),网关路由与审批优先直连归属实例
+   (一致性哈希/round-robin 仅作回退),审批还会带上 run_token 供引擎校验
+   (陈旧 run 的审批被拒;归属指向别的实例时返回明确的 "run owned by another engine
+   instance"，不再是含糊的 "no active agent")。
+   **仍存在的限制**:进行中 run 的现场状态(工具审批队列、持久终端、进程内簿记)
+   仍在引擎进程内,实例故障时该 run 仍会中断——归属映射只消除「路由到错误实例 +
+   静默失败」,不提供现场状态迁移;会话 run 锁为 5min TTL + 60s 心跳续期(批 E2),
+   用户 ≤5min 后可重试(历史消息已持久化)。文件工具结果依赖共享沙箱卷。
 6. **RPA 浏览器桥(批 D)**:插件 WS 与 `/v1/rpa/exec` 可落在不同网关副本,
    经 Redis 注册中心路由(通道 `rpa:cmd` / `rpa:res`,key `rpa:client:*`)。
    Redis 不可用时网关自动退回单机模式(`localOnly`),此时仍需单实例/粘性。
 7. 扩容引擎:启用 E1(`ENGINE_ADVERTISE_URL`)后网关自动感知,无需再改静态清单。
+8. **依赖门禁与就绪探针**:Redis 是生产必需依赖——未配置或连接失败时网关
+   (`cmd/chiron/main.go`)与引擎(`python-engine/app/main.py`)默认**拒绝启动**,
+   仅显式 `DEGRADED_MODE=true`(单机开发)才降级运行。运行期依赖断连由就绪探针反映:
+   网关 `GET /ready`(检查 PG + Redis)、引擎 `GET /readyz`(检查 Redis)返回 503;
+   compose 的 gateway/python-engine 健康检查已指向这两个端点,依赖故障时标记 unhealthy。
 
 ## 5. 已知剩余项(后续批次,不影响上述基线运行)
 
 - 批 F:迁移收敛为发布流程单点执行;RLS 逐表核查。
+- 部署编排修复(本次):`gateway` 不再发布宿主机端口(改内部 `expose`,对外只经
+  frontend 的 nginx);`etcd` 的 `--advertise-client-urls` 指向 `http://etcd:2379`;
+  固定浮动镜像版本;移除 compose 中未被代码使用的 `temporal` 服务(go.mod 与
+  python-engine/requirements.txt 均无 Temporal 依赖);补上缺失的 `prometheus.yml`
+  (此前该挂载点不存在,会让 prometheus 容器启动失败)并统一 `METRICS_TOKEN`。
+- 仍待办(后续批次):Redis/PG 不可用时的就绪门禁、任务不丢(优雅关闭/重试/幂等)、
+  进程内运行态与事件可靠性、缓存一致性。
 
 ## 6. 验证冒烟
 
 ```bash
 docker compose config            # 配置校验
 docker compose up -d --scale gateway=2 --scale python-engine=2
-curl -s http://localhost:8080/health          # 每个网关副本
-curl -s http://localhost:8080/v1/system/health
+# gateway 不发布宿主机端口(多副本时固定 8080 会互相抢占),对外入口是 frontend 的 nginx:
+curl -s http://localhost:3000/health          # 前端入口(静态资源 + 同源反代)
+curl -s http://localhost:3000/v1/system/health
+# 需要直连某个 gateway 副本时(临时映射端口):
+#   docker compose run --rm --service-ports gateway
 # RPA(需真实浏览器插件):
 #   插件连副本 A 的 /ws/rpa,再经任意副本 POST /v1/rpa/exec,命令应能到达插件。
 ```

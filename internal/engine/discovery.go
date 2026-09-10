@@ -33,6 +33,9 @@ type engineInstanceRecord struct {
 
 // StartEngineDiscovery 启动引擎发现循环（每网关实例一次；Redis/client 为空则跳过）。
 func StartEngineDiscovery(ctx context.Context, rdb db.RedisClient, client *PythonClient) {
+	// 顺带注入 session→实例归属映射（engine:run:*，批次 4）读取所用的同一 Redis 客户端。
+	// Redis 不可用时为 nil，RunOwner 直接返回 false，路由回退一致性哈希。
+	SetAffinityRedis(rdb)
 	if rdb == nil || client == nil {
 		return
 	}

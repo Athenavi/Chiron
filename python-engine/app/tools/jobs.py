@@ -64,6 +64,10 @@ async def _enqueue_tool_job(job_id: str, command: str, shell_key: str) -> bool:
         "retry_count": "0",
         "trace_id": "",
         "priority": "0",
+        # 幂等键 = job_id:命令执行成功后重投同一 job 不再重复执行(副作用幂等);
+        # 失败仍可重试(claim 只拒绝 completed)。
+        "idempotency_key": f"tool_job:{job_id}",
+        "deadline": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 3600)),
     }
     try:
         await redis.xadd(TASK_STREAM, msg, maxlen=100000)

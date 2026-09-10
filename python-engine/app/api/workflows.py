@@ -71,6 +71,12 @@ async def _enqueue_workflow_run(
         "retry_count": "0",
         "trace_id": "",
         "priority": "0",
+        # 幂等键 = instance_id:workflow 断点续跑幂等(executor 依 checkpoint);
+        # 已完成实例重投不再执行。
+        "idempotency_key": f"workflow_run:{instance_id}",
+        "deadline": (
+            datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=2)
+        ).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
     try:
         await redis.xadd(rkey("engine:tasks"), msg, maxlen=100000)

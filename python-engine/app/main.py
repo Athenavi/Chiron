@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 
 import redis.asyncio as aioredis
 import uvicorn
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.config import settings
@@ -20,8 +20,9 @@ from app.session_store import SessionStore
 # 全局会话消息缓存（lifespan 中接入 Redis 实现多实例共享）
 _session_cache = SessionStore(max_sessions=200)
 # 活跃 AgentRuntime 注册表（S 安全修复：工具确认端点按 session_id 定位 runtime；
-# 值为 (runtime, owner_user_id)，用于确认时校验来电者是否为会话 owner）
-_ACTIVE_RUNTIMES: dict[str, tuple[AgentRuntime, str]] = {}
+# 值为 (runtime, owner_user_id, run_token)：owner 用于确认时校验来电者身份，
+# run_token 用于校验审批属于当前 run（批次 4：归属另镜像到 Redis，见 app/run_registry.py）
+_ACTIVE_RUNTIMES: dict[str, tuple[AgentRuntime, str, str]] = {}
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +30,11 @@ logger = logging.getLogger(__name__)
 _start_time = time.monotonic()
 _redis: aioredis.Redis | None = None
 _gateway = None  # GatewayRouter
-_queue_worker = None  # asyncio.Task
+_queue_worker = None  # asyncio.Task（后台协程句柄）
+# QueueWorker 实例：关机时必须先调它的 stop() 优雅排空（停 PEL reclaim、等待进行中任务），
+# 再取消上面的 Task。只 cancel Task 会跳过 stop()——start() 内部捕获取消后正常返回。
+_queue_worker_instance = None
 _mcp_client = None  # MCPClient
-_key_pool = None  # SmartAPIKeyPool
 
 
 # ── FastAPI 依赖注入 ──
@@ -51,25 +54,6 @@ async def get_gateway():
     return _gateway
 
 
-async def get_key_pool():
-    """获取 SmartAPIKeyPool（FastAPI Depends）"""
-    if _key_pool is None:
-        raise RuntimeError("Key pool not initialized")
-    return _key_pool
-
-
-# ── 插件 MCP 连接池（无状态友好：配置存磁盘，连接为可重建缓存） ──
-
-_plugin_pool = None  # MCPClientPool
-
-
-def get_plugin_pool():
-    """获取 MCP 插件连接池（FastAPI Depends / 内部调用）。"""
-    if _plugin_pool is None:
-        raise RuntimeError("Plugin pool not initialized")
-    return _plugin_pool
-
-
 def touch_user(user_id: str) -> None:
     """标记用户活跃（有会话/工具/Agent 请求时调用），驱动 MCP 轮询范围。"""
     if _plugin_pool is not None and user_id:
@@ -79,7 +63,7 @@ def touch_user(user_id: str) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期：启动初始化 + 关闭清理"""
-    global _redis, _gateway, _queue_worker, _key_pool
+    global _redis, _gateway, _queue_worker
 
     # ── 0. 全局异常处理 ──
     import sys
@@ -114,7 +98,17 @@ async def lifespan(app: FastAPI):
     logger.info("=" * 60)
 
     # ── 2. Redis 连接池 ──
+    # 依赖门禁：Redis 是生产必需依赖。未显式开启 DEGRADED_MODE 时，
+    # 未配置与连接失败都直接拒绝启动(fail fast)——进程内降级会让多副本看到不同的
+    # 会话/限流/队列/事件，问题会在运行期以不一致形式暴露而不是启动时暴露。
+    # 仅单机开发允许显式 DEGRADED_MODE=true 走进程内降级。
     if not settings.redis_url:
+        if not settings.degraded_mode:
+            logger.error(
+                "REDIS_URL not configured — refusing to start "
+                "(set REDIS_URL, or DEGRADED_MODE=true for single-instance development)"
+            )
+            raise RuntimeError("REDIS_URL is required unless DEGRADED_MODE=true")
         logger.warning(
             "Redis URL not configured — degraded mode (session cache in-process, distributed features disabled)"
         )
@@ -136,9 +130,15 @@ async def lifespan(app: FastAPI):
             _session_cache._redis = _redis
             logger.info("SessionStore switched to Redis backend")
         except Exception as e:
-            # 产品决策(2026-08-22)「Redis 必需、无降级」已修订(2026-09)：与 Go 网关一致，
-            # Redis 不可用时降级启动——SessionStore 回退进程内内存模式，
-            # 依赖 Redis 的功能（分布式限流/会话多实例共享/队列）返回 503，不阻断引擎启动。
+            if not settings.degraded_mode:
+                logger.error(
+                    "Redis unavailable — refusing to start (%s); "
+                    "set DEGRADED_MODE=true only for single-instance development",
+                    e,
+                )
+                raise RuntimeError("Redis is required but unavailable") from e
+            # 显式降级模式：SessionStore 回退进程内内存模式，依赖 Redis 的功能
+            #（分布式限流/会话多实例共享/队列）返回 503（就绪探针见 /readyz）。
             logger.warning(
                 "Redis unavailable — degraded mode (session cache in-process, distributed features disabled): %s",
                 e,
@@ -303,24 +303,6 @@ async def lifespan(app: FastAPI):
 
     await preload_default_capabilities()
 
-    # ── 3.5. SmartAPIKeyPool ──
-    # 中间态：纯内存，不落盘明文、不落库。管理端添加的 Key 重启即丢失；
-    # 正式持久化/多实例方案见 docs/llm-provider-key-management-dr.md。
-    from app.gateway.smart_key_pool import SmartAPIKeyPool
-
-    _key_pool = SmartAPIKeyPool()
-    # 从 settings 注入已有 key（env 为事实源，重启由 env 重新注入）
-    if settings.openai_api_key:
-        await _key_pool.add_key("openai", settings.openai_api_key, "from env")
-    if settings.deepseek_api_key:
-        await _key_pool.add_key("deepseek", settings.deepseek_api_key, "from env")
-    if settings.anthropic_api_key:
-        await _key_pool.add_key("anthropic", settings.anthropic_api_key, "from env")
-    logger.warning(
-        "SmartAPIKeyPool is in-memory only: admin-added api keys will be lost on restart (DR pending)"
-    )
-    logger.info("SmartAPIKeyPool initialized with %d providers", len(providers))
-
     # ── 4. 限流器（middleware 需要） ──
     # Redis 可用：分布式租户限流；Redis 不可用：本地限流兑底（避免裸奔/None 崩溃）。
     from app.gateway.ratelimit import LocalTenantRateLimiter
@@ -403,8 +385,16 @@ async def lifespan(app: FastAPI):
     # ── 关闭 ──
     logger.info("Shutting down...")
 
-    # 停止队列 worker
+    # 停止队列 worker：先优雅排空，再取消后台协程。
+    # 不能只 cancel：QueueWorker.start() 内部捕获 CancelledError 后正常返回，
+    # 因此 stop()（停止领取新任务、停止 PEL reclaim loop、最多等待 30s 进行中任务）
+    # 会被整体跳过，进行中的任务随事件循环被直接取消、消息滞留在 PEL 等待 reclaim。
     if _queue_worker:
+        if _queue_worker_instance is not None:
+            try:
+                await _queue_worker_instance.stop()
+            except Exception as e:  # noqa: BLE001 - 排空失败不应阻断后续关闭步骤
+                logger.warning("Queue worker drain failed: %s", e)
         _queue_worker.cancel()
         try:
             await _queue_worker
@@ -890,13 +880,32 @@ async def agent_submit(
         memory=get_memory_service(),
     )
     session_id = task.session_id
+    run_lease = None
     if session_id:
-        _ACTIVE_RUNTIMES[session_id] = (runtime, task.user_id)
+        import uuid
+
+        from app.run_registry import RunLease
+
+        run_token = uuid.uuid4().hex
+        _ACTIVE_RUNTIMES[session_id] = (runtime, task.user_id, run_token)
+        # run 归属映射（Redis）：网关据此把该 session 的请求路由到本实例，
+        # 审批端点据此校验归属与 run_token。实例故障后映射随 TTL(300s) 过期，
+        # 用户重试即在新实例重建 run（现场状态不迁移，明确中断而非静默错路由）。
+        run_lease = RunLease(
+            _redis,
+            session_id,
+            _get_instance_id(),
+            run_token,
+            owner_uid=task.user_id or "",
+            url=settings.engine_advertise_url,
+        )
 
     async def event_generator():
         total_in = 0
         total_out = 0
         started = time.monotonic()
+        if run_lease is not None:
+            await run_lease.start()
         try:
             async for event in runtime.run(task):
                 if event.input_tokens:
@@ -941,6 +950,9 @@ async def agent_submit(
                 except Exception as wh_err:  # noqa: BLE001
                     logger.debug("agent webhook emit failed: %s", wh_err)
         finally:
+            # 先注销 Redis 归属映射（仅当仍属于本次 run_token），再清进程内注册表
+            if run_lease is not None:
+                await run_lease.stop()
             if session_id:
                 _ACTIVE_RUNTIMES.pop(session_id, None)
 
@@ -962,12 +974,29 @@ async def agent_approval(
     reason = body.get("reason", "")
     entry = _ACTIVE_RUNTIMES.get(session_id)
     if entry is None:
+        # 本地没有该 run：查 Redis 归属，区分「run 在别的实例」与「没有活动 run」。
+        # 前者此前只得到含糊的 "no active agent"，前端/运维无法判断该不该重试。
+        from app.run_registry import owner_of
+
+        owner = await owner_of(_redis, session_id)
+        if owner and owner.get("instance_id"):
+            logger.warning(
+                "approval rejected: run owned by another instance (session=%s owner=%s self=%s)",
+                session_id,
+                owner.get("instance_id"),
+                _get_instance_id(),
+            )
+            return {
+                "ok": False,
+                "error": "run owned by another engine instance",
+                "owner_instance_id": owner.get("instance_id"),
+            }
         return {"ok": False, "error": "no active agent for this session"}
 
     # S 安全修复：校验来电者是否为会话 owner，防止他人代批/拒批危险工具。
     # 可信 user_id 由 Go 网关从已验证 JWT claims 写入 body(或 X-User-ID 头)，
     # 直连路径无该身份时不得放行他人。
-    runtime, owner_uid = entry
+    runtime, owner_uid, run_token = entry
     caller = request.headers.get("x-user-id", "") or body.get("user_id", "")
     if owner_uid and caller and owner_uid != caller:
         logger.warning(
@@ -977,6 +1006,18 @@ async def agent_approval(
             session_id,
         )
         return {"ok": False, "error": "not session owner"}
+    # run token 校验（批次 4）：网关从 Redis 归属映射取出当前 run_token 注入，
+    # 防止陈旧 run 的审批命中新 run（session 复用场景）。缺失时不强制
+    # （兼容未启用归属映射的网关/直连调用）；带上且不匹配则一律拒绝。
+    given_token = body.get("run_token") or request.headers.get("x-run-token", "")
+    if given_token and given_token != run_token:
+        logger.warning(
+            "approval rejected: stale run token (session=%s given=%.8s expected=%.8s)",
+            session_id,
+            given_token,
+            run_token,
+        )
+        return {"ok": False, "error": "stale run token"}
     resolved = await runtime.submit_approval(tool_call_id, approved, reason)
     return {"ok": resolved}
 
@@ -1041,130 +1082,9 @@ async def kb_query(
     return {"success": True, "results": results, "count": len(results)}
 
 
-# ── Admin API Key 管理（SmartKeyPool 的 HTTP 接口） ──
-
-
-def _require_gateway_internal(request: Request) -> None:
-    """S 修复:admin API Key 管理仅允许经由可信网关(X-Internal-Token)到达。
-
-    Go 网关已在网关侧完成 admin/owner RBAC 后才转发(且 ForwardRequest 注入本 token)。
-    Python 引擎直连不可绕过角色校验,防止引擎端口可达时被任意调用方增删改密钥池。
-    """
-    import hmac
-
-    provided = request.headers.get("X-Internal-Token", "")
-    if (
-        not settings.internal_token
-        or not provided
-        or not hmac.compare_digest(provided, settings.internal_token)
-    ):
-        raise HTTPException(
-            status_code=401, detail="admin requires gateway internal token"
-        )
-
-
-async def admin_list_api_keys(
-    request: Request,
-    pool=Depends(get_key_pool),
-    _gateway=Depends(_require_gateway_internal),
-):
-    """获取所有 API Key 列表"""
-    keys = pool.get_all_keys()
-    stats = pool.get_stats()
-    return {"keys": keys, "stats": stats}
-
-
-async def admin_add_api_key(
-    request: Request,
-    pool=Depends(get_key_pool),
-    _gateway=Depends(_require_gateway_internal),
-):
-    """添加 API Key"""
-    body = await request.json()
-    provider = body.get("provider", "")
-    key = body.get("key", "")
-    remark = body.get("remark", "")
-    if not provider or not key:
-        from fastapi.responses import JSONResponse
-
-        return JSONResponse({"error": "provider and key are required"}, status_code=400)
-    await pool.add_key(provider, key, remark)
-    return {"status": "added", "provider": provider}
-
-
-async def admin_update_api_key(
-    request: Request,
-    pool=Depends(get_key_pool),
-    _gateway=Depends(_require_gateway_internal),
-):
-    """更新 API Key 状态（按稳定 ID 定位，active/rate_limited/circuit_open）"""
-    from fastapi.responses import JSONResponse
-
-    key_id = request.path_params.get("key_id", "")
-    body = await request.json()
-    status_val = body.get("status", "")
-    if not key_id or not status_val:
-        return JSONResponse(
-            {
-                "status": "error",
-                "error": "key id and status are required",
-                "id": key_id,
-            },
-            status_code=400,
-        )
-    updated = await pool.update_key_status(key_id, status_val)
-    if not updated:
-        return JSONResponse(
-            {
-                "status": "not_found",
-                "error": f"API key not found or invalid status: {status_val}",
-                "id": key_id,
-            },
-            status_code=404,
-        )
-    return {"status": "updated", "id": key_id, "key_status": status_val}
-
-
-async def admin_delete_api_key(
-    request: Request,
-    pool=Depends(get_key_pool),
-    _gateway=Depends(_require_gateway_internal),
-):
-    """删除 API Key（按路径 ID；兼容请求体 provider+key 定位）"""
-    key_id = request.path_params.get("key_id", "")
-    try:
-        try:
-            body = await request.json()
-        except Exception:
-            body = {}
-        provider = body.get("provider", "")
-        key_full = body.get("key", "")
-        if key_id:
-            removed = await pool.remove_key_by_id(key_id)
-        elif provider and key_full:
-            removed = await pool.remove_key(provider, key_full)
-        else:
-            return JSONResponse(
-                {
-                    "status": "error",
-                    "error": "key id (path) or provider+key (body) required",
-                    "id": key_id,
-                },
-                status_code=400,
-            )
-        if not removed:
-            return JSONResponse(
-                {"status": "not_found", "error": "API key not found", "id": key_id},
-                status_code=404,
-            )
-    except Exception as e:
-        logger.error("Failed to delete API key %s: %s", key_id, e)
-        return {"status": "error", "error": str(e), "id": key_id}
-    return {"status": "deleted", "id": key_id}
-
-
 async def _run_queue_worker(redis: aioredis.Redis, gateway=None) -> None:
     """后台队列消费者"""
+    global _queue_worker_instance
     from app.queue.worker import QueueWorker
 
     worker = QueueWorker(
@@ -1173,10 +1093,16 @@ async def _run_queue_worker(redis: aioredis.Redis, gateway=None) -> None:
         gateway=gateway,
         global_concurrency=settings.queue_worker_global_concurrency,
     )
+    _queue_worker_instance = worker
     try:
         await worker.start()
-    except asyncio.CancelledError:
-        await worker.stop()
+    finally:
+        # start() 内部会捕获 CancelledError 后正常返回，故不能只在 except 分支清理：
+        # 这里兜底执行优雅停止（停 PEL reclaim loop、排空进行中任务）。
+        # 关机路径已先调用 stop() 并清空 _queue_worker_instance，因此不会重复排空。
+        if _queue_worker_instance is worker:
+            _queue_worker_instance = None
+            await worker.stop()
 
 
 def main():

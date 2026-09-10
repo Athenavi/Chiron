@@ -6,7 +6,7 @@
 #     - agent 沙箱 SANDBOX_ROOT(引擎)
 #     - 插件数据 PLUGIN_DATA_DIR(网关与引擎同卷)
 #     - 本地存储兜底 STORAGE_ROOT=/app/workspace(媒体默认走 MinIO/S3)
-# 详细多实例要求见 docs/deployment-multi-instance.md(新增引擎副本时须同步 PYTHON_ENGINE_ADDRESS 并滚动重启网关)。
+# 详细多实例要求见 docs/deployment-multi-instance.md。
 services:
 
   postgres:
@@ -42,37 +42,21 @@ services:
       timeout: 3s
       retries: 5
 
-  temporal:
-    image: temporalio/auto-setup:latest
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:7233:7233"
-      - "127.0.0.1:8233:8233"
-    environment:
-      - DB=postgres12
-      - DB_PORT=5432
-      - POSTGRES_USER=postgres
-      - POSTGRES_PWD=${TEMPORAL_PWD:?TEMPORAL_PWD is required — generate a strong password}
-      - POSTGRES_SEEDS=postgres
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
   gateway:
     build:
       context: .
       dockerfile: Dockerfile
-    ports:
-      - "8080:8080"
+    # 不发布宿主机端口:多副本(--scale gateway=2)时固定端口会互相抢占,
+    # 且宿主机端口发布不是服务发现方案。对外入口由 frontend 容器的 nginx
+    # 同源反代(/v1、/events、/ws、/submit、/cancel、/media)提供;
+    # 临时直连调试: docker compose run --rm --service-ports gateway
+    expose:
+      - "8080"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-      temporal:
-        condition: service_started
     environment:
       # 多副本一致性要求:所有 gateway/python-engine 副本注入完全相同的
       # APP_SECRET / JWT_SECRET / INTERNAL_TOKEN / REDIS_KEY_PREFIX(见 docs/deployment-multi-instance.md)。
@@ -101,12 +85,21 @@ services:
       RATE_LIMIT_INSTANCES: ${RATE_LIMIT_INSTANCES:-1}
       # 前置负载均衡器时填写真实来源网段(如 "10.0.0.0/8,172.16.0.0/12")
       TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-}
+      # Prometheus 抓取 /metrics 的共享 Bearer token(与 prometheus 服务同值)。
+      # 为空时 /metrics 只接受 JWT admin 权限,Prometheus 抓取会 401(见 prometheus.yml)。
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
+      # 依赖门禁:默认 false = Redis 不可用时拒绝启动(多副本一致性优先);
+      # 仅单机开发设 true 才允许进程内降级(限流/会话/事件退化为单实例语义)。
+      DEGRADED_MODE: ${DEGRADED_MODE:-false}
     volumes:
       - workspace:/app/workspace
       - plugindata:/srv/chiron/plugins
+    stop_grace_period: 30s
     restart: unless-stopped
     healthcheck:
-      test: [ "CMD", "wget", "-qO-", "http://localhost:8080/health" ]
+      # 就绪探针用 /ready(检查 PG + Redis):依赖不可用时标记 unhealthy,
+      # 避免编排器把流量继续打给处于降级状态的副本;/health 仅供存活检查。
+      test: [ "CMD", "wget", "-qO-", "http://localhost:8080/ready" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -132,6 +125,9 @@ services:
       HTTP_PORT: "8000"
       REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379/${REDIS_DB:-0}
       REDIS_KEY_PREFIX: ${REDIS_KEY_PREFIX:-}
+      # 依赖门禁:默认 false = Redis 未配置/不可用时拒绝启动;
+      # 仅单机开发设 true 才允许进程内降级(见 python-engine/app/main.py)。
+      DEGRADED_MODE: ${DEGRADED_MODE:-false}
       # 引擎回调网关的地址(webhook/事件/config 下发)
       GATEWAY_INTERNAL_URL: http://gateway:8080
       RPA_GATEWAY_URL: http://gateway:8080
@@ -141,9 +137,11 @@ services:
       # 向量库(Milvus 已在本 compose 提供;pgvector 时改 VECTOR_DB_TYPE=pgvector)
       MILVUS_ADDRESS: ${MILVUS_ADDRESS:-milvus:19530}
       VECTOR_DB_TYPE: ${VECTOR_DB_TYPE:-milvus}
-      # 多实例注意:每个启用 MCP 的引擎副本都会对活跃用户持有 MCP 连接(连接数 N×),
-      # 副本数增长后按需关闭部分副本的 MCP 池(MCP_POOL_ENABLED=false)。
-      MCP_POOL_ENABLED: ${MCP_POOL_ENABLED:-true}
+      # 多实例注意:每个启用 MCP 的引擎副本都会对活跃用户持有 MCP 连接,
+      # 连接规模 ≈ 副本数 × 活跃用户数 × MCP server 数,扩容会瞬间放大第三方连接。
+      # compose 面向多副本编排,因此默认关闭;需要 MCP 的副本(或单机部署)请显式
+      # 设置 MCP_POOL_ENABLED=true,详见 docs/deployment-multi-instance.md。
+      MCP_POOL_ENABLED: ${MCP_POOL_ENABLED:-false}
       # K8s 注入实例标识;compose 下留空由引擎自生成
       INSTANCE_ID: ${INSTANCE_ID:-}
       # 模型密钥(ANTHROPIC_API_KEY/OPENAI_API_KEY/DEEPSEEK_API_KEY/LLM_API_KEY 等)
@@ -160,9 +158,11 @@ services:
     volumes:
       - sandboxdata:/srv/chiron/sandbox
       - plugindata:/srv/chiron/plugins
+    stop_grace_period: 30s
     restart: unless-stopped
     healthcheck:
-      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')" ]
+      # /readyz 检查 Redis(与 gateway 的 /ready 对齐);/healthz 仅为进程存活检查。
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/readyz')" ]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -205,7 +205,7 @@ services:
       ETCD_SNAPSHOT_COUNT: "50000"
     volumes:
       - etcddata:/etcd
-    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    command: etcd --advertise-client-urls=http://etcd:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
 
   frontend:
     build:
@@ -216,9 +216,16 @@ services:
     depends_on:
       gateway:
         condition: service_healthy
-    environment:
-      VITE_API_URL: "http://gateway:8080"
-      VITE_WS_URL: "ws://gateway:8080"
+    # 注意:VITE_API_URL/VITE_WS_URL 是构建期变量(vite build 内联),
+    # 在此设置运行时 environment 无效;而容器内 DNS 名 gateway 浏览器也无法解析。
+    # 前端默认 API_URL=''(见 src/api/index.ts)即同源相对路径,
+    # 由本容器 nginx.conf 反代到 gateway,无需配置对外地址。
+    healthcheck:
+      test: [ "CMD", "wget", "-qO-", "http://localhost/" ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     restart: unless-stopped
 
 
@@ -226,6 +233,9 @@ services:
     image: prom/prometheus:v3.2.1
     ports:
       - "127.0.0.1:9090:9090"
+    environment:
+      # prometheus.yml 用 ${METRICS_TOKEN} 做环境变量替换,必须与 gateway 同值
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
       - ./prometheus_alerts.yml:/etc/prometheus/alerts.yml
