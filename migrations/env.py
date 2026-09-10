@@ -115,15 +115,15 @@ def get_database_url() -> str | None:
 # Set the database URL
 db_url = get_database_url()
 # 隐藏密码打印
+# 隐藏密码打印：密码可能含 @ 与 :（如 p@ssw0rd!），必须按「最后一个 @」定位 host，
+# 否则密码后半段会被当成 host 打印进 Alembic 日志（凭据泄露）。
 safe_url = "(none)"
 if db_url:
     if '@' in db_url:
-        parts = db_url.split('@')
-        prefix = parts[0]
-        suffix = parts[1]
-        if ':' in prefix.split('://', 1)[-1]:
-            user_part = prefix.split('://', 1)[0] + '://' + prefix.split('://', 1)[-1].split(':')[0]
-            safe_url = f"{user_part}:***@{suffix}"
+        _scheme, _, _rest = db_url.partition('://')
+        _userinfo, _, _host = _rest.rpartition('@')
+        if ':' in _userinfo:
+            safe_url = f"{_scheme}://{_userinfo.split(':', 1)[0]}:***@{_host}"
         else:
             safe_url = db_url
     else:

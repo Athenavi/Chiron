@@ -73,12 +73,8 @@ func main() {
 			db.Pool = router.Write() // backward compatibility alias
 			pgConnected = true
 			defer router.Close()
-			// 执行数据库迁移（Alembic upgrade head）
-			if err := db.RunMigrations(cfg.PostgresDSN); err != nil {
-				slog.Warn("database migrations failed", "error", err)
-			} else {
-				slog.Info("database migrations completed")
-			}
+			// schema 版本校验（只读）：迁移由发布流程/DBA 执行，应用不再自行迁移
+			verifySchemaVersion(ctx, cfg)
 			slog.Info("database router enabled", "read_replicas", len(cfg.PostgresReadDSNs))
 		}
 	}
@@ -95,12 +91,8 @@ func main() {
 			if err := db.EnsureDefaultTenant(ctx, db.Pool); err != nil {
 				slog.Warn("ensure default tenant failed", "error", err)
 			}
-			// 执行数据库迁移（Alembic upgrade head）
-			if err := db.RunMigrations(cfg.PostgresDSN); err != nil {
-				slog.Warn("database migrations failed", "error", err)
-			} else {
-				slog.Info("database migrations completed")
-			}
+			// schema 版本校验（只读）：迁移由发布流程/DBA 执行，应用不再自行迁移
+			verifySchemaVersion(ctx, cfg)
 		}
 	}
 
@@ -409,6 +401,33 @@ func applyDBSettingsAfterConnect(ctx context.Context, cfg *config.Config) {
 			cfg.AlipayGateway = v
 		}
 	})
+}
+
+// verifySchemaVersion 只读校验数据库 schema 与代码期望的迁移 head 是否一致。
+//
+// 应用不再自行迁移（旧实现会 shell 出 python -m alembic 并写 .env，在无 python 的应用
+// 镜像里必然静默失败）。迁移由发布流程/DBA 用 requirements-migrate.txt 的环境执行；
+// 这里比对 migrations/versions 的 head 与数据库 alembic_version，不一致时默认拒绝启动，
+// ALLOW_SCHEMA_DRIFT=true 可放行（迁移超前/回滚等场景）。
+func verifySchemaVersion(ctx context.Context, cfg *config.Config) {
+	expected, actual, match, err := db.CheckSchemaVersion(ctx)
+	if err != nil {
+		slog.Warn("schema version check unavailable", "error", err)
+		return
+	}
+	if match {
+		slog.Info("schema version verified", "migration", expected)
+		return
+	}
+	slog.Error("database schema does not match this build",
+		"expected_migration", expected, "database_migration", actual,
+		"hint", "run `alembic upgrade head` (see requirements-migrate.txt) before starting")
+	if cfg.AllowSchemaDrift {
+		slog.Warn("ALLOW_SCHEMA_DRIFT=true — continuing despite schema drift")
+		return
+	}
+	slog.Error("FATAL: refusing to start on mismatched schema; set ALLOW_SCHEMA_DRIFT=true to bypass")
+	os.Exit(1)
 }
 
 func parseLogLevel(level string) slog.Level {

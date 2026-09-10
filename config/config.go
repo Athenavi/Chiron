@@ -43,6 +43,11 @@ type Config struct {
 	// 会话/限流/事件（限流按副本放大、run 锁退化为本地锁），破坏一致性。
 	DegradedMode bool
 
+	// AllowSchemaDrift 允许"数据库 schema 版本与代码期望不一致"时仍启动。
+	// 默认 false：迁移由发布流程/DBA 执行（见 requirements-migrate.txt），
+	// 启动只做只读校验，不一致即拒绝启动，避免"代码已升级、迁移未跑"的静默漂移。
+	AllowSchemaDrift bool
+
 	// Auth
 	JWTSecret     string
 	JWTExpiration time.Duration
@@ -199,6 +204,7 @@ func loadConfig() *Config {
 		TrustedProxyCIDRs:   getStringSlice("TRUSTED_PROXY_CIDRS", []string{}),
 		MetricsToken:        getEnv("METRICS_TOKEN", ""),
 		DegradedMode:        isTruthy(getEnv("DEGRADED_MODE", "")),
+		AllowSchemaDrift:    isTruthy(getEnv("ALLOW_SCHEMA_DRIFT", "")),
 		LogLevel:            getEnv("LOG_LEVEL", "info"),
 
 		// 支付（支付宝/微信）

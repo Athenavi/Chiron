@@ -19,13 +19,22 @@
 
 ```bash
 cp .env.example .env
-# 必填：POSTGRES_PASSWORD、REDIS_PASSWORD、POSTGRES_DSN、APP_SECRET
+# 必填：REDIS_PASSWORD、POSTGRES_DSN（外部 PostgreSQL）、APP_SECRET
 #       JWT_SECRET、INTERNAL_TOKEN、MINIO_ACCESS_KEY、MINIO_SECRET_KEY
-docker compose up -d postgres redis minio etcd milvus
-python -m alembic upgrade head
+
+# 1) 迁移目标 PostgreSQL（PG 由云厂商/DBA 维护，不在本 compose 内）
+python -m pip install -r requirements-migrate.txt
+DATABASE_DSN='postgresql://user:pwd@your-pg:5432/dbname' \
+  python -m alembic -c alembic.ini upgrade head
+
+# 2) 启动应用层
+docker compose up -d redis minio etcd milvus
 docker compose up -d --scale gateway=2 --scale python-engine=2
 curl -s http://localhost:3000/health        # 前端入口（静态资源 + 同源反代）
 ```
+
+> 应用启动会校验 schema 版本：若上一步未执行或未完成，网关会**拒绝启动**并打印期望/实际
+> migration 版本（`ALLOW_SCHEMA_DRIFT=true` 可临时放行）。
 
 ## 3. 关键变量
 
@@ -67,7 +76,36 @@ curl -s http://localhost:3000/health        # 前端入口（静态资源 + 同�
 | `turns` | 网关（每轮一行） | 网关每 `RETENTION_INTERVAL_HOURS` 清理 `TURN_RETENTION_DAYS`（默认 30 天）前**已完结**记录；`running` 不删 |
 | `task_idempotency` | 引擎（每任务一行） | 引擎每 `RETENTION_INTERVAL_HOURS` 清理 `TASK_IDEMPOTENCY_RETENTION_DAYS` 前 `status <> 'running'` 记录 |
 
-## 7. 验证
+## 7. 数据库迁移与 schema 校验
+
+- **应用不迁移**：网关启动只做只读校验（`internal/db/schema_version.go`），不执行 DDL、不需要 DDL 权限；
+- **谁执行**：CI 流水线或 DBA，用 `requirements-migrate.txt` 的环境在受控窗口执行
+  `python -m alembic -c alembic.ini upgrade head`（离线场景可 `--sql` 生成 DDL 审阅后执行）；
+- **校验规则**：比对 `migrations/versions` 解析出的 head 与数据库 `alembic_version.version_num`；
+  不一致 → `FATAL: refusing to start on mismatched schema`（`ALLOW_SCHEMA_DRIFT=true` 放行，用于迁移超前/回滚）；
+  迁移链分叉（多个 head）会直接报错，必须在合并后发布；
+- **滚动发布顺序**：先迁移（向后兼容的变更）→ 再滚动应用副本。破坏性变更（删列/改名）需用"扩展-迁移-收缩"两步发布。
+
+## 8. 连接预算（扩容必读）
+
+PostgreSQL 的 `max_connections` 是**硬上限**，而连接数随副本数线性增长：
+
+```
+网关: POSTGRES_MAX_CONN × 网关副本数
+引擎: DB_POOL_MAX_SIZE  × 引擎副本数
++ 运维/监控/迁移连接
+───────────────────────────────────────
+合计必须留出余量（建议 ≤ max_connections 的 70%）
+```
+
+- PostgreSQL 由云厂商/DBA 维护，`max_connections` 是其**实例参数**（云实例通常按规格限制，PostgreSQL 默认仅 100）：请在扩容前确认上限，并据此下调应用侧池大小；
+- 应用侧默认值：`POSTGRES_MAX_CONN=20`、`DB_POOL_MAX_SIZE=20`。**4 个副本时就应下调到 10 左右**，例如：
+  `POSTGRES_MAX_CONN=10 DB_POOL_MAX_SIZE=10 docker compose up -d --scale gateway=4 --scale python-engine=4`
+- 托管实例若限制严格，建议引入 PgBouncer 之类的连接池中间件（应用→PgBouncer→实例）。
+- 托管数据库（RDS/Cloud SQL）请按实例规格确认上限，必要时改用 PgBouncer 之类的连接池中间件；
+- Redis 侧同理（`REDIS_POOL_SIZE` 默认 100 × 副本数），需对照 `redis-cli info clients` 的 `maxclients`（默认 10000）。
+
+## 9. 验证
 
 ```bash
 docker compose config --quiet                 # 配置校验
@@ -83,7 +121,7 @@ python -m pytest python-engine/tests -q
 - 同一 `task_id` 重复投递只执行一次（日志 `duplicate task skipped (already completed)`）；
 - 同一 `turn_id` 重复扣费时余额只减一次。
 
-## 8. 已知边界
+## 10. 已知边界
 
 - run 现场状态不迁移：实例故障该 run 中断（只保证「路由到正确实例 + 陈旧审批被拒」）；
 - SSE 跨实例实时通道为 Pub/Sub：断连窗口内的实时事件依赖客户端携带 `Last-Event-ID` 从 Stream 重放；

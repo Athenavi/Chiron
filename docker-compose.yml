@@ -9,24 +9,11 @@
 # 详细多实例要求见 docs/deployment-multi-instance.md。
 services:
 
-  postgres:
-    image: pgvector/pgvector:pg16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      # 安全: 生产必须设置强密码；开发环境仅在本地可访问
-      # 生产部署：export POSTGRES_PASSWORD=$(openssl rand -base64 32)
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required — generate a strong password}
-      POSTGRES_DB: chiron0827
-    ports:
-      - "127.0.0.1:5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
-      interval: 5s
-      timeout: 3s
-      retries: 5
+  # 说明:PostgreSQL 不在本 compose 中部署——生产使用托管实例或由 DBA 维护,
+  # 连接串经 POSTGRES_DSN 注入。schema 迁移由发布流程/DBA 执行;应用启动只做
+  # 只读的版本校验(见 internal/db/migrate.go 与 README「数据库迁移」)。
+  # 连接预算:POSTGRES_MAX_CONN × 网关副本数 + DB_POOL_MAX_SIZE × 引擎副本数
+  # 必须小于目标实例的 max_connections(建议留 30% 余量)。
 
   redis:
     image: redis:7-alpine
@@ -53,8 +40,6 @@ services:
     expose:
       - "8080"
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
     environment:
@@ -63,7 +48,9 @@ services:
       INTERNAL_TOKEN: ${INTERNAL_TOKEN:?INTERNAL_TOKEN is required — set to same value as python-engine's INTERNAL_TOKEN}
       APP_SECRET: ${APP_SECRET:?APP_SECRET is required}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
-      POSTGRES_DSN: ${POSTGRES_DSN:?POSTGRES_DSN is required — point at postgres:5432/chiron0827}
+      # 外部 PostgreSQL(托管实例或 DBA 维护);schema 迁移须先由发布流程执行,
+      # 否则启动会被版本校验阻断(见 ALLOW_SCHEMA_DRIFT)
+      POSTGRES_DSN: ${POSTGRES_DSN:?POSTGRES_DSN is required — point at your managed PostgreSQL}
       # Redis(键空间前缀必须与引擎一致)
       REDIS_ADDR: redis:6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
@@ -85,6 +72,9 @@ services:
       RATE_LIMIT_INSTANCES: ${RATE_LIMIT_INSTANCES:-1}
       # 前置负载均衡器时填写真实来源网段(如 "10.0.0.0/8,172.16.0.0/12")
       TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-}
+      # 连接预算:本值 × 网关副本数 会占用 PG 连接;多副本时按副本数下调
+      # (如 4 副本 → 10),总量不得超过 postgres 的 max_connections。
+      POSTGRES_MAX_CONN: ${POSTGRES_MAX_CONN:-20}
       # Prometheus 抓取 /metrics 的共享 Bearer token(与 prometheus 服务同值)。
       # 为空时 /metrics 只接受 JWT admin 权限,Prometheus 抓取会 401(见 prometheus.yml)。
       METRICS_TOKEN: ${METRICS_TOKEN:-}
@@ -128,6 +118,8 @@ services:
       # 依赖门禁:默认 false = Redis 未配置/不可用时拒绝启动;
       # 仅单机开发设 true 才允许进程内降级(见 python-engine/app/main.py)。
       DEGRADED_MODE: ${DEGRADED_MODE:-false}
+      # 连接预算:本值 × 引擎副本数 会占用 PG 连接(与网关侧共享 max_connections)。
+      DB_POOL_MAX_SIZE: ${DB_POOL_MAX_SIZE:-20}
       # 引擎回调网关的地址(webhook/事件/config 下发)
       GATEWAY_INTERNAL_URL: http://gateway:8080
       RPA_GATEWAY_URL: http://gateway:8080
@@ -156,8 +148,6 @@ services:
       LLM_API_KEY: ${LLM_API_KEY:-}
     depends_on:
       redis:
-        condition: service_healthy
-      postgres:
         condition: service_healthy
     volumes:
       - sandboxdata:/srv/chiron/sandbox
@@ -265,7 +255,6 @@ services:
     restart: unless-stopped
 
 volumes:
-  pgdata:
   redisdata:
   miniodata:
   workspace:

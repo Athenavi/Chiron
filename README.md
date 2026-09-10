@@ -37,8 +37,12 @@ python run.py start              # 网关 :8080 + 引擎 :8000 + 前端 :5173
 
 ```bash
 cp .env.example .env             # 填写 compose 必填项（见下）
-docker compose up -d postgres redis minio etcd milvus
-python -m alembic upgrade head
+# 1) 先对目标 PostgreSQL 执行迁移（数据库由云厂商/DBA 维护，不在 compose 内）
+python -m pip install -r requirements-migrate.txt
+DATABASE_DSN='postgresql://user:pwd@your-pg:5432/dbname' \
+  python -m alembic -c alembic.ini upgrade head
+# 2) 启动应用层
+docker compose up -d redis minio etcd milvus
 docker compose up -d --scale gateway=2 --scale python-engine=2
 # 对外入口是 frontend 容器的 nginx：http://localhost:3000
 ```
@@ -56,6 +60,7 @@ docker compose up -d --scale gateway=2 --scale python-engine=2
 | `MCP_POOL_ENABLED` | 默认 `false`：每个开启的引擎副本会为活跃用户持有 MCP 连接（副本数 × 活跃用户 × server），需要时显式开启 |
 | `ENGINE_ADVERTISE_URL` | 引擎自注册地址；设置后网关可把某 session 的 run 请求（审批/取消）路由到持有它的实例 |
 | `TURN_RETENTION_DAYS` / `TASK_IDEMPOTENCY_RETENTION_DAYS` | 保留策略天数（默认 30），防长期运行表膨胀 |
+| `ALLOW_SCHEMA_DRIFT` | 默认 `false`：启动时校验数据库 migration 版本，不一致**拒绝启动**（迁移超前/回滚场景可设 `true` 放行） |
 
 ## 常用命令
 
@@ -63,7 +68,8 @@ docker compose up -d --scale gateway=2 --scale python-engine=2
 go build ./...                            # Go 编译
 go test ./...                             # Go 测试
 python -m pytest python-engine/tests -q   # 引擎测试
-python -m alembic upgrade head            # 迁移到最新
+python -m pip install -r requirements-migrate.txt   # 迁移依赖（仅迁移需要）
+python -m alembic upgrade head            # 迁移到最新（发布流程/DBA 执行）
 python -m alembic heads                   # 迁移链检查（应只有一个 head）
 docker compose config --quiet             # compose 配置校验
 make build                                # 见 Makefile（fmt/lint/test/build） 
@@ -80,6 +86,22 @@ migrations/        Alembic 迁移；ORM 模型由 configs/orm/V1/models.yaml 经
                    scripts/generate_orm_models.py 生成到 shared/models/
 market/skills/     内置技能市场内容（SKILL.md 等，运行时读取）
 ```
+
+## 数据库迁移
+
+**应用不自行迁移**（网关启动只做只读的 schema 版本校验）。迁移是发布流程的一次性步骤，
+由 CI 流水线或 DBA 在受控窗口执行：
+
+```bash
+python -m pip install -r requirements-migrate.txt      # alembic/SQLAlchemy/psycopg2/cryptography/dotenv
+DATABASE_DSN='postgresql://user:pwd@host:5432/db' \
+  python -m alembic -c alembic.ini upgrade head        # 在线迁移
+python -m alembic -c alembic.ini upgrade head --sql > upgrade.sql   # 离线：生成 DDL 交 DBA 审阅执行
+```
+
+- 需要 `alembic.ini`、`migrations/`、`shared/models/` 三者在运行目录内（`migrations/env.py` 会加载 ORM 元数据）；
+- 启动校验：比对 `migrations/versions` 的 head 与数据库 `alembic_version`，不一致时拒绝启动（`ALLOW_SCHEMA_DRIFT=true` 可放行）；
+- 迁移链必须**单一 head**（分叉会导致启动校验失败）。
 
 ## 许可
 

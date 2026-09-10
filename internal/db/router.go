@@ -14,20 +14,26 @@ import (
 
 // redactDSN 脱敏 DSN 中的密码，避免日志泄露。
 // postgres://user:password@host:port/db → postgres://user:***@host:port/db
+// redactDSN 隐藏 DSN 中的密码（scheme://user:pwd@host/db → scheme://user:***@host/db）。
+//
+// 必须按「最后一个 @」定位 host：密码可能含 @ 与 :（如 p@ssw0rd!），
+// 若按第一个 @ 切分，密码后半段会被当成 host 打进日志（凭据泄露）。
 func redactDSN(dsn string) string {
-	before, after, found := strings.Cut(dsn, "@")
-	if !found {
+	schemeEnd := strings.Index(dsn, "://")
+	if schemeEnd < 0 {
 		return dsn
 	}
-	_, userinfo, found := strings.Cut(before, "://")
-	if !found {
+	rest := dsn[schemeEnd+3:]
+	at := strings.LastIndex(rest, "@")
+	if at < 0 {
 		return dsn
 	}
-	user, _, found := strings.Cut(userinfo, ":")
-	if !found {
-		return dsn
+	userinfo, host := rest[:at], rest[at+1:]
+	colon := strings.Index(userinfo, ":")
+	if colon < 0 {
+		return dsn // 无密码，原样返回
 	}
-	return strings.SplitN(before, ":", 2)[0] + "://" + user + ":***@" + after
+	return dsn[:schemeEnd+3] + userinfo[:colon] + ":***@" + host
 }
 
 // PoolConfig holds connection pool tuning parameters.
