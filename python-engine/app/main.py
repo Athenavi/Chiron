@@ -348,6 +348,11 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("Queue worker skipped (Redis not available)")
 
+    # ── 6.2 幂等表保留策略（A7/C1）──
+    # task_idempotency 每任务一行，长期运行必须清理；turns 由网关侧
+    # src: internal/api/retention.go 的 StartRetentionCleaner 负责。
+    _retention_task = asyncio.create_task(_run_retention_cleaner())
+
     # ── 6.5. 启动进程指标收集器 ──
     from app.observability.metrics import record_process_metrics
 
@@ -366,6 +371,15 @@ async def lifespan(app: FastAPI):
     # ── 8. 实例注册（批 E1：引擎动态发现）──
     # 网关 StartEngineDiscovery 每 15s 消费本注册表并动态更新引擎地址（替代静态清单）。
     # 需 ENGINE_ADVERTISE_URL（引擎网络可达地址）;Redis 不可用/未配置时跳过,网关回退静态地址。
+    # A4：run 归属路由（engine:run:*，批 4）依赖本注册表才能把 instance_id 解析成地址——
+    # 未配置时归属映射会被写入但网关查不到地址，审批/取消仍按一致性哈希漂移。
+    # 这不是故障，但必须让部署者知道"亲和是尽力而为"，而不是以为已按归属路由。
+    if _redis is not None and not settings.engine_advertise_url:
+        logger.warning(
+            "ENGINE_ADVERTISE_URL not set: engine will not register, so run-owner "
+            "affinity falls back to session hash (approvals/cancel may drift after "
+            "scale-out or instance restart)"
+        )
     from app.engine_registry import EngineRegistry
 
     _engine_registry = EngineRegistry(
@@ -406,6 +420,14 @@ async def lifespan(app: FastAPI):
         _metrics_task.cancel()
         try:
             await _metrics_task
+        except asyncio.CancelledError:
+            pass
+
+    # 停止保留策略清理（A7/C1）
+    if '_retention_task' in locals():
+        _retention_task.cancel()
+        try:
+            await _retention_task
         except asyncio.CancelledError:
             pass
 
@@ -1080,6 +1102,36 @@ async def kb_query(
         vector_db=body.get("vector_db", "milvus"),
     )
     return {"success": True, "results": results, "count": len(results)}
+
+
+async def _run_retention_cleaner() -> None:
+    """定期清理 task_idempotency 历史记录（A7/C1：长期运行防表膨胀）。
+
+    保留期 TASK_IDEMPOTENCY_RETENTION_DAYS（默认 30 天），
+    间隔 RETENTION_INTERVAL_HOURS（默认 6 小时）；清理失败只告警，不影响主链路。
+    """
+    import os as _os
+
+    days = int(_os.getenv("TASK_IDEMPOTENCY_RETENTION_DAYS", "30") or 30)
+    hours = int(_os.getenv("RETENTION_INTERVAL_HOURS", "6") or 6)
+    from app.queue.idempotency import purge_older_than
+
+    logger.info(
+        "idempotency retention cleaner started (days=%d, interval=%dh)", days, hours
+    )
+    while True:
+        try:
+            await asyncio.sleep(hours * 3600)
+            removed = await purge_older_than(days)
+            if removed:
+                logger.info(
+                    "task_idempotency retention: removed %d rows (>%dd)", removed, days
+                )
+        except asyncio.CancelledError:
+            logger.info("idempotency retention cleaner stopped")
+            return
+        except Exception as e:  # noqa: BLE001 - 清理失败不影响主链路
+            logger.warning("idempotency retention failed: %s", e)
 
 
 async def _run_queue_worker(redis: aioredis.Redis, gateway=None) -> None:

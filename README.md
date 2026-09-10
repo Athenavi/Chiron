@@ -1,74 +1,86 @@
 # Chiron
 
-> Chiron 是一个多租户 SaaS AI Agent 平台，采用 **Go 网关 + Python AI 引擎 + Vue 3 前端** 的三层架构。
-> ![Chiron Logo](assets/chiron-logo.svg)
-> 对话、Agent、工作流、技能、知识库与插件一体化，全栈能力自由组合；轨迹可循、过程可见，轻松 Harness。
+多租户 SaaS AI Agent 平台：**Go 网关 + Python AI 引擎 + Vue 3 前端** 三层架构。
+对话、Agent、工作流、技能、知识库、插件与多层级记忆一体化；轨迹可循、过程可见。
 
-## 架构概览
+## 架构
 
 ```
-┌─────────────────────────────────────────────────┐
-│                  前端 (Vue 3)                    │
-│         frontend-vue/  —  :5173                 │
-├─────────────────────────────────────────────────┤
-│               Go 网关 (chiron)                   │
-│  cmd/chiron  —  :8080                           │
-│  认证 · 路由 · 限流 · 计费 · 管理后台                │
-├─────────────────────────────────────────────────┤
-│            Python AI 引擎 (python-engine)        │
-│  python-engine/  —  :8000                       │
-│  对话 · Agent · 工作流 · RAG · 技能 · 记忆 · MCP    │
-├─────────────────────────────────────────────────┤
-│     PostgreSQL (pgvector)  ·  Redis  ·  Milvus  │
-│     MinIO/S3  ·  Temporal (可选)                 │
-└─────────────────────────────────────────────────┘
+浏览器 ─► 前端(Nginx/Vue 3, 宿主机 :3000) ─► Go 网关(cmd/chiron, :8080)
+                                                    │
+                                                    ▼
+                                    Python 引擎(python-engine, :8000)
+                                                    │
+              PostgreSQL(pgvector) · Redis ◄───────┴───────► Milvus · MinIO/S3
 ```
+
+| 组件 | 目录 | 端口 | 职责 |
+|---|---|---|---|
+| Go 网关 | `cmd/chiron`、`internal/*` | 8080（容器内，不发布宿主机端口） | 认证、路由、限流、计费、管理后台、SSE 转发 |
+| Python 引擎 | `python-engine/` | 8000（容器内） | 对话、Agent、工作流、RAG、技能、记忆、MCP |
+| 前端 | `frontend-vue/` | 5173（dev）/ 80（容器） | Vue 3 + TypeScript + Vite；nginx 同源反代 `/v1`、`/events`、`/ws` |
+| 数据库 | `migrations/`、`shared/models/` | 5432 | PostgreSQL + pgvector（Alembic 迁移 + 生成式 ORM 模型） |
+| 缓存/队列/事件 | — | 6379 | Redis（会话、限流、后台任务、SSE 事件、run 归属） |
 
 ## 快速开始
 
+### 本地开发（非容器）
+
 ```bash
-# 1. 克隆
-git clone https://github.com/athenavi/chiron.git && cd chiron
-
-# 2. 启动基础设施
-docker compose up -d postgres redis
-
-# 3. 配置环境变量
-cp .env.example .env
-# 编辑 .env，填写 APP_SECRET
-
-# 4. 安装依赖并启动
-python run.py setup      # 首次：安装 Python 依赖、前端依赖
-python run.py start      # 启动网关(:8080) + 引擎(:8000) + 前端(:5173)
+cp .env.example .env             # 至少填写 APP_SECRET（≥32 字符）
+python run.py setup              # 安装 Python / 前端依赖
+python -m alembic upgrade head   # 数据库迁移（需 PostgreSQL 可达）
+python run.py start              # 网关 :8080 + 引擎 :8000 + 前端 :5173
 ```
 
-## 核心能力
+### 容器（多副本编排）
 
-| 能力 | 说明 |
-|------|------|
-| **对话** | 多模型支持，流式响应，上下文记忆 |
-| **Agent** | 多 Agent 协作，工具调用，代码执行 |
-| **工作流** | 可视化 DAG 编排，动态节点 |
-| **技能 (Skill)** | 可复用的 AI 能力模板 |
-| **知识库** | 多格式文档导入，RAG 检索增强 |
-| **插件** | MCP 协议支持，第三方工具集成 |
-| **记忆** | 多层级记忆系统，用户画像 |
-| **多租户** | 租户隔离，RBAC 权限，配额管理 |
+```bash
+cp .env.example .env             # 填写 compose 必填项（见下）
+docker compose up -d postgres redis minio etcd milvus
+python -m alembic upgrade head
+docker compose up -d --scale gateway=2 --scale python-engine=2
+# 对外入口是 frontend 容器的 nginx：http://localhost:3000
+```
 
-## 技术栈
+多副本部署、依赖门禁、就绪探针与伸缩边界的完整说明见
+[多实例部署指南](docs/deployment-multi-instance.md)。
 
-- **网关:** Go 1.26+, Gin, PostgreSQL, Redis
-- **引擎:** Python 3.11+, FastAPI, LLM 网关, vector store
-- **前端:** Vue 3, TypeScript, Vite 8, Pinia, Vue Router
-- **CI/CD:** GitHub Actions, Docker, Docker Compose
+## 关键配置
 
-## 文档
+| 变量 | 说明 |
+|---|---|
+| `APP_SECRET` | **必须**：部署级主密钥（≥32 字符）。派生 `JWT_SECRET`/`INTERNAL_TOKEN`，并加密后台敏感配置（丢失后已加密配置无法解密） |
+| `POSTGRES_DSN`、`REDIS_ADDR`（引擎用 `REDIS_URL`） | 基础设施连接串 |
+| `DEGRADED_MODE` | 默认 `false`：Redis 不可用时网关与引擎**拒绝启动**；仅单机开发设 `true` 才允许进程内降级 |
+| `MCP_POOL_ENABLED` | 默认 `false`：每个开启的引擎副本会为活跃用户持有 MCP 连接（副本数 × 活跃用户 × server），需要时显式开启 |
+| `ENGINE_ADVERTISE_URL` | 引擎自注册地址；设置后网关可把某 session 的 run 请求（审批/取消）路由到持有它的实例 |
+| `TURN_RETENTION_DAYS` / `TASK_IDEMPOTENCY_RETENTION_DAYS` | 保留策略天数（默认 30），防长期运行表膨胀 |
 
-- [贡献指南](CONTRIBUTING.md)
-- [安全策略](SECURITY.md)
-- [API 文档](docs/openapi.yaml)
-- [架构说明](docs/ARCHITECTURE.md)
+## 常用命令
+
+```bash
+go build ./...                            # Go 编译
+go test ./...                             # Go 测试
+python -m pytest python-engine/tests -q   # 引擎测试
+python -m alembic upgrade head            # 迁移到最新
+python -m alembic heads                   # 迁移链检查（应只有一个 head）
+docker compose config --quiet             # compose 配置校验
+make build                                # 见 Makefile（fmt/lint/test/build） 
+```
+
+## 目录结构
+
+```
+cmd/               网关与 CLI（chiron 网关；chiron-cli 管理本地启动的进程）
+internal/          Go 网关实现（api、auth、billing、broadcast、db、engine、session、storage…）
+python-engine/     引擎实现（app/agent、queue、api、tools、workflow、memory、rag…）
+frontend-vue/      Vue 3 前端（nginx 反代 /v1、/events、/ws、/submit、/cancel、/media 到网关）
+migrations/        Alembic 迁移；ORM 模型由 configs/orm/V1/models.yaml 经
+                   scripts/generate_orm_models.py 生成到 shared/models/
+market/skills/     内置技能市场内容（SKILL.md 等，运行时读取）
+```
 
 ## 许可
 
-[MIT](LICENSE)
+MIT（见 [LICENSE](LICENSE)）

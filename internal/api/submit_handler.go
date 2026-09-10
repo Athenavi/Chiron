@@ -64,7 +64,7 @@ func (h *SubmitHandler) SubmitApproval(w http.ResponseWriter, r *http.Request) {
 	// approval 必须路由到承载该 session 运行的引擎实例：路由优先按 Redis 归属映射
 	// （engine:run:{session}，见 engine.RunOwnerURL），一致性哈希仅作回退；否则
 	// round-robin/哈希漂移会打到没有该 run 的实例并返回 "no active agent"。
-	routeCtx := engine.WithSession(r.Context(), req.SessionID)
+	routeCtx := engine.WithRunAffinity(r.Context(), req.SessionID)
 	// 顺带取出当前 run 的 token：引擎据此拒绝陈旧 run 的审批（映射不可用时留空，
 	// 引擎只在「带上了且不匹配」时拒绝，兼容未启用归属映射的部署）。
 	if rec, ok := engine.RunOwner(routeCtx, req.SessionID); ok {
@@ -242,11 +242,11 @@ func (h *SubmitHandler) HandleSubmit(ctx context.Context, userID, sessionID, con
 				}
 			} else {
 				// 超出免费额度或查询失败：正常扣费
-				if _, err := h.biller.DeductTokens(userID, inputTokens, outputTokens); err != nil {
+				if _, err := h.biller.DeductTokens(userID, inputTokens, outputTokens, turnID); err != nil {
 					slog.Error("billing: DeductTokens failed", "user", userID, "error", err)
 				} else {
 					// 企业成本中心 token 明细（billing_records）；失败仅告警，不影响已扣费与流水
-					if recErr := h.biller.RecordTokenUsage(storeCtx, userID, sessionID, inputTokens, outputTokens); recErr != nil {
+					if recErr := h.biller.RecordTokenUsage(storeCtx, userID, sessionID, inputTokens, outputTokens, turnID); recErr != nil {
 						slog.Warn("billing: enterprise token usage record failed",
 							"user", userID, "session", sessionID, "error", recErr)
 					}

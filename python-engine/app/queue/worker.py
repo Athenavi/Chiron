@@ -414,9 +414,28 @@ class QueueWorker:
             except ValueError:
                 dl = None
             if dl is not None and dl < datetime.datetime.now(datetime.timezone.utc):
+                # 过期任务不再执行,但也不能静默丢弃(A3):转 DLQ 保留可见性与人工重投能力。
                 logger.warning(
-                    "Task skipped (deadline exceeded): id=%s type=%s", task_id, task_type
+                    "Task expired (deadline=%s), moved to DLQ: id=%s type=%s",
+                    deadline_raw,
+                    task_id,
+                    task_type,
                 )
+                try:
+                    await self._redis.xadd(
+                        DLQ_STREAM,
+                        {
+                            "task_id": task_id,
+                            "task_type": task_type,
+                            "payload": payload_raw,
+                            "error": f"deadline exceeded: {deadline_raw}",
+                            "retry_count": str(retry_count),
+                        },
+                        maxlen=10000,
+                    )
+                    QUEUE_DLQ_TOTAL.labels(task_type=task_type).inc()
+                except Exception as exc:  # noqa: BLE001 - DLQ 写入失败也必须 ACK，避免无限重投
+                    logger.warning("expired DLQ move failed: %s", exc)
                 await self._redis.xack(TASK_STREAM, GROUP_NAME, stream_id)
                 return
 

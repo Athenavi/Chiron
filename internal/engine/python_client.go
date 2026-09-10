@@ -42,6 +42,23 @@ func sessionFromCtx(ctx context.Context) string {
 	return ""
 }
 
+// ctxRunAffinityKey 标记"必须按 run 归属路由"的请求（审批/取消）。
+// 与普通会话亲和分开：归属查询要访问 Redis，只放在真正需要它的低频路径上，
+// 否则每个对话请求都会被打上一次 Redis 往返（A1：Redis 抖动时的延迟放大器）。
+type ctxRunAffinityKey struct{}
+
+// WithRunAffinity = WithSession + 允许归属查询：该 ctx 下的请求先查
+// engine:run:{session} 并优先路由到持有该 run 的实例；查不到/实例不可用时
+// 回退一致性哈希。仅用于审批、取消等"认实例"的请求。
+func WithRunAffinity(ctx context.Context, sessionID string) context.Context {
+	return context.WithValue(WithSession(ctx, sessionID), ctxRunAffinityKey{}, true)
+}
+
+func runAffinityFromCtx(ctx context.Context) bool {
+	v, ok := ctx.Value(ctxRunAffinityKey{}).(bool)
+	return ok && v
+}
+
 // pyAddrEntry 单个引擎地址及其熔断冷却状态（Unix 秒，0=正常）。
 type pyAddrEntry struct {
 	url           string
@@ -440,17 +457,21 @@ func (c *PythonClient) addressFor(ctx context.Context) string {
 	if key == "" {
 		return c.pickAddress()
 	}
-	// 归属优先（批次 4）：引擎把 session 的 run owner 写进 Redis（engine:run:{session}，
-	// TTL 300s）。命中且该实例在当前地址表中健康时直连——一致性哈希在扩缩容/副本
-	// 上下线后会漂移，会把审批与取消送到并不持有该 run 的实例。
-	// 查询失败（无映射/Redis 抖动）一律走下方哈希回退，不改变原有行为。
-	if url, rec, ok := RunOwnerURL(ctx, key); ok {
-		if c.isKnownHealthy(url) {
-			return url
+	// 归属优先（批次 4），**仅对显式要求归属的请求**（审批/取消，见 WithRunAffinity）：
+	// 引擎把 session 的 run owner 写进 Redis（engine:run:{session}，TTL 300s），
+	// 命中且该实例在当前地址表中健康时直连——一致性哈希在扩缩容/副本上下线后会漂移，
+	// 会把审批与取消送到并不持有该 run 的实例。
+	// 普通对话请求不查 Redis（A1）：归属查询在请求路径上，不能让 Redis 往返成为
+	// 每个请求的固定成本；查询失败一律走下方哈希回退。
+	if runAffinityFromCtx(ctx) {
+		if url, rec, ok := RunOwnerURL(ctx, key); ok {
+			if c.isKnownHealthy(url) {
+				return url
+			}
+			slog.Info("python engine: run owner instance unavailable, falling back to hash",
+				"session", key[:min(len(key), 16)],
+				"owner_instance", rec.InstanceID, "owner_url", url)
 		}
-		slog.Info("python engine: run owner instance unavailable, falling back to hash",
-			"session", key[:min(len(key), 16)],
-			"owner_instance", rec.InstanceID, "owner_url", url)
 	}
 	now := time.Now().Unix()
 	h := fnv.New32a()

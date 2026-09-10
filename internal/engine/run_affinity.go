@@ -30,7 +30,9 @@ import (
 const (
 	runRecordPrefix   = "engine:run:"
 	instanceKeyPrefix = "engine:instance:"
-	runLookupTimeout  = 2 * time.Second
+	// runLookupTimeout 归属查询超时：只在审批/取消等显式要求归属的请求上调用
+	// （WithRunAffinity），必须远小于请求预算——Redis 抖动时快速回退哈希（A1）。
+	runLookupTimeout = 250 * time.Millisecond
 )
 
 var (

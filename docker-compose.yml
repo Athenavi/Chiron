@@ -144,6 +144,10 @@ services:
       MCP_POOL_ENABLED: ${MCP_POOL_ENABLED:-false}
       # K8s 注入实例标识;compose 下留空由引擎自生成
       INSTANCE_ID: ${INSTANCE_ID:-}
+      # 引擎对外可达地址(批 E1):设置后引擎向 Redis 自注册,网关据此把某个 session 的
+      # 请求(审批/取消)路由到持有该 run 的实例,避免扩容/重启后漂移。留空=不注册,
+      # 会话亲和退化为一致性哈希(见 docs/deployment-multi-instance.md 第 4.5 条)。
+      ENGINE_ADVERTISE_URL: ${ENGINE_ADVERTISE_URL:-}
       # 模型密钥(ANTHROPIC_API_KEY/OPENAI_API_KEY/DEEPSEEK_API_KEY/LLM_API_KEY 等)
       # 在 .env 中配置并在此透传,或经后台「系统设置」下发;详见 docs/deployment-multi-instance.md。
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}

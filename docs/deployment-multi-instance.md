@@ -1,148 +1,90 @@
-# Chiron 多实例(横向扩展)部署指南
+# 多实例部署（横向扩展）
 
-> 面向"企业化多副本部署"的基线文档。本文描述的配置已落地到
-> `docker-compose.yml`(批 A);批 B(令牌桶限流总量化 / 配置跨副本热更 / WS 下线统一 SSE)
-> 见第 4 节,批 D(RPA 跨实例桥接)见文末。
+面向多副本部署的配置与边界。**前提**：Redis 与 PostgreSQL 是硬依赖——Redis 不可用时
+网关与引擎默认拒绝启动（见第 4 节）。
 
 ## 1. 拓扑
 
 ```
-                 ┌──────────────┐
-   浏览器/前端 ───►  LB(可选)    │
-                 └──────┬───────┘
-          ┌─────────────┴──────────────┐
-          ▼                            ▼
-   gateway 副本 1..N            python-engine 副本 1..M
-   (无状态;RPA WS 连接、       (无状态;会话/队列 Redis 化;
-    事件/会话/限流走 Redis)      agent 沙箱走共享卷)
-          │        │      │            │
-          ▼        ▼      ▼            ▼
-      PostgreSQL   Redis  MinIO/S3   Milvus(可选)  共享卷(sandbox/plugins)
+浏览器 ─► 前端容器(Nginx, 宿主机 :3000) ─► gateway 副本 1..N ─► python-engine 副本 1..M
+                                                        │
+                                        PostgreSQL · Redis · MinIO/S3 · Milvus
 ```
 
-- **副本无本地状态**:会话元数据、SSE 事件、后台任务、审计、限流全部经 Redis/PG;
-  文件类数据分三层:媒体走对象存储、沙箱/插件走共享卷、临时走本地盘。
-- 所有副本必须注入**完全相同**的 `APP_SECRET` / `JWT_SECRET` / `INTERNAL_TOKEN` /
-  `REDIS_KEY_PREFIX`(任一不一致都会造成 token 不互信或 Redis 键空间隔离错乱)。
+- `gateway` **不发布宿主机端口**（仅 `expose: 8080`）：多副本下固定端口互相抢占，且宿主机端口发布不是服务发现方案。对外只经前端 nginx 或外部 LB。
+- 前端 nginx 用 `resolver 127.0.0.11` + 变量式 `proxy_pass` 重新解析服务名 `gateway`，跟随 `--scale` 变化；**这不是负载均衡**（无健康摘除、无调度算法）。生产必须前置真实 LB 并设置 `TRUSTED_PROXY_CIDRS`。
+- 所有副本必须注入**完全相同**的 `APP_SECRET` / `JWT_SECRET` / `INTERNAL_TOKEN` / `REDIS_KEY_PREFIX`（不一致会造成 token 不互信或键空间错乱）。
 
-## 2. Compose 快速起步(多副本)
+## 2. 快速起步
 
 ```bash
-# 1) 准备 .env(最少必填见下方)
-cp .env.example .env   # 然后填写全部 required 变量
-
-# 2) 启动基础件
+cp .env.example .env
+# 必填：POSTGRES_PASSWORD、REDIS_PASSWORD、POSTGRES_DSN、APP_SECRET
+#       JWT_SECRET、INTERNAL_TOKEN、MINIO_ACCESS_KEY、MINIO_SECRET_KEY
 docker compose up -d postgres redis minio etcd milvus
-
-# 3) 启动多副本应用层(示例:网关 2 副本、引擎 2 副本)
+python -m alembic upgrade head
 docker compose up -d --scale gateway=2 --scale python-engine=2
+curl -s http://localhost:3000/health        # 前端入口（静态资源 + 同源反代）
 ```
 
-> 单机 `docker compose` 不带 LB:对外入口只有 frontend 容器的 nginx(宿主机 `:3000`),
-> 它用 `resolver` + 变量式 `proxy_pass` 每次请求重新解析服务名 `gateway`,
-> 因此能跟随 `--scale gateway=N` 的副本变化并轮转转发。但这**不是**负载均衡:
-> 没有健康检查摘除、没有连接级调度算法,某个 gateway 副本故障或重启期间,
-> 仍会有请求被转发到不可用的副本。应用层已验证无状态,可直接多副本;
-> 生产必须前置真实负载均衡器(`gateway` 在 compose 中不发布宿主机端口,
-> 仅内部网络可达),并设置 `TRUSTED_PROXY_CIDRS` 为 LB 网段。
-
-### 必填环境变量(required,缺失则 compose 拒绝启动)
-
-| 变量 | 用途 |
-|---|---|
-| `POSTGRES_PASSWORD` | PG 密码;`POSTGRES_DSN` 需指向 `postgres:5432/chiron0827` |
-| `REDIS_PASSWORD` | Redis 密码(网关 `REDIS_ADDR/PASSWORD`,引擎 `REDIS_URL` 共用) |
-| `APP_SECRET` / `JWT_SECRET` / `INTERNAL_TOKEN` | 全副本一致;推荐显式设置(不依赖 APP_SECRET 派生) |
-| `POSTGRES_DSN` | 全副本一致,示例 `postgresql://postgres:<pwd>@postgres:5432/chiron0827` |
-| `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | 网关 S3 媒体存储与 Milvus 共用 |
-
-### 多副本关键变量(批 A 引入)
+## 3. 关键变量
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
-| `PYTHON_ENGINE_ADDRESS` | `http://python-engine:8000` | 逗号分隔引擎列表;**新增/下线引擎副本须同步更新并滚动重启网关** |
-| `REDIS_KEY_PREFIX` | 空 | 多环境共用同一 Redis 时隔离键空间(如 `prod:`);**网关与引擎必须同值** |
-| `STORAGE_BACKEND` | `s3` | 媒体存储:compose 默认走 MinIO;纯本机开发可改 `local` |
-| `STORAGE_ROOT` | `/app/workspace` | `local` 兜底目录(挂 workspace 共享卷) |
-| `S3_ENDPOINT` 等 | MinIO 内网地址 | 网关媒体对象存储 |
-| `PLUGIN_DATA_DIR` | `/srv/chiron/plugins` | 网关与引擎**同卷共享** |
-| `SANDBOX_ROOT` | `/srv/chiron/sandbox`(引擎容器) | agent 沙箱根,多副本挂同一共享卷 |
-| `RATE_LIMIT_INSTANCES` | 已废弃 | 批 B-1′ 令牌桶为总量语义,不再按副本数放大;变量保留仅为兼容旧配置,代码已不使用 |
-| `TRUSTED_PROXY_CIDRS` | 空 | 前置 LB 时填真实来源网段 |
-| `HTTP_HOST` | `0.0.0.0`(引擎) | 引擎必须对外监听供网关访问 |
-| `MCP_POOL_ENABLED` | `true` | 每启用副本对活跃用户各持 MCP 连接;副本增多后按需关闭部分实例 |
-| `DEGRADED_MODE` | `false` | **依赖门禁**:默认 Redis 未配置/不可用时网关与引擎拒绝启动;仅单机开发设 `true` 才允许进程内降级(限流/会话/事件退化为单实例语义) |
-| `INSTANCE_ID` | 空 | K8s 注入;compose 留空由引擎自生成 |
-| `ENGINE_ADVERTISE_URL` | 空(批 E1) | 引擎对外可达地址(如 `http://engine-0:8000`),设置后引擎向 Redis 自注册、网关 15s 内动态感知扩缩容;为空则不注册,网关回退 `PYTHON_ENGINE_ADDRESS` 静态列表 |
+| `DEGRADED_MODE` | `false` | 依赖门禁：Redis 不可用时拒绝启动；仅单机开发设 `true` |
+| `REDIS_KEY_PREFIX` | 空 | 多环境共用同一 Redis 时隔离键空间；**网关与引擎必须同值** |
+| `PYTHON_ENGINE_ADDRESS` | `http://python-engine:8000` | 引擎静态地址（注册表为空时的回退） |
+| `ENGINE_ADVERTISE_URL` | 空 | 引擎对外可达地址，设置后向 Redis 自注册；**run 归属路由的前置条件** |
+| `MCP_POOL_ENABLED` | `false` | 每个开启副本会为活跃用户持有 MCP 连接（副本×用户×server 放大） |
+| `STORAGE_BACKEND` | `s3` | 媒体走 MinIO；`local` 时走共享卷 `STORAGE_ROOT` |
+| `SANDBOX_ROOT` / `PLUGIN_DATA_DIR` | — | 引擎沙箱与插件数据，**多副本必须共享同一卷** |
+| `TRUSTED_PROXY_CIDRS` | 空 | 前置 LB 时填真实来源网段（否则 IP 限流可被伪造） |
+| `TURN_RETENTION_DAYS` / `TASK_IDEMPOTENCY_RETENTION_DAYS` | 30 | 保留策略天数 |
+| `RETENTION_INTERVAL_HOURS` | 6 | 保留策略执行间隔 |
 
-## 3. 存储分层(定案)
+## 4. 依赖门禁与就绪探针
 
-| 数据 | 介质 | 理由 |
+- **启动期**：Redis 未配置或连接失败时，网关（`cmd/chiron/main.go`）与引擎（`python-engine/app/main.py`）默认**拒绝启动**（安装模式除外）。进程内降级会让各副本看到不同的限流配额、会话与事件，因此不再静默降级。
+- **运行期**：就绪探针——网关 `GET /ready`（检查 PG + Redis）、引擎 `GET /readyz`（检查 Redis），依赖不可用返回 **503**；compose 的健康检查已指向这两个端点，故障副本被标记 `unhealthy`。
+- 存活检查：网关 `GET /health`、引擎 `GET /healthz`。
+
+## 5. 伸缩注意项
+
+1. **限流**：Redis 原子令牌桶，global/tenant/user 均为**每分钟配额（总量语义）**，与副本数无关，扩缩容无需调参。
+2. **会话与事件**：会话元数据、SSE 事件（Redis Stream 缓冲 + Pub/Sub 实时通道）、JWT 黑名单跨副本一致；SSE 单次 Redis 操作有 200ms 超时（抖动时丢失重放能力，不影响实时输出）；慢订阅者超 3s 丢事件，客户端凭 `Last-Event-ID` 重连补齐。
+3. **引擎发现**：引擎配 `ENGINE_ADVERTISE_URL` 即向 Redis 自注册，网关每 15s 感知扩缩容；注册表为空时回退静态地址。
+4. **run 归属**：引擎把「哪个实例持有该 session 的 run」写入 `engine:run:{session_id}`（TTL 300s + 100s 心跳）。审批/取消走归属路由并携带 `run_token`（陈旧 run 的审批被拒；归属指向别的实例时返回明确的 `run owned by another engine instance`）。
+   **前置条件**：需要引擎自注册（`ENGINE_ADVERTISE_URL`），否则网关拿不到归属实例地址，实际仍走一致性哈希（引擎启动日志会给出明确告警）。
+   **限制**：进行中 run 的现场状态（工具审批队列、持久终端、进程内簿记）仍在引擎进程内，实例故障时该 run 中断，用户重试在新实例重建。
+5. **后台任务**：统一走 `engine:tasks` 消费组：失败按 `retry_count` 重投，超限进 `engine:tasks:dlq`；过期任务（`deadline`，按任务类型取值）进 DLQ 而非丢弃；进行中消息有 lease 心跳（`XCLAIM JUSTID`），副本被杀后约 10 分钟内被其它副本 reclaim；执行前经 `task_idempotency` 幂等闸门（同一键已完成则直接 ACK 跳过）。优雅下线会先排空进行中任务（最多 30s）。
+6. **计费**：同一回合（turn）只扣一次——`credit_transactions.turn_id` 唯一索引 + `ON CONFLICT DO NOTHING`，重试不会重复扣费。
+7. **MCP**：默认关闭；需要 MCP 工具能力的副本请显式 `MCP_POOL_ENABLED=true`。
+
+## 6. 数据与保留策略
+
+| 表 | 写入方 | 保留策略 |
 |---|---|---|
-| 媒体/上传/知识库文档 | **S3/MinIO**(`STORAGE_BACKEND=s3`) | BLOB 语义;副本一致、签名 URL |
-| Agent 沙箱 | **共享 POSIX 卷**(引擎 `SANDBOX_ROOT`) | agent 文件工具/git/终端需要真文件系统与低延迟;对象存储/FUSE 不可行(性能+安全) |
-| 插件数据 | **共享卷**(`PLUGIN_DATA_DIR`,网关与引擎同卷) | 小 JSON 高频写 |
-| 会话/任务/事件 | Redis(键前缀统一) | 已多副本就绪 |
+| `turns` | 网关（每轮一行） | 网关每 `RETENTION_INTERVAL_HOURS` 清理 `TURN_RETENTION_DAYS`（默认 30 天）前**已完结**记录；`running` 不删 |
+| `task_idempotency` | 引擎（每任务一行） | 引擎每 `RETENTION_INTERVAL_HOURS` 清理 `TASK_IDEMPOTENCY_RETENTION_DAYS` 前 `status <> 'running'` 记录 |
 
-K8s/云部署等价物:沙箱与插件用 PVC 或 EFS(同区);本地起步可用单机卷。
-安全:容器保持非 root;卷按 `{tenant}/{user}` 分目录;EFS/NFS 注意挂载选项与锁语义。
-
-## 4. 伸缩注意事项
-
-1. **网关横向扩展**:直接加副本;会话取消、JWT 黑名单、SSE 事件已跨实例。
-2. **限流(批 B-1′)**:分布式限流为 Redis 原子令牌桶,**总量语义**(global/tenant/user
-   为每分钟配额;容量=配额、按配额/60 每秒补充),与网关副本数无关——扩缩容无需调整
-   任何参数;后台「系统设置」rate_limit 保存后经跨副本广播即时生效。
-3. **配置热更(批 B-2′)**:后台保存 `rate_limit`(限流阈值)与 `cors`(白名单)后所有
-   副本即时生效;`redis`/`storage`/`s3`/`payment`/`agent` 等分类广播告警,需滚动
-   重启后生效(redis 集群切换属高风险热更项)。
-4. **实时通道统一为 SSE(批 B-3′)**:`GET /ws/{sessionId}` 与 WebSocketHub 已下线
-   (Vue 前端仅使用 EventSource);SSE 经 Redis Stream + Pub/Sub 跨副本一致,并支持
-   Last-Event-ID 断线重放。RPA 插件通道 `GET /ws/rpa` 不受影响。
-5. **引擎横向扩展(批 E1/E2 已落地)**:会话消息 Redis 化、后台任务 Redis Streams 消费组分摊;
-   引擎配 `ENGINE_ADVERTISE_URL` 即向 Redis 自注册,网关每 15s 动态感知扩缩容
-   (注册表为空时回退静态 `PYTHON_ENGINE_ADDRESS`);
-   **run 归属映射(批 4)**:引擎把「哪个实例持有该 session 的 run」写入 Redis
-   `engine:run:{session_id}`(TTL 300s + 100s 心跳续期,见
-   `python-engine/app/run_registry.py`),网关路由与审批优先直连归属实例
-   (一致性哈希/round-robin 仅作回退),审批还会带上 run_token 供引擎校验
-   (陈旧 run 的审批被拒;归属指向别的实例时返回明确的 "run owned by another engine
-   instance"，不再是含糊的 "no active agent")。
-   **仍存在的限制**:进行中 run 的现场状态(工具审批队列、持久终端、进程内簿记)
-   仍在引擎进程内,实例故障时该 run 仍会中断——归属映射只消除「路由到错误实例 +
-   静默失败」,不提供现场状态迁移;会话 run 锁为 5min TTL + 60s 心跳续期(批 E2),
-   用户 ≤5min 后可重试(历史消息已持久化)。文件工具结果依赖共享沙箱卷。
-6. **RPA 浏览器桥(批 D)**:插件 WS 与 `/v1/rpa/exec` 可落在不同网关副本,
-   经 Redis 注册中心路由(通道 `rpa:cmd` / `rpa:res`,key `rpa:client:*`)。
-   Redis 不可用时网关自动退回单机模式(`localOnly`),此时仍需单实例/粘性。
-7. 扩容引擎:启用 E1(`ENGINE_ADVERTISE_URL`)后网关自动感知,无需再改静态清单。
-8. **依赖门禁与就绪探针**:Redis 是生产必需依赖——未配置或连接失败时网关
-   (`cmd/chiron/main.go`)与引擎(`python-engine/app/main.py`)默认**拒绝启动**,
-   仅显式 `DEGRADED_MODE=true`(单机开发)才降级运行。运行期依赖断连由就绪探针反映:
-   网关 `GET /ready`(检查 PG + Redis)、引擎 `GET /readyz`(检查 Redis)返回 503;
-   compose 的 gateway/python-engine 健康检查已指向这两个端点,依赖故障时标记 unhealthy。
-
-## 5. 已知剩余项(后续批次,不影响上述基线运行)
-
-- 批 F:迁移收敛为发布流程单点执行;RLS 逐表核查。
-- 部署编排修复(本次):`gateway` 不再发布宿主机端口(改内部 `expose`,对外只经
-  frontend 的 nginx);`etcd` 的 `--advertise-client-urls` 指向 `http://etcd:2379`;
-  固定浮动镜像版本;移除 compose 中未被代码使用的 `temporal` 服务(go.mod 与
-  python-engine/requirements.txt 均无 Temporal 依赖);补上缺失的 `prometheus.yml`
-  (此前该挂载点不存在,会让 prometheus 容器启动失败)并统一 `METRICS_TOKEN`。
-- 仍待办(后续批次):Redis/PG 不可用时的就绪门禁、任务不丢(优雅关闭/重试/幂等)、
-  进程内运行态与事件可靠性、缓存一致性。
-
-## 6. 验证冒烟
+## 7. 验证
 
 ```bash
-docker compose config            # 配置校验
-docker compose up -d --scale gateway=2 --scale python-engine=2
-# gateway 不发布宿主机端口(多副本时固定 8080 会互相抢占),对外入口是 frontend 的 nginx:
-curl -s http://localhost:3000/health          # 前端入口(静态资源 + 同源反代)
-curl -s http://localhost:3000/v1/system/health
-# 需要直连某个 gateway 副本时(临时映射端口):
-#   docker compose run --rm --service-ports gateway
-# RPA(需真实浏览器插件):
-#   插件连副本 A 的 /ws/rpa,再经任意副本 POST /v1/rpa/exec,命令应能到达插件。
+docker compose config --quiet                 # 配置校验
+python -m alembic heads                       # 期望单一 head
+go build ./... && go vet ./...
+python -m pytest python-engine/tests -q
 ```
+
+运行时抽查（多副本）：
+
+- 停 Redis 后 `GET /ready`（网关）与 `GET /readyz`（引擎）应为 503，恢复后自动回 200；
+- 引擎收到 SIGTERM 时日志出现 `Queue worker stopping, waiting for N in-flight tasks...` 与 `Queue worker stopped`（说明优雅排空生效）；
+- 同一 `task_id` 重复投递只执行一次（日志 `duplicate task skipped (already completed)`）；
+- 同一 `turn_id` 重复扣费时余额只减一次。
+
+## 8. 已知边界
+
+- run 现场状态不迁移：实例故障该 run 中断（只保证「路由到正确实例 + 陈旧审批被拒」）；
+- SSE 跨实例实时通道为 Pub/Sub：断连窗口内的实时事件依赖客户端携带 `Last-Event-ID` 从 Stream 重放；
+- Compose 内置的 PostgreSQL、Redis、MinIO、Milvus、etcd 仍是**单点**：生产需替换为托管或集群方案（Redis Sentinel/Cluster、Patroni、分布式 MinIO、Milvus 集群、多副本 etcd），并配套备份恢复与跨可用区演练。

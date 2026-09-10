@@ -953,6 +953,12 @@ models:
         format: date-time
         description: 创建时间
         default: now()
+      turn_id:
+        type: string
+        format: uuid
+        maxLength: 36
+        description: 所属回合 ID（幂等扣费键：同一 turn 只扣一次）
+        nullable: true
 
   KnowledgeBase:
     table: knowledge_bases

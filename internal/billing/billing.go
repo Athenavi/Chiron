@@ -86,9 +86,9 @@ type Store interface {
 	GetHistory(ctx context.Context, userID string, limit int) ([]CreditChange, error)
 	DailyFreeCount(ctx context.Context, userID string) (int, error)
 	MarkFreeUsage(ctx context.Context, userID string) error
-	AtomicDeductBalance(ctx context.Context, userID string, amount int, reason string) (int, error)
+	AtomicDeductBalance(ctx context.Context, userID string, amount int, reason, turnID string) (int, error)
 	AtomicAddBalance(ctx context.Context, userID string, amount int, reason string) (int, error)
-	RecordBillingRecord(ctx context.Context, userID, sessionID string, inputTokens, outputTokens, costCents int) error
+	RecordBillingRecord(ctx context.Context, userID, sessionID string, inputTokens, outputTokens, costCents int, turnID string) error
 	PaymentStore
 }
 
@@ -204,6 +204,13 @@ func (m *Manager) GetBalance(userID string) (int, error) {
 // 事实源，多副本部署下不会超扣/重复扣费；内存仅作读缓存。
 // 无外部请求上下文，使用 Background 自建超时上下文（异步事件处理不阻塞请求链路）。
 func (m *Manager) Deduct(userID, reason string, amount int) (int, error) {
+	return m.deduct(userID, reason, amount, "")
+}
+
+// deduct 是 Deduct 的带幂等键版本（B4）：turnID 非空时同一回合只扣一次，
+// 重复调用返回当前余额且不再写流水（由 credit_transactions.turn_id 唯一索引保证）。
+// turnID 为空时与历史行为完全一致。
+func (m *Manager) deduct(userID, reason string, amount int, turnID string) (int, error) {
 	if amount <= 0 {
 		return 0, fmt.Errorf("invalid deduction amount: %d", amount)
 	}
@@ -211,7 +218,7 @@ func (m *Manager) Deduct(userID, reason string, amount int) (int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	newBalance, err := m.store.AtomicDeductBalance(ctx, userID, amount, reason)
+	newBalance, err := m.store.AtomicDeductBalance(ctx, userID, amount, reason, turnID)
 	if err != nil {
 		return 0, fmt.Errorf("insufficient credits or user not found: %w", err)
 	}
@@ -314,23 +321,23 @@ func (m *Manager) MarkFreeUsage(ctx context.Context, userID string) error {
 }
 
 // DeductTokens deducts credits based on token usage.
-func (m *Manager) DeductTokens(userID string, inputTokens, outputTokens int) (int, error) {
+func (m *Manager) DeductTokens(userID string, inputTokens, outputTokens int, turnID string) (int, error) {
 	cfg := m.Config()
 	cost := int((int64(inputTokens)*int64(cfg.LLMCostPerToken) + int64(outputTokens)*int64(cfg.LLMCostPerOutput)) / 1000)
 	if cost < 1 {
 		cost = 1
 	}
-	return m.Deduct(userID, "llm_token", cost)
+	return m.deduct(userID, "llm_token", cost, turnID)
 }
 
 // RecordTokenUsage 记录企业成本中心 token 明细（billing_records）。
 // 仅在 DeductTokens 实际扣费成功后调用；余额/流水已由 Deduct 同事务保障，
 // 此处失败仅影响成本中心明细（记录层错误由调用方告警，不影响计费主链路）。
-func (m *Manager) RecordTokenUsage(ctx context.Context, userID, sessionID string, inputTokens, outputTokens int) error {
+func (m *Manager) RecordTokenUsage(ctx context.Context, userID, sessionID string, inputTokens, outputTokens int, turnID string) error {
 	cfg := m.Config()
 	cost := int((int64(inputTokens)*int64(cfg.LLMCostPerToken) + int64(outputTokens)*int64(cfg.LLMCostPerOutput)) / 1000)
 	if cost < 1 {
 		cost = 1
 	}
-	return m.store.RecordBillingRecord(ctx, userID, sessionID, inputTokens, outputTokens, cost)
+	return m.store.RecordBillingRecord(ctx, userID, sessionID, inputTokens, outputTokens, cost, turnID)
 }

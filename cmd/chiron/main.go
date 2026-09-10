@@ -263,6 +263,8 @@ func main() {
 
 		// ── Background Maintenance ──
 		api.StartBlacklistCleaner(lifecycleCtx)
+		// A7/C1: turns 保留策略清理（避免长期运行表膨胀；TURN_RETENTION_DAYS 可配）
+		api.StartRetentionCleaner(lifecycleCtx)
 		// P0-1: 启动JWT黑名单跨实例同步
 		api.StartBlacklistPubSub(lifecycleCtx)
 		// 跨实例 agent 取消广播订阅

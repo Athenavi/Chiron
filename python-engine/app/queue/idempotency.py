@@ -90,6 +90,37 @@ async def fail(key: str) -> None:
     await _update(_FAIL_SQL, key)
 
 
+_PURGE_SQL = """
+DELETE FROM task_idempotency
+WHERE status <> 'running'
+  AND updated_at < NOW() - make_interval(days => $1)
+"""
+
+
+async def purge_older_than(days: int) -> int:
+    """删除保留期外已完结（completed/failed）的幂等记录，返回删除行数。
+
+    running 不删：可能仍在执行或等待重试（claim 只拒绝 completed）。
+    A7/C1：该表每任务一行，长期运行必须清理，否则无限膨胀。
+    """
+    if days <= 0:
+        return 0
+    try:
+        pool = _pool()
+    except Exception:  # noqa: BLE001 - 无池（PG 未启用）时跳过
+        return 0
+    try:
+        res = await pool.execute(_PURGE_SQL, days)
+    except Exception as e:  # noqa: BLE001 - 清理失败留待下一轮
+        logger.warning("idempotency purge failed: %s", e)
+        return 0
+    # asyncpg / 统一客户端均返回 "DELETE <n>"
+    try:
+        return int(str(res).split()[-1])
+    except (ValueError, IndexError):
+        return 0
+
+
 async def _update(sql: str, *args) -> None:
     try:
         pool = _pool()

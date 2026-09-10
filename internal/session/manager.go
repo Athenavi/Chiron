@@ -336,6 +336,29 @@ func (m *Manager) SaveAssistantMessage(ctx context.Context, sessionID, assistant
 	m.evictCache(ctx, sessionID)
 }
 
+// pgUUIDOrNil 把字符串转成 *string 供 uuid 列使用：非 uuid 格式返回 nil（写 NULL）。
+// 历史数据存在 "session_xxx" 这类非 uuid 会话 ID，直接 ::uuid 强转会让整条 INSERT
+// 报 22P02，导致该会话的 turn 记录全部丢失（A5）。
+func pgUUIDOrNil(v string) *string {
+	if len(v) != 36 {
+		return nil
+	}
+	for i := 0; i < len(v); i++ {
+		c := v[i]
+		if i == 8 || i == 13 || i == 18 || i == 23 {
+			if c != '-' {
+				return nil
+			}
+			continue
+		}
+		isHex := (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+		if !isHex {
+			return nil
+		}
+	}
+	return &v
+}
+
 // CreateTurn 记录一次回合的开始（000.md 第 14 条）：turns.created -> running。
 // turnID 由调用方生成并贯穿该回合的消息/工具调用/计费落库，便于幂等与故障排查。
 // 会话不存在时先补建（与 SaveUserMessage 相同的 upsert），避免 FK 失败。
@@ -353,9 +376,9 @@ func (m *Manager) CreateTurn(ctx context.Context, turnID, sessionID, userID stri
 	}
 	_, err = m.pool.Exec(ctx,
 		`INSERT INTO turns (id, session_id, user_id, status, started_at, created_at)
-		 VALUES ($1, NULLIF($2, '')::uuid, NULLIF($3, '')::uuid, 'running', NOW(), NOW())
+		 VALUES ($1, $2, $3, 'running', NOW(), NOW())
 		 ON CONFLICT (id) DO UPDATE SET status = 'running', started_at = NOW()`,
-		turnID, sessionID, userID)
+		turnID, pgUUIDOrNil(sessionID), pgUUIDOrNil(userID))
 	if err != nil {
 		// 回合状态写失败不阻断对话（SSE 照常），但必须可见（不再静默）
 		slog.Error("create turn", "turn", turnID, "session", sessionID, "error", err)

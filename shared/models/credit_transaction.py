@@ -1,7 +1,7 @@
 """
 SQLAlchemy 模型定义 - CreditTransaction
 由代码生成器自动生成 (基于 models.yaml / routes.yaml) - 请勿手动修改
-生成时间：2026-08-27 17:22:39
+生成时间：2026-09-10 21:44:53
 """
 
 from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, ForeignKey
@@ -33,6 +33,8 @@ class CreditTransaction(Base):
 
     created_at = Column(String(255), default='now()', doc='创建时间')
 
+    turn_id = Column(String(36), nullable=True, doc='所属回合 ID（幂等扣费键：同一 turn 只扣一次）')
+
 
     def to_dict(self, exclude_sensitive=True):
         """转换为字典
@@ -47,6 +49,7 @@ class CreditTransaction(Base):
             'balance': self.balance,
             'reason': self.reason,
             'created_at': self.created_at,
+            'turn_id': self.turn_id,
         }
 
         if not exclude_sensitive:

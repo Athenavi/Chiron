@@ -18,6 +18,17 @@ from app.redis_keys import rkey
 TASK_STREAM = rkey("engine:tasks")
 DLQ_STREAM = rkey("engine:tasks:dlq")
 
+# 按任务类型的默认截止时间(秒):既避免"堆积后执行早已无意义的旧任务",
+# 也不能误杀长任务(知识库建索引可能数小时)。
+DEFAULT_DEADLINE_SECONDS = {
+    "rag_index": 6 * 3600,
+    "embed_batch": 3600,
+    "memory_save": 900,
+    "tool_job": 3600,
+    "workflow_run": 7200,
+}
+DEFAULT_DEADLINE_SECONDS_FALLBACK = 3600
+
 
 class QueueProducer:
     """Redis Streams 任务发布者"""
@@ -31,7 +42,8 @@ class QueueProducer:
         tenant_id: str,
         payload: dict,
         priority: int = 0,
-        deadline_seconds: int = 900,
+        deadline_seconds: int | None = None,
+        idempotency_key: str = "",
     ) -> str:
         """
         发布任务到 Redis Streams
@@ -41,6 +53,14 @@ class QueueProducer:
             tenant_id: 租户 ID
             payload: 任务数据
             priority: 优先级（0=普通，1=高）
+            deadline_seconds: 截止时间（秒）；None 时按 task_type 取默认值
+            idempotency_key: 业务幂等键。**留空表示"只对同一条消息的重复投递幂等"**——
+                本方法每次生成新 task_id，回退键 `{task_type}:{task_id}` 因此每次不同，
+                覆盖的是重投/认领场景（消息字段原样重投）。只有"同一业务动作必须只执行
+                一次"时才传稳定键（如 tool_job 用 job_id、workflow_run 用 instance_id）。
+                注意 worker 的 claim 只拒绝 `completed`：传稳定键会让**用户再次主动发起
+                的同一操作**被跳过，因此不可用于可重复发起的动作（如"重建索引"——
+                该场景由 `_handle_rag_index` 的自身幂等负责）。
 
         Returns:
             task_id
@@ -57,12 +77,23 @@ class QueueProducer:
             "retry_count": "0",
             "trace_id": trace_id,
             "priority": str(priority),
-            # 幂等键(000.md 第 15 条):worker 执行前 claim,已完成的任务重投被直接丢弃;
-            # 显式写出便于上游按业务键定制(缺省回退 {task_type}:{task_id})。
-            "idempotency_key": f"{task_type}:{task_id}",
-            # 截止时间:超过后 worker 直接 ACK 丢弃,避免堆积后执行早已无意义的任务。
+            # 幂等键(000.md 第 15 条):worker 执行前 claim,已完成的任务重投被直接丢弃。
+            # 语义边界见方法 docstring(A6):传了业务键就要对"可重复性"负责。
+            "idempotency_key": idempotency_key or f"{task_type}:{task_id}",
+            # 截止时间:超时后 worker 不再执行(进 DLQ,不静默丢弃,见 worker.py)。
+            # 未显式指定时按 task_type 取默认值——长任务与短任务不能同一档(A2)。
             "deadline": time.strftime(
-                "%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + deadline_seconds)
+                "%Y-%m-%dT%H:%M:%SZ",
+                time.gmtime(
+                    time.time()
+                    + (
+                        deadline_seconds
+                        if deadline_seconds is not None
+                        else DEFAULT_DEADLINE_SECONDS.get(
+                            task_type, DEFAULT_DEADLINE_SECONDS_FALLBACK
+                        )
+                    )
+                ),
             ),
         }
 
