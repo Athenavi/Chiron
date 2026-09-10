@@ -1,11 +1,12 @@
 """
 SQLAlchemy 模型定义 - EntQuotaPool
 由代码生成器自动生成 (基于 models.yaml / routes.yaml) - 请勿手动修改
-生成时间：2026-08-27 17:22:39
+生成时间：2026-09-10 23:04:54
 """
 
 from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, ForeignKey
 import uuid
+from datetime import datetime
 
 from . import Base  # 使用统一的 Base
 
@@ -30,9 +31,9 @@ class EntQuotaPool(Base):
 
     period = Column(String(10), default='monthly', doc='周期')
 
-    created_at = Column(String(255), default='now()', doc='创建时间')
+    created_at = Column(DateTime, default=datetime.utcnow, doc='创建时间')    
 
-    updated_at = Column(String(255), default='now()', doc='更新时间')
+    updated_at = Column(DateTime, default=datetime.utcnow, doc='更新时间')    
 
 
     def to_dict(self, exclude_sensitive=True):
@@ -47,8 +48,8 @@ class EntQuotaPool(Base):
             'resource_type': self.resource_type,
             'total_amount': self.total_amount,
             'period': self.period,
-            'created_at': self.created_at,
-            'updated_at': self.updated_at,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
 
         if not exclude_sensitive:

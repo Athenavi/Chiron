@@ -1,11 +1,12 @@
 """
 SQLAlchemy 模型定义 - Turn
 由代码生成器自动生成 (基于 models.yaml / routes.yaml) - 请勿手动修改
-生成时间：2026-09-10 21:30:34
+生成时间：2026-09-10 23:04:54
 """
 
 from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, ForeignKey
 import uuid
+from datetime import datetime
 
 from . import Base  # 使用统一的 Base
 
@@ -36,11 +37,11 @@ class Turn(Base):
     output_tokens = Column(BigInteger, default=0, doc='输出 Tokens')
 
 
-    started_at = Column(String(255), default='now()', doc='开始时间')
+    started_at = Column(DateTime, default=datetime.utcnow, doc='开始时间')    
 
-    finished_at = Column(String(255), nullable=True, doc='结束时间')
+    finished_at = Column(DateTime, nullable=True, doc='结束时间')    
 
-    created_at = Column(String(255), default='now()', doc='创建时间')
+    created_at = Column(DateTime, default=datetime.utcnow, doc='创建时间')    
 
 
     def to_dict(self, exclude_sensitive=True):
@@ -57,9 +58,9 @@ class Turn(Base):
             'error': self.error,
             'input_tokens': self.input_tokens,
             'output_tokens': self.output_tokens,
-            'started_at': self.started_at,
-            'finished_at': self.finished_at,
-            'created_at': self.created_at,
+            'started_at': self.started_at.isoformat() if self.started_at else None,
+            'finished_at': self.finished_at.isoformat() if self.finished_at else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
         }
 
         if not exclude_sensitive:

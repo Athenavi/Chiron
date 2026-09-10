@@ -1,11 +1,12 @@
 """
 SQLAlchemy 模型定义 - AdminDbConfig
 由代码生成器自动生成 (基于 models.yaml / routes.yaml) - 请勿手动修改
-生成时间：2026-08-27 17:22:39
+生成时间：2026-09-10 23:04:54
 """
 
 from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime
 import uuid
+from datetime import datetime
 
 from . import Base  # 使用统一的 Base
 
@@ -39,7 +40,7 @@ class AdminDbConfig(Base):
 
     status = Column(String(20), default='active', doc='状态')
 
-    last_health_check = Column(String(255), nullable=True, doc='最后健康检查')
+    last_health_check = Column(DateTime, nullable=True, doc='最后健康检查')    
 
     avg_query_time_ms = Column(String(255), default='0', doc='平均查询时间（毫秒）')
 
@@ -51,9 +52,9 @@ class AdminDbConfig(Base):
     sequential_scans = Column(BigInteger, default=0, nullable=True, doc='顺序扫描次数')
 
 
-    created_at = Column(String(255), default='now()', doc='创建时间')
+    created_at = Column(DateTime, default=datetime.utcnow, doc='创建时间')    
 
-    updated_at = Column(String(255), default='now()', doc='更新时间')
+    updated_at = Column(DateTime, default=datetime.utcnow, doc='更新时间')    
 
 
     def to_dict(self, exclude_sensitive=True):
@@ -72,13 +73,13 @@ class AdminDbConfig(Base):
             'max_idle_connections': self.max_idle_connections,
             'conn_max_lifetime': self.conn_max_lifetime,
             'status': self.status,
-            'last_health_check': self.last_health_check,
+            'last_health_check': self.last_health_check.isoformat() if self.last_health_check else None,
             'avg_query_time_ms': self.avg_query_time_ms,
             'database_size_mb': self.database_size_mb,
             'total_tables': self.total_tables,
             'sequential_scans': self.sequential_scans,
-            'created_at': self.created_at,
-            'updated_at': self.updated_at,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
 
         if not exclude_sensitive:

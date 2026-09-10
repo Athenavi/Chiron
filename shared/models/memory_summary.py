@@ -1,11 +1,12 @@
 """
 SQLAlchemy 模型定义 - MemorySummary
 由代码生成器自动生成 (基于 models.yaml / routes.yaml) - 请勿手动修改
-生成时间：2026-08-27 17:22:39
+生成时间：2026-09-10 23:04:54
 """
 
 from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, JSON
 import uuid
+from datetime import datetime
 
 from . import Base  # 使用统一的 Base
 
@@ -46,11 +47,11 @@ class MemorySummary(Base):
     access_count = Column(Integer, default=0, doc='访问次数')
 
 
-    last_accessed_at = Column(String(255), nullable=True, doc='最近访问时间')
+    last_accessed_at = Column(DateTime, nullable=True, doc='最近访问时间')    
 
     status = Column(String(16), default='active', doc='状态')
 
-    created_at = Column(String(255), default='now()', doc='创建时间')
+    created_at = Column(DateTime, default=datetime.utcnow, doc='创建时间')    
 
 
     def to_dict(self, exclude_sensitive=True):
@@ -71,9 +72,9 @@ class MemorySummary(Base):
             'turn_end': self.turn_end,
             'content_hash': self.content_hash,
             'access_count': self.access_count,
-            'last_accessed_at': self.last_accessed_at,
+            'last_accessed_at': self.last_accessed_at.isoformat() if self.last_accessed_at else None,
             'status': self.status,
-            'created_at': self.created_at,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
         }
 
         if not exclude_sensitive:

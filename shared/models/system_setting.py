@@ -1,10 +1,11 @@
 """
 SQLAlchemy 模型定义 - SystemSetting
 由代码生成器自动生成 (基于 models.yaml / routes.yaml) - 请勿手动修改
-生成时间：2026-08-27 17:22:39
+生成时间：2026-09-10 23:04:54
 """
 
 from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, JSON
+from datetime import datetime
 
 from . import Base  # 使用统一的 Base
 
@@ -26,7 +27,7 @@ class SystemSetting(Base):
     value = Column(JSON, doc='值（JSONB）')
 
 
-    updated_at = Column(String(255), default='now()', doc='更新时间')
+    updated_at = Column(DateTime, default=datetime.utcnow, doc='更新时间')    
 
     updated_by = Column(String(36), nullable=True, doc='更新者')
 
@@ -45,7 +46,7 @@ class SystemSetting(Base):
             'category': self.category,
             'key': self.key,
             'value': self.value,
-            'updated_at': self.updated_at,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'updated_by': self.updated_by,
             'encrypted': self.encrypted,
         }

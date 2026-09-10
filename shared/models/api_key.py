@@ -1,11 +1,12 @@
 """
 SQLAlchemy 模型定义 - ApiKey
 由代码生成器自动生成 (基于 models.yaml / routes.yaml) - 请勿手动修改
-生成时间：2026-08-27 17:22:39
+生成时间：2026-09-10 23:04:54
 """
 
 from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, ForeignKey
 import uuid
+from datetime import datetime
 
 from . import Base  # 使用统一的 Base
 
@@ -27,11 +28,11 @@ class ApiKey(Base):
 
     key_hash = Column(String(64), nullable=True, doc='密钥哈希')
 
-    last_used_at = Column(String(255), nullable=True, doc='最后使用时间')
+    last_used_at = Column(DateTime, nullable=True, doc='最后使用时间')    
 
-    expires_at = Column(String(255), nullable=True, doc='过期时间')
+    expires_at = Column(DateTime, nullable=True, doc='过期时间')    
 
-    created_at = Column(String(255), default='now()', doc='创建时间')
+    created_at = Column(DateTime, default=datetime.utcnow, doc='创建时间')    
 
     revoked = Column(Boolean, default=False, doc='是否已撤销')
 
@@ -48,9 +49,9 @@ class ApiKey(Base):
             'user_id': self.user_id,
             'name': self.name,
             'key_hash': self.key_hash,
-            'last_used_at': self.last_used_at,
-            'expires_at': self.expires_at,
-            'created_at': self.created_at,
+            'last_used_at': self.last_used_at.isoformat() if self.last_used_at else None,
+            'expires_at': self.expires_at.isoformat() if self.expires_at else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
             'revoked': self.revoked,
         }
 

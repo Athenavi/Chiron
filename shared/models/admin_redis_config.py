@@ -1,11 +1,12 @@
 """
 SQLAlchemy 模型定义 - AdminRedisConfig
 由代码生成器自动生成 (基于 models.yaml / routes.yaml) - 请勿手动修改
-生成时间：2026-08-27 17:22:39
+生成时间：2026-09-10 23:04:54
 """
 
 from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime
 import uuid
+from datetime import datetime
 
 from . import Base  # 使用统一的 Base
 
@@ -40,7 +41,7 @@ class AdminRedisConfig(Base):
 
     status = Column(String(20), default='active', doc='状态')
 
-    last_health_check = Column(String(255), nullable=True, doc='最后健康检查')
+    last_health_check = Column(DateTime, nullable=True, doc='最后健康检查')    
 
     avg_latency_ms = Column(String(255), default='0', doc='平均延迟（毫秒）')
 
@@ -55,9 +56,9 @@ class AdminRedisConfig(Base):
     misses = Column(BigInteger, default=0, doc='未命中次数')
 
 
-    created_at = Column(String(255), default='now()', doc='创建时间')
+    created_at = Column(DateTime, default=datetime.utcnow, doc='创建时间')    
 
-    updated_at = Column(String(255), default='now()', doc='更新时间')
+    updated_at = Column(DateTime, default=datetime.utcnow, doc='更新时间')    
 
 
     def to_dict(self, exclude_sensitive=True):
@@ -76,14 +77,14 @@ class AdminRedisConfig(Base):
             'min_idle_connections': self.min_idle_connections,
             'max_conn_age': self.max_conn_age,
             'status': self.status,
-            'last_health_check': self.last_health_check,
+            'last_health_check': self.last_health_check.isoformat() if self.last_health_check else None,
             'avg_latency_ms': self.avg_latency_ms,
             'memory_used_mb': self.memory_used_mb,
             'connected_clients': self.connected_clients,
             'hits': self.hits,
             'misses': self.misses,
-            'created_at': self.created_at,
-            'updated_at': self.updated_at,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
 
         if not exclude_sensitive:

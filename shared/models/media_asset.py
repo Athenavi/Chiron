@@ -1,7 +1,7 @@
 """
 SQLAlchemy 模型定义 - MediaAsset
 由代码生成器自动生成 (基于 models.yaml / routes.yaml) - 请勿手动修改
-生成时间：2026-08-27 17:22:39
+生成时间：2026-09-10 23:04:54
 """
 
 from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, ForeignKey, JSON
@@ -38,7 +38,7 @@ class MediaAsset(Base):
 
     thumbnail = Column(String(512), default='', doc='缩略图')
 
-    metadata_data = Column(JSON, default={}, doc='元数据（JSONB）')
+    metadata_data = Column('metadata', JSON, default={}, doc='元数据（JSONB）')
 
 
     tags = Column(String(255), default='[]', doc='标签')

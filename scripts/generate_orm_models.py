@@ -60,9 +60,16 @@ def convert_properties_to_fields(properties: Dict, model_name: str, all_models: 
             if not db_column:
                 db_column = field_name
 
+        # 归一：models.yaml 用 `type: string, format: date-time` 表达时间戳（时间语义），
+        # 需转成 datetime，否则模板会落到 String(255) 分支——库中时间戳列被建成
+        # character varying，与 Go 侧的 time.Time 不兼容（见迁移 8b3f1d60a7c2 的背景）。
+        # 与 scripts/cli/commands/generate_models.py 的同类处理保持一致。
+        field_type = prop.get('type', 'string')
+        if field_type == 'string' and prop.get('format') == 'date-time':
+            field_type = 'datetime'
+
         # 处理 default: now() -> datetime.utcnow (仅对 datetime 类型)
         default_value = prop.get('default')
-        field_type = prop.get('type', 'string')
         if default_value == 'now()' and field_type in ('datetime', 'timestamp'):
             default_value = 'datetime.utcnow'
 

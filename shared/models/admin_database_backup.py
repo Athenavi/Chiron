@@ -1,11 +1,12 @@
 """
 SQLAlchemy 模型定义 - AdminDatabaseBackup
 由代码生成器自动生成 (基于 models.yaml / routes.yaml) - 请勿手动修改
-生成时间：2026-08-27 17:22:39
+生成时间：2026-09-10 23:04:54
 """
 
 from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime
 import uuid
+from datetime import datetime
 
 from . import Base  # 使用统一的 Base
 
@@ -34,9 +35,9 @@ class AdminDatabaseBackup(Base):
     error_message = Column(Text, nullable=True, doc='错误信息')
 
 
-    started_at = Column(String(255), default='now()', doc='开始时间')
+    started_at = Column(DateTime, default=datetime.utcnow, doc='开始时间')    
 
-    completed_at = Column(String(255), nullable=True, doc='完成时间')
+    completed_at = Column(DateTime, nullable=True, doc='完成时间')    
 
     duration_seconds = Column(Integer, nullable=True, doc='耗时（秒）')
 
@@ -58,8 +59,8 @@ class AdminDatabaseBackup(Base):
             'file_size_mb': self.file_size_mb,
             'status': self.status,
             'error_message': self.error_message,
-            'started_at': self.started_at,
-            'completed_at': self.completed_at,
+            'started_at': self.started_at.isoformat() if self.started_at else None,
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
             'duration_seconds': self.duration_seconds,
             'created_by': self.created_by,
         }

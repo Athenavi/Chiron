@@ -1,11 +1,12 @@
 """
 SQLAlchemy 模型定义 - ConversationShare
 由代码生成器自动生成 (基于 models.yaml / routes.yaml) - 请勿手动修改
-生成时间：2026-08-27 17:22:39
+生成时间：2026-09-10 23:04:54
 """
 
 from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime
 import uuid
+from datetime import datetime
 
 from . import Base  # 使用统一的 Base
 
@@ -28,9 +29,9 @@ class ConversationShare(Base):
 
     message_ids = Column(String(255), default='[]', doc='消息 ID 列表')
 
-    created_at = Column(String(255), default='now()', doc='创建时间')
+    created_at = Column(DateTime, default=datetime.utcnow, doc='创建时间')    
 
-    revoked_at = Column(String(255), nullable=True, doc='撤销时间')
+    revoked_at = Column(DateTime, nullable=True, doc='撤销时间')    
 
 
     def to_dict(self, exclude_sensitive=True):
@@ -45,8 +46,8 @@ class ConversationShare(Base):
             'user_id': self.user_id,
             'title': self.title,
             'message_ids': self.message_ids,
-            'created_at': self.created_at,
-            'revoked_at': self.revoked_at,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'revoked_at': self.revoked_at.isoformat() if self.revoked_at else None,
         }
 
         if not exclude_sensitive:

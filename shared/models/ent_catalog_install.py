@@ -1,11 +1,12 @@
 """
 SQLAlchemy 模型定义 - EntCatalogInstall
 由代码生成器自动生成 (基于 models.yaml / routes.yaml) - 请勿手动修改
-生成时间：2026-08-27 17:22:39
+生成时间：2026-09-10 23:04:54
 """
 
 from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, ForeignKey
 import uuid
+from datetime import datetime
 
 from . import Base  # 使用统一的 Base
 
@@ -25,7 +26,7 @@ class EntCatalogInstall(Base):
     enabled = Column(Boolean, default=True, doc='是否启用')
 
 
-    installed_at = Column(String(255), default='now()', doc='安装时间')
+    installed_at = Column(DateTime, default=datetime.utcnow, doc='安装时间')    
 
 
     def to_dict(self, exclude_sensitive=True):
@@ -38,7 +39,7 @@ class EntCatalogInstall(Base):
             'item_id': self.item_id,
             'tenant_id': self.tenant_id,
             'enabled': self.enabled,
-            'installed_at': self.installed_at,
+            'installed_at': self.installed_at.isoformat() if self.installed_at else None,
         }
 
         if not exclude_sensitive:

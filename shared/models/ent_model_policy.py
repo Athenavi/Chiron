@@ -1,11 +1,12 @@
 """
 SQLAlchemy 模型定义 - EntModelPolicy
 由代码生成器自动生成 (基于 models.yaml / routes.yaml) - 请勿手动修改
-生成时间：2026-08-27 17:22:39
+生成时间：2026-09-10 23:04:54
 """
 
 from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, ForeignKey, JSON
 import uuid
+from datetime import datetime
 
 from . import Base  # 使用统一的 Base
 
@@ -31,9 +32,9 @@ class EntModelPolicy(Base):
     per_model_limits = Column(JSON, default={}, doc='模型限制（JSONB）')
 
 
-    created_at = Column(String(255), default='now()', doc='创建时间')
+    created_at = Column(DateTime, default=datetime.utcnow, doc='创建时间')    
 
-    updated_at = Column(String(255), default='now()', doc='更新时间')
+    updated_at = Column(DateTime, default=datetime.utcnow, doc='更新时间')    
 
 
     def to_dict(self, exclude_sensitive=True):
@@ -48,8 +49,8 @@ class EntModelPolicy(Base):
             'role_id': self.role_id,
             'allowed_models': self.allowed_models,
             'per_model_limits': self.per_model_limits,
-            'created_at': self.created_at,
-            'updated_at': self.updated_at,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
 
         if not exclude_sensitive:
