@@ -237,7 +237,7 @@ func (h *SubmitHandler) HandleSubmit(ctx context.Context, userID, sessionID, con
 			freeCount, fcErr := h.biller.DailyFreeCount(storeCtx, userID)
 			if fcErr == nil && freeCount < billing.DailyFreeLimit {
 				// 免费对话：记录使用，不扣费
-				if markErr := h.biller.MarkFreeUsage(storeCtx, userID); markErr != nil {
+				if markErr := h.biller.MarkFreeUsage(storeCtx, userID, turnID); markErr != nil {
 					slog.Error("billing: MarkFreeUsage failed", "user", userID, "error", markErr)
 				}
 			} else {

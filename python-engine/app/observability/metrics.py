@@ -61,6 +61,18 @@ TOKEN_BUDGET_LIMIT = Gauge(
 )
 
 # ── 队列级 ──
+# ── MCP 插件连接池（B1）：多实例下的连接放大观测与预算 ──
+MCP_POOL_CONNECTIONS = Gauge(
+    "mcp_pool_connections", "MCP shared connections held by this engine instance"
+)
+MCP_POOL_USERS = Gauge(
+    "mcp_pool_users", "Active users with MCP connections on this instance"
+)
+MCP_POOL_REJECTED = Counter(
+    "mcp_pool_rejected_total",
+    "MCP users/servers skipped because the instance connection budget was reached",
+)
+
 QUEUE_DEPTH = Gauge(
     "queue_depth",
     "Task queue depth",

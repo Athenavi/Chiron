@@ -332,7 +332,10 @@ async def lifespan(app: FastAPI):
         from app.plugins.pool import MCPClientPool
         from app.plugins.store import ActiveTracker, PluginStore
 
-        _plugin_pool = MCPClientPool(store=PluginStore(), tracker=ActiveTracker())
+        # redis 用于 MCP owner 租约（B1a，默认关闭；见 MCP_OWNER_LEASE_ENABLED）
+        _plugin_pool = MCPClientPool(
+            store=PluginStore(), tracker=ActiveTracker(), redis=_redis
+        )
         await _plugin_pool.start()
         logger.info("MCP plugin pool started (poll=%ds)", 25)
     else:

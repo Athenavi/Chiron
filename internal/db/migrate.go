@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -130,12 +131,53 @@ func isEmptyMigration(filePath string) (bool, error) {
 	return false, nil
 }
 
+// resolvePythonBinary 返回可用的 Python 解释器：
+// 依次尝试 CHIRON_PYTHON / PYTHON 环境变量，再尝试 python、python3。
+// 找不到时返回可操作的错误（应用镜像刻意不装 Python，见 requirements-migrate.txt）。
+func resolvePythonBinary() (string, error) {
+	candidates := []string{
+		os.Getenv("CHIRON_PYTHON"),
+		os.Getenv("PYTHON"),
+		"python",
+		"python3",
+	}
+	for _, c := range candidates {
+		if c == "" {
+			continue
+		}
+		if resolved, err := exec.LookPath(c); err == nil {
+			return resolved, nil
+		}
+	}
+	return "", errors.New(
+		"no Python interpreter found (tried CHIRON_PYTHON, PYTHON, python, python3): " +
+			"migrations need Python + alembic (`pip install -r requirements-migrate.txt`, " +
+			"then `alembic upgrade head` from the repository root). The application image " +
+			"intentionally ships without Python — run migrations as a separate release step",
+	)
+}
+
 // RunMigrations 执行 Alembic 数据库迁移（alembic upgrade head）
 // dsn 为 PostgreSQL 连接串，通过环境变量 DATABASE_DSN 传递给 Alembic
 func RunMigrations(dsn string) error {
 	// Normalize DSN: postgres:// -> postgresql:// for Alembic
 	dsn = strings.Replace(dsn, "postgres://", "postgresql://", 1)
 	os.Setenv("DATABASE_DSN", dsn)
+
+	// 前置检测（fail loud）：应用镜像（alpine）通常没有 python/alembic，旧实现会在此
+	// 静默失败（只 slog.Warn），造成"代码已升级、迁移未跑"。这里显式解析解释器与
+	// alembic.ini，缺失即返回可操作的错误，由调用方决定阻断或提示。
+	pythonBin, err := resolvePythonBinary()
+	if err != nil {
+		return err
+	}
+	if _, statErr := os.Stat(alembicConfigPath()); statErr != nil {
+		return fmt.Errorf(
+			"alembic config not found at %q: run migrations from the repository root "+
+				"or set ALEMBIC_CONFIG (see requirements-migrate.txt)",
+			alembicConfigPath(),
+		)
+	}
 
 	// Ensure APP_SECRET is written to .env for Alembic
 	// Preserve other configuration entries (e.g., DATABASE_DSN) in the file.
@@ -170,12 +212,7 @@ func RunMigrations(dsn string) error {
 	}
 
 	os.Setenv("PYTHONUTF8", "1")
-	python := "python"
-	if v := os.Getenv("PYTHON"); v != "" {
-		python = v
-	} else if v := os.Getenv("CHIRON_PYTHON"); v != "" {
-		python = v
-	}
+	// 解释器已由上面的 resolvePythonBinary() 前置检测确定（pythonBin）
 
 	// ── 迁移执行（多实例安全） ──
 	// 数据库 revision 以 alembic_version 表为唯一事实源；启动只执行幂等的
@@ -190,7 +227,7 @@ func RunMigrations(dsn string) error {
 		defer func() { _, _ = Pool.Exec(context.Background(), "SELECT pg_advisory_unlock($1)", migrationLockKey) }()
 	}
 
-	upgradeCmd := exec.Command(python, "-m", "alembic", "--config", alembicConfigPath(), "upgrade", "head")
+	upgradeCmd := exec.Command(pythonBin, "-m", "alembic", "--config", alembicConfigPath(), "upgrade", "head")
 	upgradeCmd.Dir = "."
 	upgradeCmd.Stdout = os.Stdout
 	upgradeCmd.Stderr = os.Stderr

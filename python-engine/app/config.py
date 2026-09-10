@@ -44,6 +44,18 @@ class Settings(BaseSettings):
     # 多实例部署时仅需要的实例启用（每实例对活跃用户各持有 MCP 连接，全开会 N×连接放大）；
     # 默认开 = 保持单实例现状。关闭的实例不建 MCP 连接，相关工具调用会报不可用。
     mcp_pool_enabled: bool = True
+    # MCP 连接预算（多实例部署的连接放大源）：
+    # 连接总量 ≈ 实例数 × 活跃用户数 × 每用户 server 数，故按实例设上限更安全。
+    # 活跃用户超过上限时只服务「最近活跃的前 N 个」；共享连接达到上限时新用户不再建连。
+    # 0 = 不限制。被跳过的用户计入 mcp_pool_rejected_total 指标（见 observability/metrics.py）。
+    mcp_max_users_per_instance: int = 20
+    mcp_max_connections_per_instance: int = 50
+    # MCP owner 租约（B1a）：开启后每个活跃用户只由一个引擎实例持有 MCP 连接，
+    # 其它实例只注册「代理工具」并经 Redis 通道转发调用 ⇒ 连接数从 实例数×用户数×server
+    # 降为 用户数×server。默认关闭（保持单实例/现状行为）；开启需 Redis 可用。
+    mcp_owner_lease_enabled: bool = False
+    mcp_owner_lease_ttl: int = 90  # 租约 TTL（秒）；owner 每轮轮询（25s）续期
+    mcp_bridge_timeout: float = 30.0  # 跨实例工具调用超时（秒）
 
     # ── PostgreSQL ──
     # 默认空：强制通过 .env / POSTGRES_DSN 环境变量提供，避免误用开发库

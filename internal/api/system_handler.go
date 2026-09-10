@@ -101,6 +101,9 @@ func (h *SystemHandler) PrometheusMetrics(w http.ResponseWriter, r *http.Request
 		{"sso_login_attempts", "Total SSO login attempts"},
 		{"sso_login_successes", "Total successful SSO logins"},
 		{"sso_login_failures", "Total failed SSO logins"},
+		{"sse_publish_enqueued", "Total SSE events enqueued for publish"},
+		{"sse_publish_delivered", "Total SSE events delivered by publish workers"},
+		{"sse_publish_fallback", "SSE publishes that fell back to synchronous (queue full)"},
 	}
 	for _, c := range counters {
 		fmt.Fprintf(w, "# HELP chiron_%s %s\n# TYPE chiron_%s counter\nchiron_%s %v\n", c[0], c[1], c[0], c[0], s[c[0]])
@@ -114,6 +117,7 @@ func (h *SystemHandler) PrometheusMetrics(w http.ResponseWriter, r *http.Request
 		{"go_memory_alloc_bytes", "Allocated heap memory in bytes"},
 		{"go_memory_sys_bytes", "Total OS memory in bytes"},
 		{"go_gc_runs", "Number of completed GC cycles"},
+		{"sse_publish_queued", "SSE publish queue backlog (all shards)"},
 	}
 	for _, g := range gauges {
 		fmt.Fprintf(w, "# HELP chiron_%s %s\n# TYPE chiron_%s gauge\nchiron_%s %v\n", g[0], g[1], g[0], g[0], s[g[0]])

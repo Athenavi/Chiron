@@ -19,6 +19,12 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.mcp.client import MCPClient
+from app.observability.metrics import (
+    MCP_POOL_CONNECTIONS,
+    MCP_POOL_REJECTED,
+    MCP_POOL_USERS,
+)
+from app.plugins.owner_lease import MCPBridge, MCPOwnerLease
 from app.plugins.store import ActiveTracker, PluginStore, ServerConfig
 from app.tools.registry import registry
 
@@ -46,12 +52,36 @@ class _SharedConnection:
     users: set[str] = field(default_factory=set)
 
 
+_SELF_INSTANCE_ID: str | None = None
+
+
+def _self_instance_id() -> str:
+    """本实例标识（owner 租约用）：优先 settings.instance_id / pod_name，兜底进程内随机。"""
+    global _SELF_INSTANCE_ID
+    if _SELF_INSTANCE_ID:
+        return _SELF_INSTANCE_ID
+    import uuid as _uuid
+
+    from app.config import settings as _settings
+
+    _SELF_INSTANCE_ID = _settings.instance_id or _settings.pod_name or f"mcp-{_uuid.uuid4().hex[:8]}"
+    return _SELF_INSTANCE_ID
+
+
 class MCPClientPool:
     def __init__(
-        self, store: PluginStore | None = None, tracker: ActiveTracker | None = None
+        self,
+        store: PluginStore | None = None,
+        tracker: ActiveTracker | None = None,
+        redis=None,
     ) -> None:
         self._store = store or PluginStore()
         self._tracker = tracker or ActiveTracker()
+        self._redis = redis
+        # owner 租约（B1a）：启用时只有 owner 实例建 MCP 连接，其余实例注册代理工具
+        self._lease: MCPOwnerLease | None = None
+        self._bridge: MCPBridge | None = None
+        self._owned_users: set[str] = set()
         self._conns: dict[str, _SharedConnection] = {}  # fingerprint -> shared conn
         self._user_sigs: dict[str, str] = {}  # user_id -> 已加载配置签名
         self._user_conns: dict[str, set[str]] = {}  # user_id -> 引用的指纹集合
@@ -60,10 +90,86 @@ class MCPClientPool:
         self._poll_task: asyncio.Task | None = None
 
     async def start(self) -> None:
+        from app.config import settings as _settings
+
+        # owner 租约（B1a）：需要 Redis；未开启时保持单实例语义（本实例即为 owner）
+        if _settings.mcp_owner_lease_enabled and self._redis is not None:
+            self._lease = MCPOwnerLease(
+                self._redis, _self_instance_id(), _settings.mcp_owner_lease_ttl
+            )
+            self._bridge = MCPBridge(
+                self._redis,
+                _self_instance_id(),
+                self._handle_remote_invocation,
+                timeout=_settings.mcp_bridge_timeout,
+            )
+            await self._bridge.start()
+            logger.info(
+                "mcp owner lease enabled (instance=%s, ttl=%ds)",
+                _self_instance_id(),
+                _settings.mcp_owner_lease_ttl,
+            )
         if self._poll_task is None:
             self._poll_task = asyncio.create_task(self._poll_loop())
 
+    async def _handle_remote_invocation(self, tool_name: str, args: dict) -> Any:
+        """owner 侧入口：执行被其它实例转发的 MCP 工具调用（本地 registry，不再二次转发）。"""
+        tool = registry.get(tool_name)
+        if tool is None:
+            raise RuntimeError(f"MCP tool not available on this owner instance: {tool_name}")
+        return await tool.handler(**(args or {}))
+
+    def _make_proxy_handler(self, uid: str, tool_name: str):
+        """非 owner 侧的代理 handler：转发到 owner 实例执行。"""
+
+        async def handler(**kwargs: Any) -> Any:
+            owner = await self._lease.owner_of(uid)
+            if not owner:
+                raise RuntimeError(
+                    f"MCP owner unavailable for user {uid} (lease expired); retry shortly"
+                )
+            return await self._bridge.invoke(owner, tool_name, kwargs)
+
+        return handler
+
+    async def _sync_proxy_tools_locked(self, uid: str) -> None:
+        """非 owner 实例：按 owner 公布的清单注册代理工具（调用时经 Redis 转发）。"""
+        owner = await self._lease.owner_of(uid) or ""
+        sig = f"proxy:{owner}"
+        if sig == self._user_sigs.get(uid):
+            return
+        await self._release_user_locked(uid)
+        self._user_tools[uid] = set()
+        tools = await self._lease.read_tools(uid)
+        for t in tools:
+            name = t.get("name") or ""
+            if not name:
+                continue
+            registry.register(
+                name=name,
+                description=t.get("description") or "",
+                parameters=t.get("schema") or {},
+                handler=self._make_proxy_handler(uid, name),
+                owner=uid,
+            )
+            self._user_tools[uid].add(name)
+        self._user_sigs[uid] = sig
+        if self._user_tools[uid]:
+            logger.info(
+                "user %s mcp proxy tools: %d (owner=%s)",
+                uid,
+                len(self._user_tools[uid]),
+                owner or "unknown",
+            )
+
     async def stop(self) -> None:
+        if self._bridge is not None:
+            await self._bridge.stop()
+            self._bridge = None
+        if self._lease is not None:
+            for uid in list(self._owned_users):
+                await self._lease.release(uid)
+            self._owned_users.clear()
         if self._poll_task:
             self._poll_task.cancel()
             try:
@@ -85,8 +191,50 @@ class MCPClientPool:
                 logger.warning("mcp reconcile failed: %s", e, exc_info=True)
 
     async def reconcile(self) -> None:
-        """处理活跃用户的配置变动；回收不再活跃用户。"""
-        active = set(self._tracker.active_users())
+        """处理活跃用户的配置变动；回收不再活跃用户。
+
+        连接预算（B1）：活跃用户超过 mcp_max_users_per_instance 时只服务最近活跃的前 N 个，
+        避免「实例数 × 用户数 × server 数」的连接放大打爆第三方 MCP server；
+        被跳过的用户计入 mcp_pool_rejected_total（下一轮轮询会重试）。
+        """
+        from app.config import settings as _settings
+
+        max_users = _settings.mcp_max_users_per_instance
+        active_list = self._tracker.active_users_sorted(limit=max_users)
+        skipped = len(self._tracker.active_users()) - len(active_list)
+        if skipped > 0:
+            MCP_POOL_REJECTED.inc(skipped)
+            logger.warning(
+                "mcp pool user budget reached (%d): serving %d most-recent users, skipped %d",
+                max_users,
+                len(active_list),
+                skipped,
+            )
+        # owner 租约（B1a）：决定本轮谁是各活跃用户的 owner（抢租约 / 续期 / 放弃）
+        if self._lease is not None:
+            owned: set[str] = set()
+            for uid in active_list:
+                if await self._lease.acquire(uid):
+                    owned.add(uid)
+            for uid in list(self._owned_users):
+                if uid in owned:
+                    continue
+                if await self._lease.renew(uid):
+                    owned.add(uid)  # 仍持有：续期待到下一轮
+                else:
+                    await self._lease.release(uid)
+            dropped = self._owned_users - owned
+            if dropped:
+                logger.info("mcp owner lease lost for %d user(s)", len(dropped))
+            self._owned_users = owned
+            if len(owned) < len(active_list):
+                logger.debug(
+                    "mcp owner: %d/%d active users owned by this instance",
+                    len(owned),
+                    len(active_list),
+                )
+
+        active = set(active_list)
         async with self._lock:
             # 1. 同步活跃用户
             for uid in active:
@@ -100,8 +248,15 @@ class MCPClientPool:
                 await self._close_conn(key)
             # 4. 清理过期活跃标记（避免内存增长）
             self._tracker.prune()
+        # 连接预算可观测性（B1）
+        MCP_POOL_CONNECTIONS.set(len(self._conns))
+        MCP_POOL_USERS.set(len(self._user_sigs))
 
     async def _sync_user_locked(self, uid: str) -> None:
+        # owner 租约开启时：非归属实例不建 MCP 连接，改为注册代理工具（经 Redis 转发）
+        if self._lease is not None and uid not in self._owned_users:
+            await self._sync_proxy_tools_locked(uid)
+            return
         sig = self._store.signature(uid)
         if sig == self._user_sigs.get(uid):
             return  # 配置无变动
@@ -111,10 +266,23 @@ class MCPClientPool:
         servers = self._store.active_servers(uid)
         self._user_conns[uid] = set()
         self._user_tools[uid] = set()
+        from app.config import settings as _settings
+
+        max_conns = _settings.mcp_max_connections_per_instance
         for server in servers:
             key = _fingerprint(server)
             shared = self._conns.get(key)
             if shared is None:
+                # 连接预算（B1）：达到上限则本用户不再新建连接（共享连接仍可被复用）
+                if max_conns > 0 and len(self._conns) >= max_conns:
+                    MCP_POOL_REJECTED.inc()
+                    logger.warning(
+                        "mcp connection budget reached (%d), skip server %s for user %s",
+                        max_conns,
+                        server.name,
+                        uid,
+                    )
+                    continue
                 client = MCPClient([_server_to_def(server)])
                 try:
                     await client.start()
@@ -140,6 +308,21 @@ class MCPClientPool:
         self._user_sigs[uid] = sig
         if self._user_tools[uid]:
             logger.info("user %s mcp tools: %d", uid, len(self._user_tools[uid]))
+        # owner 公布工具清单（供非 owner 实例注册代理工具）
+        if self._lease is not None and self._user_tools.get(uid):
+            manifest = []
+            for name in self._user_tools[uid]:
+                t = registry.get(name)
+                if t is None:
+                    continue
+                manifest.append(
+                    {
+                        "name": name,
+                        "description": getattr(t, "description", "") or "",
+                        "schema": getattr(t, "parameters", None) or {},
+                    }
+                )
+            await self._lease.publish_tools(uid, manifest)
 
     async def _release_user_locked(self, uid: str) -> None:
         """移除用户对工具与连接的引用。"""
@@ -164,10 +347,16 @@ class MCPClientPool:
                 logger.warning("mcp close %s failed: %s", key, e)
 
     def status(self) -> dict[str, Any]:
+        from app.config import settings as _settings
+
         return {
             "active_users": len(self._tracker.active_users()),
             "shared_connections": len(self._conns),
             "user_loaded": len(self._user_sigs),
+            "max_users_per_instance": _settings.mcp_max_users_per_instance,
+            "max_connections_per_instance": _settings.mcp_max_connections_per_instance,
+            "owner_lease_enabled": self._lease is not None,
+            "owned_users": len(self._owned_users),
         }
 
 

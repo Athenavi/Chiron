@@ -42,6 +42,7 @@ func (s *PGStore) EnsureTables(ctx context.Context) error {
 			amount INTEGER NOT NULL,
 			balance INTEGER NOT NULL,
 			reason VARCHAR(64) NOT NULL,
+			turn_id VARCHAR(36),
 			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		)`)
 	if err != nil {
@@ -163,7 +164,9 @@ func (s *PGStore) DailyFreeCount(ctx context.Context, userID string) (int, error
 }
 
 // MarkFreeUsage records a free conversation usage for today.
-func (s *PGStore) MarkFreeUsage(ctx context.Context, userID string) error {
+// turnID 非空时按回合幂等（credit_transactions.turn_id 唯一索引）：同一回合重试
+// 不会重复占用免费额度（此前重试会多记一次，见其余幂等项）。
+func (s *PGStore) MarkFreeUsage(ctx context.Context, userID, turnID string) error {
 	tx := &CreditChange{
 		ID:        fmt.Sprintf("free_%d", time.Now().UnixNano()),
 		UserID:    userID,
@@ -172,10 +175,15 @@ func (s *PGStore) MarkFreeUsage(ctx context.Context, userID string) error {
 		Reason:    "free_chat",
 		CreatedAt: time.Now(),
 	}
+	var tid *string
+	if turnID != "" {
+		tid = &turnID
+	}
 	_, err := db.GlobalDBManager.Exec(ctx,
-		`INSERT INTO credit_transactions (id, user_id, amount, balance, reason, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6)`,
-		tx.ID, tx.UserID, tx.Amount, tx.Balance, tx.Reason, tx.CreatedAt)
+		`INSERT INTO credit_transactions (id, user_id, amount, balance, reason, created_at, turn_id)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)
+		 ON CONFLICT (turn_id) DO NOTHING`,
+		tx.ID, tx.UserID, tx.Amount, tx.Balance, tx.Reason, tx.CreatedAt, tid)
 	return err
 }
 

@@ -19,6 +19,7 @@ import (
 	"github.com/athenavi/chiron/internal/broadcast"
 	"github.com/athenavi/chiron/internal/db"
 	"github.com/athenavi/chiron/internal/engine"
+	"github.com/athenavi/chiron/internal/monitor"
 	"github.com/athenavi/chiron/internal/session"
 	"github.com/athenavi/chiron/internal/storage"
 )
@@ -186,6 +187,21 @@ func NewGatewayRouter(
 
 	// 运行时 CORS 白名单注入（批 B-2′）：CORSMiddleware / checkWebSocketOrigin / billing 统一读该共享源
 	SetCORSAllowOrigin(cfg.CORSOrigins)
+
+	// SSE 发布管线指标（B2）：hub 改为异步发布后，`fallback > 0` 表示队列曾被写满
+	// （Redis 慢或事件突发，此时回退同步发布、调用方被阻塞），`queued` 持续高位表示
+	// 投递跟不上生产。这两项是背压的直接信号，接入 /metrics 与 /v1/system/metrics。
+	if eventHub != nil {
+		monitor.RegisterExtraStats(func() map[string]interface{} {
+			s := eventHub.Stats()
+			return map[string]interface{}{
+				"sse_publish_enqueued":  s.Enqueued,
+				"sse_publish_delivered": s.Delivered,
+				"sse_publish_fallback":  s.Fallback,
+				"sse_publish_queued":    s.Queued,
+			}
+		})
+	}
 
 	// Rate limiter — 当 Redis 可用时使用分布式限流器。
 	// 批 B-1′（令牌桶重构）：global/tenant/user 三级桶均为“每分钟配额（总量）”，

@@ -101,9 +101,34 @@ PostgreSQL 的 `max_connections` 是**硬上限**，而连接数随副本数线�
 - PostgreSQL 由云厂商/DBA 维护，`max_connections` 是其**实例参数**（云实例通常按规格限制，PostgreSQL 默认仅 100）：请在扩容前确认上限，并据此下调应用侧池大小；
 - 应用侧默认值：`POSTGRES_MAX_CONN=20`、`DB_POOL_MAX_SIZE=20`。**4 个副本时就应下调到 10 左右**，例如：
   `POSTGRES_MAX_CONN=10 DB_POOL_MAX_SIZE=10 docker compose up -d --scale gateway=4 --scale python-engine=4`
-- 托管实例若限制严格，建议引入 PgBouncer 之类的连接池中间件（应用→PgBouncer→实例）。
 - 托管数据库（RDS/Cloud SQL）请按实例规格确认上限，必要时改用 PgBouncer 之类的连接池中间件；
 - Redis 侧同理（`REDIS_POOL_SIZE` 默认 100 × 副本数），需对照 `redis-cli info clients` 的 `maxclients`（默认 10000）。
+
+### MCP 插件连接（第三方连接放大）
+
+MCP 连接规模 ≈ **引擎副本数 × 活跃用户数 × 每用户 server 数**，是与数据库无关的另一处放大源：
+
+- `MCP_POOL_ENABLED`（compose 默认 `false`）：建议只在 1~2 个专用副本开启，其余副本关闭；
+- `MCP_MAX_USERS_PER_INSTANCE`（默认 20）/ `MCP_MAX_CONNECTIONS_PER_INSTANCE`（默认 50）：
+  按实例限制 MCP 预算——活跃用户超限时只服务**最近活跃的前 N 个**；共享连接满员后不再新建
+  （已有共享连接仍可复用）。被跳过的用户/服务器计入 `mcp_pool_rejected_total`，下一轮轮询会重试；
+  `0` = 不限制；
+- 观测：`mcp_pool_connections`、`mcp_pool_users`（gauge）、`mcp_pool_rejected_total`（counter）。
+
+#### owner 租约（可选，彻底消除「实例数」因子）
+
+开启 `MCP_OWNER_LEASE_ENABLED=true` 后，每个活跃用户由**一个 owner 实例**持有 MCP 连接，
+其它实例只注册「代理工具」并经 Redis 通道（`mcp:invoke:{instance}` / `mcp:reply:{instance}`）
+转发调用 —— 连接数从 **实例数 × 用户数 × server** 降为 **用户数 × server**：
+
+- **租约**：`mcp:owner:{user_id}` = instance_id（`SET NX EX` 抢占，TTL `MCP_OWNER_LEASE_TTL`
+  默认 90s；owner 每轮轮询（25s）续期，续期用 Lua CAS 仅当值仍是自己）；
+- **工具可见性**：owner 把工具清单写入 `mcp:tools:{user_id}`，非 owner 据此注册代理工具
+  （否则 LLM 在非 owner 实例上看不到这些工具）；
+- **故障转移**：owner 下线后租约 TTL 到期，其它实例在下一轮轮询接管（≤ TTL + 25s）；
+- **失败语义**：桥走 Redis pub/sub（不保证投递），`MCP_BRIDGE_TIMEOUT`（默认 30s）超时即
+  **明确报错**且**不自动重试**（MCP 工具可能有副作用）；
+- **默认关闭**：未开启时行为与单实例完全一致，不做任何跨实例转发。
 
 ## 9. 验证
 
@@ -125,4 +150,18 @@ python -m pytest python-engine/tests -q
 
 - run 现场状态不迁移：实例故障该 run 中断（只保证「路由到正确实例 + 陈旧审批被拒」）；
 - SSE 跨实例实时通道为 Pub/Sub：断连窗口内的实时事件依赖客户端携带 `Last-Event-ID` 从 Stream 重放；
-- Compose 内置的 PostgreSQL、Redis、MinIO、Milvus、etcd 仍是**单点**：生产需替换为托管或集群方案（Redis Sentinel/Cluster、Patroni、分布式 MinIO、Milvus 集群、多副本 etcd），并配套备份恢复与跨可用区演练。
+- **PostgreSQL 已外置**（云托管或 DBA 维护，见第 7 节）；**Redis、MinIO、Milvus、etcd 在 compose 中仍是单点**：生产需替换为 Sentinel/Cluster、分布式 MinIO、Milvus 集群与多副本 etcd，并配套备份恢复与跨可用区演练。
+
+### 明确不做的项（技术结论）
+
+| 项 | 结论 | 理由 |
+|---|---|---|
+| SSE 事件 ID 与业务 sequence 分离 | **不需要** | `id` 已是 Redis Stream ID（跨实例单调、可比较、支持 `Last-Event-ID` 精确续传）；业务序号仅在需要「业务语义重放/缺号聚类」时才必要，属协议设计而非缺陷 |
+| text 事件合帧下沉到 hub | **不建议** | 网关已有 50ms 合帧；下沉会让 `tool_call`、`[thinking]` 等**必须即时**的事件进窗口，复杂度与首字延迟风险大于省下的几次 Redis 写入 |
+| 全库时间列统一为 `TIMESTAMPTZ` | **待独立立项** | 涉及 ORM 生成器 + 数十张表 + 存量数据 `USING` 转换，需在可验证环境（有 PG）中整体推进；当前 VARCHAR（PG `NOW()` 文本）在 `::timestamptz` 强转下可用 |
+
+### 结构性后续
+
+- **run 现场 checkpoint 续跑**：批 4 已解决「路由到持有 run 的实例 + 陈旧审批被拒」；剩余价值是「实例故障后从 checkpoint 续跑而非重跑」，需跨 Go/Python 状态模型设计；
+- **CLI / 安装向导的迁移入口**：`chiron-cli db` 与安装向导仍调用应用内迁移（现已有 Python/alembic 前置检测，缺失即明确报错）；若也要移除，需调整其交互流程；
+- **`credit_transactions` / `payments`**：已纳入 Alembic（迁移 `f7c2d05a1b8e`），但 Go 侧 `EnsureTables` 仍保留兜底建表——两处 DDL 必须同步修改。

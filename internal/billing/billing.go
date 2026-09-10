@@ -85,7 +85,7 @@ type Store interface {
 	SetBalance(ctx context.Context, userID string, balance int) error
 	GetHistory(ctx context.Context, userID string, limit int) ([]CreditChange, error)
 	DailyFreeCount(ctx context.Context, userID string) (int, error)
-	MarkFreeUsage(ctx context.Context, userID string) error
+	MarkFreeUsage(ctx context.Context, userID, turnID string) error
 	AtomicDeductBalance(ctx context.Context, userID string, amount int, reason, turnID string) (int, error)
 	AtomicAddBalance(ctx context.Context, userID string, amount int, reason string) (int, error)
 	RecordBillingRecord(ctx context.Context, userID, sessionID string, inputTokens, outputTokens, costCents int, turnID string) error
@@ -316,8 +316,8 @@ func (m *Manager) DailyFreeCount(ctx context.Context, userID string) (int, error
 }
 
 // MarkFreeUsage records one free conversation for today.
-func (m *Manager) MarkFreeUsage(ctx context.Context, userID string) error {
-	return m.store.MarkFreeUsage(ctx, userID)
+func (m *Manager) MarkFreeUsage(ctx context.Context, userID, turnID string) error {
+	return m.store.MarkFreeUsage(ctx, userID, turnID)
 }
 
 // DeductTokens deducts credits based on token usage.

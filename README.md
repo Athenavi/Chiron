@@ -58,6 +58,8 @@ docker compose up -d --scale gateway=2 --scale python-engine=2
 | `POSTGRES_DSN`、`REDIS_ADDR`（引擎用 `REDIS_URL`） | 基础设施连接串 |
 | `DEGRADED_MODE` | 默认 `false`：Redis 不可用时网关与引擎**拒绝启动**；仅单机开发设 `true` 才允许进程内降级 |
 | `MCP_POOL_ENABLED` | 默认 `false`：每个开启的引擎副本会为活跃用户持有 MCP 连接（副本数 × 活跃用户 × server），需要时显式开启 |
+| `MCP_MAX_USERS_PER_INSTANCE` / `MCP_MAX_CONNECTIONS_PER_INSTANCE` | 每实例 MCP 连接预算（默认 20 / 50，`0`=不限）；超限时只服务最近活跃的用户，跳过计数见 `mcp_pool_rejected_total` |
+| `MCP_OWNER_LEASE_ENABLED` | 默认 `false`：开启后每个活跃用户只由一个引擎实例持有 MCP 连接，其它实例经 Redis 转发调用（连接数从 实例×用户×server 降为 用户×server），详见部署文档 |
 | `ENGINE_ADVERTISE_URL` | 引擎自注册地址；设置后网关可把某 session 的 run 请求（审批/取消）路由到持有它的实例 |
 | `TURN_RETENTION_DAYS` / `TASK_IDEMPOTENCY_RETENTION_DAYS` | 保留策略天数（默认 30），防长期运行表膨胀 |
 | `ALLOW_SCHEMA_DRIFT` | 默认 `false`：启动时校验数据库 migration 版本，不一致**拒绝启动**（迁移超前/回滚场景可设 `true` 放行） |

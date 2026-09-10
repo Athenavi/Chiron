@@ -136,6 +136,21 @@ class ActiveTracker:
         with self._lock:
             return [uid for uid, ts in self._last.items() if ts > cutoff]
 
+    def active_users_sorted(self, window: int | None = None, limit: int = 0) -> list[str]:
+        """按最近活跃降序返回活跃用户；limit>0 时只取前 N 个。
+
+        用于连接预算截断：预算不足时优先服务最近有交互的用户。
+        """
+        cutoff = time.time() - self._window(window)
+        with self._lock:
+            items = sorted(
+                ((uid, ts) for uid, ts in self._last.items() if ts > cutoff),
+                key=lambda kv: kv[1],
+                reverse=True,
+            )
+        users = [uid for uid, _ in items]
+        return users[:limit] if limit > 0 else users
+
     def prune(self, window: int | None = None) -> int:
         """清理过期条目，返回清理数。"""
         cutoff = time.time() - self._window(window)
