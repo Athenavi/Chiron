@@ -126,20 +126,26 @@ export function formatClock(iso?: string): string {
  * 2. 开头未闭合 `[thinking]...`（流式进行中）→ 全部为 reasoning
  * 3. 其它位置出现 [thinking] 字样（讲解/代码示例）→ 完整保留在正文，绝不吞内容
  *
- * loose=true（历史消息回放）：流式保存的原始文本可能含多次/碎片化
- * [thinking] 标签（chunk 边界切割残留），此时全局提取配对块并剥离孤立标签。
+ * loose=true（历史回放 / 流式实时解析）：引擎按 ~80 字一段下发
+ * `[thinking]片段[/thinking]`（python-engine/app/agent/runtime.py），因此文本里会出现
+ * 多段连续思考块，流式时末段还可能尚未闭合。此时用状态机整体扫描：
+ * 进入 [thinking] 后的文本归 reasoning，遇到 [/thinking] 回到正文；未闭合的尾段仍算
+ * reasoning（它还在思考），避免 `[/thinking][thinking]` 这类标签残留到正文气泡。
  */
 export function splitThinking(src: string, opts?: { loose?: boolean }): { reasoning: string; body: string } {
   if (opts?.loose) {
     const reasoningParts: string[] = []
-    const body = src
-      .replace(/\[thinking\]([\s\S]*?)\[\/thinking\]/g, (_m, b: string) => {
-        const t = b.trim()
-        if (t) reasoningParts.push(t)
-        return ''
-      })
-      .replace(/\[thinking\]|\[\/thinking\]/g, '') // 剥离流式切割残留的孤立标签
-    return { reasoning: reasoningParts.join('\n').trim(), body: body.trim() }
+    const bodyParts: string[] = []
+    let inThinking = false
+    for (const token of src.split(/(\[thinking\]|\[\/thinking\])/)) {
+      if (token === THINK_START) { inThinking = true; continue }
+      if (token === THINK_END) { inThinking = false; continue }
+      if (!token) continue
+      if (inThinking) reasoningParts.push(token)
+      else bodyParts.push(token)
+    }
+    // 多段是同一段思考被 chunk 切割的结果，直接拼接还原原文
+    return { reasoning: reasoningParts.join('').trim(), body: bodyParts.join('').trim() }
   }
   const closed = src.match(/^\s*\[thinking\]([\s\S]*?)\[\/thinking\]([\s\S]*)$/)
   if (closed) {

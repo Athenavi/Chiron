@@ -403,7 +403,8 @@ async function sendUnified(text: string, attachments?: ChatAttachment[]) {
 
 /** 追加 assistant 消息；metadata 含 kb_hits/kb_id 时在其下显示"引用了知识库(×N)"小标签 */
 function appendAssistantWithKb(content: string, meta: any) {
-  const { reasoning, body } = splitThinking(String(content))
+  // 统一任务模式的 output 同为引擎产出（可含多段 [thinking] 块）→ 用 loose 状态机解析
+  const { reasoning, body } = splitThinking(String(content), { loose: true })
   if (reasoning) items.value.push({ kind: 'reasoning', content: reasoning, id: genItemId() })
   if (body) {
     items.value.push({
@@ -1004,7 +1005,9 @@ function genItemId() {
 
 function onTextChunk(text: string) {
   streamBuf += text
-  const { reasoning, body } = splitThinking(streamBuf)
+  // 引擎按 ~80 字分段下发 "[thinking]片段[/thinking]"，用 loose 状态机解析：
+  // 多段思考全部归 reasoning，正文不再残留 [/thinking][thinking] 标签。
+  const { reasoning, body } = splitThinking(streamBuf, { loose: true })
   if (reasoning) {
     const existing = items.value.find(it => it.id === streamReasonId)
     if (existing?.kind === 'reasoning') {

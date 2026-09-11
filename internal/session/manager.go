@@ -177,9 +177,14 @@ func (m *Manager) ListSessions(ctx context.Context, userID string, page, perPage
 	return sessions, nil
 }
 
-// DeleteSession removes a session from PG (CASCADE deletes messages) and Redis cache.
+// DeleteSession removes a session from PG and Redis cache.
 // Evict cache first so a subsequent GetSession falls through to PG (source of truth)
 // even if Redis eviction fails silently.
+//
+// 依赖表清理：messages / turns / billing_records 均以 session_id 外键引用 sessions，
+// 且迁移（a0b3a964fb54、c1f5a83e6b90）未配置 ON DELETE CASCADE，直接
+// `DELETE FROM sessions` 会触发外键违反 → 接口 500 "服务器错误"。
+// 故在同一事务内按依赖顺序清理：先删引用行，再删会话本身。
 func (m *Manager) DeleteSession(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("session id is required")
@@ -187,11 +192,32 @@ func (m *Manager) DeleteSession(ctx context.Context, id string) error {
 
 	m.evictCache(ctx, id)
 
-	if m.pool != nil {
-		_, err := m.pool.Exec(ctx, `DELETE FROM sessions WHERE id = $1`, id)
-		if err != nil {
+	if m.pool == nil {
+		return nil
+	}
+
+	tx, err := m.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("delete session: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	stmts := []string{
+		`DELETE FROM turns WHERE session_id = $1`,
+		`DELETE FROM messages WHERE session_id = $1`,
+		`DELETE FROM tool_calls WHERE session_id = $1`,
+		// 计费记录属财务数据：只解除会话引用（置 NULL）保留流水，不随会话删除
+		`UPDATE billing_records SET session_id = NULL WHERE session_id = $1`,
+		`DELETE FROM sessions WHERE id = $1`,
+	}
+	for _, q := range stmts {
+		if _, err := tx.Exec(ctx, q, id); err != nil {
 			return fmt.Errorf("delete session: %w", err)
 		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("delete session: commit: %w", err)
 	}
 
 	return nil
@@ -417,10 +443,29 @@ func (m *Manager) SaveToolCall(ctx context.Context, sessionID, toolCallID, toolN
 		 VALUES ($1, $2, $3, $4::jsonb, '', NULLIF($5, ''), NOW())
 		 ON CONFLICT (id) DO UPDATE SET tool_name = EXCLUDED.tool_name, input = EXCLUDED.input,
 		   turn_id = COALESCE(EXCLUDED.turn_id, tool_calls.turn_id)`,
-		toolCallID, sessionID, toolName, inputJSON, turnID)
+		toolCallID, sessionID, toolName, normalizeToolInput(inputJSON), turnID)
 	if err != nil {
 		slog.Error("save tool call", "session", sessionID, "turn", turnID, "error", err)
 	}
+}
+
+// normalizeToolInput 保证写入 jsonb 列（tool_calls.input / messages.tool_calls）的内容合法。
+// 模型的 arguments 可能为空串（无参调用）或被截断的半成品 JSON，直接 $4::jsonb 会因
+// invalid input syntax for type json 让整条 INSERT 失败 —— 记录只打日志，表现为
+// "工具调用历史与结果刷新后全部丢失"。此处降级为合法 JSON，宁可少字段也不丢记录。
+func normalizeToolInput(inputJSON string) string {
+	trimmed := strings.TrimSpace(inputJSON)
+	if trimmed == "" {
+		return "{}"
+	}
+	if json.Valid([]byte(trimmed)) {
+		return trimmed
+	}
+	// 非 JSON（截断/半成品）：包一层保留原文，供前端展示
+	if b, err := json.Marshal(map[string]string{"raw": trimmed}); err == nil {
+		return string(b)
+	}
+	return "{}"
 }
 
 // UpdateToolCall stores the tool result on the matching record (S 修复).

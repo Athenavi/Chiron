@@ -40,6 +40,16 @@ function isUserAnchor(item: ChatItem | undefined): boolean {
   return !!item && item.kind === 'text' && item.role === 'user'
 }
 
+/**
+ * 稳定唯一渲染 key。
+ * 同一条 assistant 消息会拆成多个 item（reasoning / text / tool_call / tool_result），
+ * 它们的 id 可能来自同一个消息 id，故加 kind 前缀避免 key 冲突导致节点错位复用。
+ * turn_stats 等无 id 的 item 用下标兜底（kind 前缀保证不与有 id 的项碰撞）。
+ */
+function itemKey(item: ChatItem, index: number): string {
+  return item.id ? `${item.kind}:${item.id}` : `${item.kind}:idx${index}`
+}
+
 function onScroll() {
   const el = scrollRef.value
   if (!el) return
@@ -144,11 +154,14 @@ const badgeText = computed(() => (unseenCount.value > 99 ? '99+' : String(unseen
       <span v-else>加载更早的消息</span>
     </div>
 
-    <!-- 消息列表：直接渲染（不需要虚拟滚动） -->
+    <!-- 消息列表：直接渲染（不需要虚拟滚动）
+         所有 item 类型统一交给 MessageItem 按 kind 分发（text / reasoning /
+         tool_call / tool_result / turn_stats / date_divider），此处只额外处理
+         kb_hits（统一任务模式的专属标签，不属于 ChatItem 联合类型） -->
     <div class="message-container">
-      <template v-for="(item, i) in items" :key="item.id ?? i">
+      <template v-for="(item, i) in items" :key="itemKey(item, i)">
         <MessageItem
-          v-if="item.kind === 'text' || item.kind === 'reasoning'"
+          v-if="(item as any).kind !== 'kb_hits'"
           :item="item"
           :anchor-key="isUserAnchor(item) ? i : undefined"
           :highlighted="highlightIndex === i"
@@ -158,7 +171,7 @@ const badgeText = computed(() => (unseenCount.value > 99 ? '99+' : String(unseen
           @retry-failed="(id: string) => emit('retry-failed', id)"
         />
         <div
-          v-else-if="(item as any).kind === 'kb_hits'"
+          v-else
           class="kb-hits-tag"
         >
           <span class="kb-hits-text">引用了知识库（×{{ (item as any).count || 1 }}）</span>
@@ -222,7 +235,6 @@ const badgeText = computed(() => (unseenCount.value > 99 ? '99+' : String(unseen
   .skeleton-lines { max-width: 85%; }
 }
 @media (max-width: 576px) { .skeleton-list { padding: 10px 12px; } }
-.virtual-window { width: 100%; }
 .earlier-loader { display: flex; align-items: center; justify-content: center; gap: 6px; height: 36px; font-size: 12px; color: var(--text-tertiary); }
 /* 消息容器：正常文档流，不遮挡 */
 .message-container { width: 100%; }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -120,7 +121,16 @@ func (h *SubmitHandler) HandleSubmit(ctx context.Context, userID, sessionID, con
 		}
 		for _, m := range hist[start:] {
 			if (m.Role == "user" || m.Role == "assistant" || m.Role == "tool") && m.Content != "" {
-				histMsgs = append(histMsgs, map[string]string{"role": m.Role, "content": m.Content})
+				content := m.Content
+				if m.Role == "assistant" {
+					// 落库的 assistant 内容保留 [thinking]…[/thinking] 思考块（前端刷新后还原思考），
+					// 但回传引擎作为 LLM 上下文时应剥离：思考只在当轮有意义，历史思考白占 token。
+					content = stripThinkingBlocks(content)
+					if content == "" {
+						continue // 纯思考轮：剥离后无正文，跳过（避免空 assistant 消息）
+					}
+				}
+				histMsgs = append(histMsgs, map[string]string{"role": m.Role, "content": content})
 			}
 		}
 	}
@@ -186,6 +196,13 @@ func (h *SubmitHandler) HandleSubmit(ctx context.Context, userID, sessionID, con
 			}
 		} else {
 			flushText() // 非 text 事件先冲刷缓冲，保持顺序
+			// 思考内容虽然不参与合帧，但必须计入落库文本（finalContent）：
+			// 引擎按 80 字符分段下发 "[thinking]片段[/thinking]"（见 runtime.py reasoning 转发），
+			// 前端历史回放依赖 splitThinking(loose) 从 content 还原思考块。
+			// 此前未累加 → assistant content 只剩正文，刷新后思考永久丢失。
+			if evt.Type == "text" && isThinking {
+				finalContent += evt.Content
+			}
 			h.eventHub.Publish(broadcast.Event{Type: evt.Type, SessionID: sessionID, Data: evt})
 		}
 		// S 修复：工具调用过程落库（tool_call 记录 + tool_result 回填），刷新后显示一致
@@ -268,4 +285,20 @@ func (h *SubmitHandler) HandleSubmit(ctx context.Context, userID, sessionID, con
 	}
 
 	h.eventHub.Publish(broadcast.Event{Type: "turn_done", SessionID: sessionID, Data: map[string]string{"session_id": sessionID}})
+}
+
+// thinkingBlockRe 匹配引擎转发的思考块：runtime.py 在正文开始前按 ~80 字符分段
+// yield "[thinking]片段[/thinking]"（DeepSeek thinking mode）。
+var thinkingBlockRe = regexp.MustCompile(`(?s)\[thinking\].*?\[/thinking\]`)
+
+// stripThinkingBlocks 剥离内容中的思考块与流式切割残留的孤立标签。
+// 仅用于回传 LLM 的历史上下文：落库与前端渲染仍保留原始标签（splitThinking 还原思考块）。
+func stripThinkingBlocks(s string) string {
+	if !strings.Contains(s, "thinking]") {
+		return s
+	}
+	s = thinkingBlockRe.ReplaceAllString(s, "")
+	s = strings.ReplaceAll(s, "[thinking]", "")
+	s = strings.ReplaceAll(s, "[/thinking]", "")
+	return strings.TrimSpace(s)
 }
