@@ -329,6 +329,10 @@ async function loadUnifiedSession(sessionId: string) {
     errorBanner.value = errorBanner.value || '统一会话加载失败，可直接发送消息继续'
   } finally {
     loading.value = false
+    // 会话加载完成后自动滚到底部
+    await nextTick()
+    const listEl = document.querySelector<HTMLElement>('.message-list')
+    if (listEl) listEl.scrollTop = listEl.scrollHeight
   }
 }
 
@@ -691,6 +695,10 @@ async function switchSession(id: string) {
     if (mySeq === switchSeq.value) {
       loading.value = false
       initialLoading.value = false
+      // 会话加载完成后自动滚到底部
+      await nextTick()
+      const listEl = document.querySelector<HTMLElement>('.message-list')
+      if (listEl) listEl.scrollTop = listEl.scrollHeight
     }
   }
 }

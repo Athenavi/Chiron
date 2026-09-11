@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, watch, nextTick, computed } from 'vue'
-import { useVirtualizer } from '@tanstack/vue-virtual'
 import { ArrowDownOutlined } from '@ant-design/icons-vue'
 import MessageItem from './MessageItem.vue'
 import type { ChatItem } from './chat-types'
@@ -34,22 +33,8 @@ const highlightIndex = ref<number | null>(null)
 const showBackToBottom = ref(false)
 const unseenCount = ref(0)
 
-// deepseek bottom-follow：离开底部 120px 视为停止跟随
 const SCROLL_THRESHOLD = 120
-// P 性能：距顶部 60px 内触发加载更早
 const TOP_LOAD_THRESHOLD = 60
-
-// ── 虚拟滚动（P 性能：只渲染可视区 ± overscan，千条消息 DOM 从数千节点 → 几十节点）──
-// 注意：count 必须是数字（virtual-core 直接参与运算，ComputedRef 对象会算出 NaN 崩溃）；
-// options 包 computed → items 变化时重算 count 并触发 setOptions（响应式正确用法）。
-const virtualizer = useVirtualizer(computed(() => ({
-  count: props.items.length,
-  getScrollElement: () => scrollRef.value,
-  estimateSize: () => 72,          // 估算行高，measureElement 动态修正
-  overscan: 8,
-  // P 正确性：稳定 id 作为 key（loadEarlier 头部插入时旧项 key 不变，不错位不重挂载）
-  getItemKey: (index) => props.items[index]?.id ?? index,
-})))
 
 function isUserAnchor(item: ChatItem | undefined): boolean {
   return !!item && item.kind === 'text' && item.role === 'user'
@@ -66,7 +51,6 @@ function onScroll() {
   } else {
     showBackToBottom.value = true
   }
-  // P 性能：触顶加载更早消息（防重复触发）
   if (props.hasMore && !props.loadingEarlier && el.scrollTop <= TOP_LOAD_THRESHOLD) {
     emit('load-earlier')
   }
@@ -81,24 +65,32 @@ watch(() => props.items.length, async (n, prev) => {
   await nextTick()
   const el = scrollRef.value
   if (el) {
-    virtualizer.value.scrollToOffset(el.scrollHeight, { align: 'end' })
+    el.scrollTop = el.scrollHeight
   }
 })
 
 function scrollToBottom() {
   const el = scrollRef.value
   if (!el) return
-  virtualizer.value.scrollToOffset(el.scrollHeight, { align: 'end' })
+  el.scrollTop = el.scrollHeight
   stickToBottom.value = true
   showBackToBottom.value = false
   unseenCount.value = 0
 }
 
-// 轨迹跳转：滚动到对应用户消息 + 高亮闪烁（虚拟列表用 scrollToIndex）
+// 轨迹跳转：滚动到对应用户消息 + 高亮闪烁
 watch(() => props.focusToken, async () => {
   if (props.focusIndex == null) return
   stickToBottom.value = false
-  virtualizer.value.scrollToIndex(props.focusIndex, { align: 'start' })
+  // 查找对应用户消息的 DOM 元素并滚动到可见区域
+  await nextTick()
+  const el = scrollRef.value
+  if (el) {
+    const target = el.querySelector<HTMLElement>(`[data-chat-anchor-key="${props.focusIndex}"]`)
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
   highlightIndex.value = props.focusIndex
   setTimeout(() => { if (highlightIndex.value === props.focusIndex) highlightIndex.value = null }, 2000)
 })
@@ -152,31 +144,33 @@ const badgeText = computed(() => (unseenCount.value > 99 ? '99+' : String(unseen
       <span v-else>加载更早的消息</span>
     </div>
 
-    <!-- 虚拟滚动窗口 -->
-    <div
-      class="virtual-window"
-      :style="{ height: virtualizer.getTotalSize() + 'px', position: 'relative' }"
-    >
-      <MessageItem
-        v-for="vi in virtualizer.getVirtualItems()"
-        :key="String(vi.key)"
-        :ref="(el: any) => el && virtualizer.measureElement(el.$el ?? el)"
-        :item="items[vi.index]"
-        :anchor-key="isUserAnchor(items[vi.index]) ? vi.index : undefined"
-        :highlighted="highlightIndex === vi.index"
-        :data-index="vi.index"
-        :style="{
-          position: 'absolute',
-          top: '0',
-          left: '0',
-          right: '0',
-          transform: `translateY(${vi.start}px)`,
-        }"
-        @retry-from="(id: string, text: string) => emit('retry-from', id, text)"
-        @regenerate="(id: string) => emit('regenerate', id)"
-        @continue="(id: string) => emit('continue', id)"
-        @retry-failed="(id: string) => emit('retry-failed', id)"
-      />
+    <!-- 消息列表：直接渲染（不需要虚拟滚动） -->
+    <div class="message-container">
+      <template v-for="(item, i) in items" :key="item.id ?? i">
+        <MessageItem
+          v-if="item.kind === 'text' || item.kind === 'reasoning'"
+          :item="item"
+          :anchor-key="isUserAnchor(item) ? i : undefined"
+          :highlighted="highlightIndex === i"
+          @retry-from="(id: string, text: string) => emit('retry-from', id, text)"
+          @regenerate="(id: string) => emit('regenerate', id)"
+          @continue="(id: string) => emit('continue', id)"
+          @retry-failed="(id: string) => emit('retry-failed', id)"
+        />
+        <div
+          v-else-if="(item as any).kind === 'kb_hits'"
+          class="kb-hits-tag"
+        >
+          <span class="kb-hits-text">引用了知识库（×{{ (item as any).count || 1 }}）</span>
+          <a
+            v-if="(item as any).kb_id"
+            class="kb-hits-link"
+            href="#"
+            title="查看引用的知识库"
+            @click.prevent
+          >查看知识库</a>
+        </div>
+      </template>
     </div>
 
     <div
@@ -230,6 +224,8 @@ const badgeText = computed(() => (unseenCount.value > 99 ? '99+' : String(unseen
 @media (max-width: 576px) { .skeleton-list { padding: 10px 12px; } }
 .virtual-window { width: 100%; }
 .earlier-loader { display: flex; align-items: center; justify-content: center; gap: 6px; height: 36px; font-size: 12px; color: var(--text-tertiary); }
+/* 消息容器：正常文档流，不遮挡 */
+.message-container { width: 100%; }
 .loading-indicator { display: flex; justify-content: center; gap: 6px; padding: 14px 0; }
 .loading-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-tertiary); animation: dotPulse 1.4s ease-in-out infinite; }
 .loading-dot:nth-child(2) { animation-delay: 0.2s; }
