@@ -818,6 +818,7 @@ def _setup_routes(app: FastAPI) -> None:
     app.post("/v1/agent/run")(agent_run)
     app.post("/v1/agent/submit")(agent_submit)
     app.post("/v1/agent/approval")(agent_approval)
+    app.post("/v1/agent/answer")(agent_answer)
 
     # ── 知识库（模块级路由函数） ──
     app.post("/v1/kb/build")(kb_build)
@@ -1061,7 +1062,7 @@ async def agent_submit(
                     total_in += event.input_tokens
                 if event.output_tokens:
                     total_out += event.output_tokens
-                yield f"data: {json.dumps({'type': event.type, 'content': event.content or event.error, 'id': event.tool_call_id, 'name': event.tool_name, 'arguments': event.tool_arguments, 'input_tokens': event.input_tokens, 'output_tokens': event.output_tokens}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'type': event.type, 'content': event.content or event.error, 'id': event.tool_call_id, 'name': event.tool_name, 'arguments': event.tool_arguments, 'options': event.options, 'input_tokens': event.input_tokens, 'output_tokens': event.output_tokens}, ensure_ascii=False)}\n\n"
             # 正常收尾 → Webhook agent.complete（主对话收尾统一出口；失败不影响主流程）
             if session_id:
                 try:
@@ -1168,6 +1169,62 @@ async def agent_approval(
         )
         return {"ok": False, "error": "stale run token"}
     resolved = await runtime.submit_approval(tool_call_id, approved, reason)
+    return {"ok": resolved}
+
+
+async def agent_answer(
+    request: Request,
+):
+    """结构化提问端点：把用户答案回填给等待中的 ask_user 调用。
+
+    校验流程与审批端点完全一致 —— 二者都是「外部输入注入到正在运行的 agent 循环」
+    的通道：会话归属、调用者身份、run token 缺一不可。
+    """
+    body = await request.json()
+    session_id = body.get("session_id", "")
+    tool_call_id = body.get("tool_call_id", "")
+    answer = str(body.get("answer", ""))
+    if not answer.strip():
+        return {"ok": False, "error": "answer is required"}
+    entry = _ACTIVE_RUNTIMES.get(session_id)
+    if entry is None:
+        from app.run_registry import owner_of
+
+        owner = await owner_of(_redis, session_id)
+        if owner and owner.get("instance_id"):
+            logger.warning(
+                "answer rejected: run owned by another instance (session=%s owner=%s self=%s)",
+                session_id,
+                owner.get("instance_id"),
+                _get_instance_id(),
+            )
+            return {
+                "ok": False,
+                "error": "run owned by another engine instance",
+                "owner_instance_id": owner.get("instance_id"),
+            }
+        return {"ok": False, "error": "no active agent for this session"}
+
+    runtime, owner_uid, run_token = entry
+    caller = request.headers.get("x-user-id", "") or body.get("user_id", "")
+    if owner_uid and caller and owner_uid != caller:
+        logger.warning(
+            "answer rejected: caller %s != owner %s (session=%s)",
+            caller,
+            owner_uid,
+            session_id,
+        )
+        return {"ok": False, "error": "not session owner"}
+    given_token = body.get("run_token") or request.headers.get("x-run-token", "")
+    if given_token and given_token != run_token:
+        logger.warning(
+            "answer rejected: stale run token (session=%s given=%.8s expected=%.8s)",
+            session_id,
+            given_token,
+            run_token,
+        )
+        return {"ok": False, "error": "stale run token"}
+    resolved = await runtime.submit_answer(tool_call_id, answer)
     return {"ok": resolved}
 
 

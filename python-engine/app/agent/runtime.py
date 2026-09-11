@@ -36,6 +36,11 @@ TOOL_RESULT_TAIL = 1000  # tail 保留长度
 #: 超时后键自动过期，避免残留决策被后续同 id 的调用误取（单次消费由 GET+DEL 保证）。
 APPROVAL_TTL_SECONDS = 300.0
 
+#: ask_user 的答案回收与审批同构（同样的 TTL 与单次消费语义）。
+#: 工具名必须与 app/tools/ask_user.py 的 ASK_USER_TOOL 一致 —— runtime 靠它识别提问调用。
+ASK_USER_TOOL = "ask_user"
+ASK_ANSWER_TTL_SECONDS = 300.0
+
 
 @dataclass(frozen=True)
 class CompactionConfig:
@@ -404,6 +409,8 @@ class AgentEvent:
     tool_call_id: str = ""
     tool_name: str = ""
     tool_arguments: str = ""
+    #: ask_user 的建议答案（仅 type="ask" 事件使用）
+    options: list[str] = field(default_factory=list)
     input_tokens: int = 0
     output_tokens: int = 0
     error: str = ""
@@ -452,6 +459,8 @@ class AgentRuntime:
         self._output_guard = OutputGuard(max_hits=3)
         # 待确认工具调用 future（外部经 submit_approval 解决）
         self._pending_approvals: dict[str, asyncio.Future] = {}
+        # 待回答的 ask_user 调用 future（外部经 submit_answer 回填答案，值为 str）
+        self._pending_answers: dict[str, asyncio.Future] = {}
         # 会话授权模式（ask/auto/yolo）：任务开始时从 Redis 读取一次并缓存，
         # 供每次工具调用裁决使用（读取失败的 fail-safe 语义见 guards.load_session_mode）
         self._current_mode: str = SESSION_MODE_AUTO
@@ -873,15 +882,21 @@ class AgentRuntime:
                     messages.append(_normalize_msg(**tc_msg_kwargs))
 
                     for tc in tool_calls:
-                        # 工具栅栏：三态裁决（S 安全修复）——block/confirm/allow
-                        tool_result, approval_evt = await self._guarded_execute_tool(
-                            tc, task
-                        )
-                        if approval_evt is not None:
-                            # 先转发用户确认事件（前端展示确认卡片，回调 /v1/agent/approval），
-                            # 再等待用户批准/拒绝——顺序不可颠倒，否则前端收不到事件、任务永久挂起
-                            yield approval_evt
-                            tool_result = await self._await_approval(tc, task)
+                        if tc.get("name") == ASK_USER_TOOL:
+                            # 提问不执行任何副作用：先发 ask 事件（前端弹卡片），再等答案回填。
+                            # 顺序不可颠倒，否则前端收不到事件、任务永久挂起。
+                            yield self._ask_event(tc)
+                            tool_result = await self._await_answer(tc, task)
+                        else:
+                            # 工具栅栏：三态裁决（S 安全修复）——block/confirm/allow
+                            tool_result, approval_evt = await self._guarded_execute_tool(
+                                tc, task
+                            )
+                            if approval_evt is not None:
+                                # 先转发用户确认事件（前端展示确认卡片，回调 /v1/agent/approval），
+                                # 再等待用户批准/拒绝——顺序不可颠倒，否则前端收不到事件、任务永久挂起
+                                yield approval_evt
+                                tool_result = await self._await_approval(tc, task)
 
                         # 记录工具执行结果 (带 trace span)
                         tool_start = time.time()
@@ -1303,6 +1318,140 @@ class AgentRuntime:
             logger.warning("submit_approval: redis write failed (%s)", e)
             return False
 
+    # ── 结构化提问（ask_user）：与审批同构的答案回收通道 ──────────────
+    def _ask_event(self, tool_call: dict) -> AgentEvent:
+        """登记待回答 future 并构造 ask 事件。
+
+        **不在本方法内等待**：调用方必须先 yield 该事件（否则前端收不到提问卡片，
+        任务会挂到超时），再调 ``_await_answer``。
+        """
+        tc_id = tool_call.get("id") or ASK_USER_TOOL
+        try:
+            targs = (
+                json.loads(tool_call["arguments"])
+                if isinstance(tool_call["arguments"], str)
+                else tool_call["arguments"]
+            )
+        except (json.JSONDecodeError, TypeError):
+            targs = {}
+        targs = targs or {}
+        loop = asyncio.get_running_loop()
+        future: asyncio.Future = loop.create_future()
+        self._pending_answers[tc_id] = future
+        options = targs.get("options")
+        logger.info("ask_user awaiting answer (id=%s)", tc_id)
+        return AgentEvent(
+            type="ask",
+            tool_call_id=tc_id,
+            tool_name=ASK_USER_TOOL,
+            tool_arguments=json.dumps(targs, ensure_ascii=False),
+            content=str(targs.get("question") or "需要你的确认"),
+            options=[str(o) for o in options] if isinstance(options, list) else [],
+        )
+
+    async def _await_answer(
+        self, tool_call: dict, task: AgentTask, timeout: float = 300.0
+    ) -> dict:
+        """等待用户回答（前端经 /v1/agent/answer → submit_answer）。
+
+        多副本与审批同理：同时等待本地 Future 与 Redis 答案键，先到者胜；
+        超时按「未回答」返回错误，让模型可以继续或改问别的。
+        """
+        tc_id = tool_call.get("id") or ASK_USER_TOOL
+        future = self._pending_answers.get(tc_id)
+        if future is None:
+            return {"error": "ask_user state missing"}
+        try:
+            answer = await self._wait_answer_decision(tc_id, future, timeout)
+        finally:
+            self._pending_answers.pop(tc_id, None)
+        if answer is None:
+            logger.warning("ask_user timed out (id=%s)", tc_id)
+            return {"error": "user did not answer in time"}
+        logger.info("ask_user answered (id=%s)", tc_id)
+        return {"answer": answer}
+
+    async def _wait_answer_decision(
+        self, tc_id: str, future: asyncio.Future, timeout: float
+    ) -> Optional[str]:
+        """本地 Future 与 Redis 答案键竞争，返回答案；超时返回 None。"""
+        poll = asyncio.create_task(self._poll_remote_answer(tc_id, timeout))
+        waiters: list[asyncio.Future] = [poll, asyncio.ensure_future(future)]
+        try:
+            done, _pending = await asyncio.wait(
+                waiters, return_when=asyncio.FIRST_COMPLETED
+            )
+        finally:
+            for w in waiters:
+                if not w.done():
+                    w.cancel()
+        for w in done:
+            try:
+                res = w.result()
+            except Exception:  # noqa: BLE001 - 单通道异常不应中断等待
+                continue
+            if isinstance(res, str):
+                return res
+        return None
+
+    async def _poll_remote_answer(
+        self, tc_id: str, timeout: float, interval: float = 0.15
+    ) -> Optional[str]:
+        """轮询 Redis 答案键（跨副本通道）；命中即取走（单次消费）。超时返回 None。"""
+        deadline = asyncio.get_running_loop().time() + timeout
+        try:
+            from app.redis_client import get_redis
+            from app.redis_keys import rkey
+
+            redis = await get_redis()
+        except Exception as e:  # noqa: BLE001
+            logger.warning("ask_user poll: redis unavailable (%s)", e)
+            return None
+        if redis is None:
+            return None
+
+        key = rkey(f"answer:{tc_id}")
+        loop = asyncio.get_running_loop()
+        while loop.time() < deadline:
+            try:
+                raw = await redis.get(key)
+                if raw is not None:
+                    await redis.delete(key)  # 单次消费：答案只被一个副本读取
+                    return raw.decode() if isinstance(raw, (bytes, bytearray)) else str(raw)
+            except Exception as e:  # noqa: BLE001 - 轮询失败不致命，继续等待
+                logger.debug("ask_user poll error: %s", e)
+            await asyncio.sleep(interval)
+        return None
+
+    async def submit_answer(self, tool_call_id: str, answer: str) -> bool:
+        """外部（HTTP 端点，可能落在任一网关副本）回填 ask_user 的答案。
+
+        与 submit_approval 同构：先命中本地 Future；否则写 Redis 答案键交给正在
+        等待的副本取走 —— 不依赖会话亲和路由。
+        """
+        future = self._pending_answers.get(tool_call_id)
+        if future is not None and not future.done():
+            future.set_result(answer)
+            return True
+
+        try:
+            from app.redis_client import get_redis
+            from app.redis_keys import rkey
+
+            redis = await get_redis()
+            if redis is None:
+                logger.warning("submit_answer: redis unavailable, answer dropped")
+                return False
+            await redis.set(
+                rkey(f"answer:{tool_call_id}"),
+                answer,
+                ex=int(ASK_ANSWER_TTL_SECONDS),
+            )
+            return True
+        except Exception as e:  # noqa: BLE001
+            logger.warning("submit_answer: redis write failed (%s)", e)
+            return False
+
     async def _execute_tool(self, tool_call: dict, task: AgentTask) -> dict:
         """执行工具"""
         tool_name = tool_call["name"]
@@ -1383,6 +1532,7 @@ async def run_agent(
             "id": event.tool_call_id,
             "name": event.tool_name,
             "arguments": event.tool_arguments,
+            "options": event.options,
             "input_tokens": event.input_tokens,
             "output_tokens": event.output_tokens,
             "message": event.error,

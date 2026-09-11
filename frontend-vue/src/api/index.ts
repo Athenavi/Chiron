@@ -25,6 +25,16 @@ export async function submitApproval(params: {
   return !!(data?.data?.ok ?? data?.ok)
 }
 
+// 结构化提问：把用户答案回填给等待中的 ask_user 工具调用（Python 侧 /v1/agent/answer）
+export async function submitAnswer(params: {
+  session_id: string
+  tool_call_id: string
+  answer: string
+}): Promise<boolean> {
+  const { data } = await api.post('/v1/agent/answer', params)
+  return !!(data?.data?.ok ?? data?.ok)
+}
+
 // ── 会话操作（重命名 / 置顶）──
 export async function updateConversation(id: string, patch: { title?: string; pinned?: boolean; tag?: string }) {
   const { data } = await api.put(`/v1/conversations/${encodeURIComponent(id)}`, patch)

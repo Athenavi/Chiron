@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { CloudServerOutlined, DisconnectOutlined } from '@ant-design/icons-vue'
+import ContextRing from './ContextRing.vue'
 import type { TurnStatsItem } from './chat-types'
 
 const props = defineProps<{
   model?: string
   /** 最近一轮的用量（后端在回合结束时下发 turn_stats；没有则整段隐藏） */
   stats?: TurnStatsItem | null
+  /** 上下文占用：分子 = 最近一轮 input tokens，分母 = 模型 context_window */
+  contextUsed?: number | null
+  contextLimit?: number | null
   online: boolean
 }>()
 
@@ -28,6 +32,10 @@ const hasUsage = computed(() => Boolean(props.stats && (props.stats.inputTokens 
       >{{ stats.durationSec }}s</span>
     </template>
     <span class="cs-spacer" />
+    <ContextRing
+      :used="contextUsed ?? null"
+      :limit="contextLimit ?? null"
+    />
     <span
       class="cs-item cs-conn"
       :class="{ offline: !online }"

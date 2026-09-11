@@ -82,7 +82,8 @@ export const useTypographyStore = defineStore('typography', () => {
   function setGap(value: number) { state.value = { ...state.value, gap: value } }
   function reset() { state.value = { ...TYPOGRAPHY_DEFAULTS } }
 
-  watch(state, () => { apply(); persist() }, { immediate: true, deep: true })
+  // flush: 'sync' —— 变量要立刻落到 <html>，否则读者会先看到旧字号再跳变
+  watch(state, () => { apply(); persist() }, { immediate: true, deep: true, flush: 'sync' })
 
   return { state, apply, setTextSize, setLeading, setGap, reset }
 })

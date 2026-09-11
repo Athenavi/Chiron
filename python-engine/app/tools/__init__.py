@@ -6,6 +6,7 @@
 """
 
 import app.tools.agent  # noqa: F401
+import app.tools.ask_user  # noqa: F401
 import app.tools.browser  # noqa: F401
 import app.tools.core  # noqa: F401
 import app.tools.edit_file  # noqa: F401

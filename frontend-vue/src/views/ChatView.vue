@@ -3,11 +3,11 @@ import { ref, computed, onMounted, onUnmounted, nextTick, watch, h } from 'vue'
 import { Button, Input, Modal, Checkbox, Alert, message, Dropdown } from 'ant-design-vue'
 import { MenuOutlined, CopyOutlined, LinkOutlined, CloseOutlined } from '@ant-design/icons-vue'
 import {
-  api, createSSEConnection, submitApproval,
+  api, createSSEConnection, submitApproval, submitAnswer,
   updateConversation, createShare, getActiveShare, revokeShare,
-  getChatSessionMessages, resolveMediaUrl, getSessionMode, setSessionMode,
+  getChatSessionMessages, resolveMediaUrl, getSessionMode, setSessionMode, listModels,
 } from '../api'
-import type { ShareInfo } from '../api'
+import type { ShareInfo, LlmModel } from '../api'
 import { useAuthStore } from '../stores/auth'
 import { useThemeStore } from '../stores/theme'
 import { useRoute, useRouter } from 'vue-router'
@@ -18,6 +18,7 @@ import ChatEmptyHero from '../components/chat/ChatEmptyHero.vue'
 import ChatInput from '../components/chat/ChatInput.vue'
 import ChatStatusBar from '../components/chat/ChatStatusBar.vue'
 import ChatDisplaySettings from '../components/chat/ChatDisplaySettings.vue'
+import AskCard from '../components/chat/AskCard.vue'
 import CallChainTimeline from '../components/CallChainTimeline.vue'
 import { HistoryOutlined, ExportOutlined, BulbOutlined, BulbFilled, MoreOutlined, FontSizeOutlined } from '@ant-design/icons-vue'
 import { splitThinking, stripUserInputTag, formatClock, formatSize } from '../components/chat/chat-types'
@@ -60,6 +61,17 @@ const lastTurnStats = computed<TurnStatsItem | null>(() => {
   }
   return null
 })
+
+// 上下文占用环的分母：模型上限来自 /v1/models 的 context_window（拿不到就不显示比例）
+const availableModels = ref<LlmModel[]>([])
+const contextWindow = computed(() => {
+  const name = llmModel.value
+  if (!name) return null
+  return availableModels.value.find(m => m.name === name)?.context_window || null
+})
+listModels()
+  .then(models => { availableModels.value = models })
+  .catch(() => { availableModels.value = [] })
 
 // ── 会话状态 ──
 const sessions = ref<ChatSession[]>([])
@@ -122,6 +134,31 @@ async function resolveApproval(a: PendingApproval, approved: boolean) {
     // 静默失败
   } finally {
     pendingApprovals.value = pendingApprovals.value.filter(p => p.id !== a.id)
+  }
+}
+
+// ── 结构化提问（ask_user 工具）────────────────────────────────────────────
+// 与审批卡的分工：审批回传布尔（允许/拒绝），提问回传**答案文本**（选项值或自由输入），
+// 因此走独立的 /v1/agent/answer 通道而不是复用 approval。
+interface PendingQuestion {
+  id: string
+  question: string
+  options: string[]
+  allowFreeText: boolean
+}
+
+const pendingQuestions = ref<PendingQuestion[]>([])
+
+async function answerQuestion(question: PendingQuestion, answer: string) {
+  pendingQuestions.value = pendingQuestions.value.filter(item => item.id !== question.id)
+  try {
+    await submitAnswer({
+      session_id: activeSessionId.value || '',
+      tool_call_id: question.id,
+      answer,
+    })
+  } catch {
+    message.error('回答提交失败，请重试')
   }
 }
 
@@ -1221,6 +1258,14 @@ function onSSEMessage(raw: any) {
       expiresAt: Date.now() + APPROVAL_TIMEOUT_MS,
     } as PendingApproval)
     ensureApprovalTimer()
+  } else if (type === 'ask') {
+    // 后端 ask_user 工具在等答案：卡片按 tool_call_id 回填
+    pendingQuestions.value.push({
+      id: d?.id ?? d?.tool_call_id ?? String(Date.now()),
+      question: d?.question ?? d?.content ?? '需要你的确认',
+      options: Array.isArray(d?.options) ? d.options.map((option: unknown) => String(option)) : [],
+      allowFreeText: d?.allow_free_text !== false,
+    })
   } else if (type === 'guardrail_blocked') {
     flushStreamingFlags()
     loading.value = false
@@ -1611,6 +1656,20 @@ function continueGeneration() {
         </div>
       </div>
 
+      <div
+        v-if="pendingQuestions.length"
+        class="ask-zone"
+      >
+        <AskCard
+          v-for="q in pendingQuestions"
+          :key="q.id"
+          :question="q.question"
+          :options="q.options"
+          :allow-free-text="q.allowFreeText"
+          @answer="(value: string) => answerQuestion(q, value)"
+        />
+      </div>
+
       <ChatInput
         ref="chatInputRef"
         :loading="loading"
@@ -1629,6 +1688,8 @@ function continueGeneration() {
       <ChatStatusBar
         :model="llmModel"
         :stats="lastTurnStats"
+        :context-used="lastTurnStats?.inputTokens ?? null"
+        :context-limit="contextWindow"
         :online="isOnline && !connectionLost"
       />
 
@@ -1835,6 +1896,8 @@ function continueGeneration() {
   .turn-status { margin: 8px auto 0; padding: 0 12px; }
 }
 .approval-zone { padding: 0 20px 8px; display: flex; flex-direction: column; gap: 8px; }
+/* 结构化提问卡片区：与审批卡同样贴输入区上方 */
+.ask-zone { padding: 0 20px 8px; display: flex; flex-direction: column; gap: 8px; }
 .approval-card { background: var(--bg-card); border: 1px solid var(--border); border-left: 3px solid var(--primary); border-radius: 10px; padding: 10px 14px; }
 /* 工具授权模式栏（与「对话模式」并列但语义独立的第二个维度） */
 .tools-mode-bar { display: flex; align-items: center; gap: 10px; padding: 6px 20px 0; flex-wrap: wrap; }

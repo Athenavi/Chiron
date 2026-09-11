@@ -6,9 +6,12 @@ import AppLayout from './components/AppLayout.vue'
 import RouteProgressBar from './components/common/RouteProgressBar.vue'
 import ErrorBoundary from './components/common/ErrorBoundary.vue'
 import { useThemeStore } from './stores/theme'
+import { useTypographyStore } from './stores/typography'
 
 const route = useRoute()
 const themeStore = useThemeStore()
+// 实例化即应用持久化的排版偏好（store 内 immediate watch 写入 <html> 变量）
+useTypographyStore()
 const showLayout = computed(() => !['Login', 'Register'].includes(route.name as string))
 
 const themeConfig = computed(() => ({
