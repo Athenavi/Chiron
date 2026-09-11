@@ -265,7 +265,7 @@ const diffTitle = computed(() => {
 </template>
 
 <style scoped>
-.tool-result { max-width: min(720px, 92%); margin: 2px auto 8px; }
+.tool-result { max-width: min(var(--chat-content-width), 92%); margin: 2px auto 8px; }
 .result-error-bar { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; padding: 5px 10px; border-radius: var(--sig-radius-button); background: var(--error-bg); color: var(--error); font-size: 12px; }
 .result-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 4px 0; border: none; background: none; color: var(--text-tertiary); cursor: pointer; font-size: 12px; }
 .result-head:hover { color: var(--primary); }

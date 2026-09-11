@@ -20,8 +20,9 @@ import ChatStatusBar from '../components/chat/ChatStatusBar.vue'
 import ChatDisplaySettings from '../components/chat/ChatDisplaySettings.vue'
 import AskCard from '../components/chat/AskCard.vue'
 import CallChainTimeline from '../components/CallChainTimeline.vue'
-import { HistoryOutlined, ExportOutlined, BulbOutlined, BulbFilled, MoreOutlined, FontSizeOutlined } from '@ant-design/icons-vue'
+import { HistoryOutlined, ExportOutlined, BulbOutlined, BulbFilled, MoreOutlined, FontSizeOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import { splitThinking, stripUserInputTag, formatClock, formatSize } from '../components/chat/chat-types'
+import { findMatches } from '../components/chat/transcriptSearch'
 import type { ChatItem, ChatSession, ChatAttachment, TurnStatsItem } from '../components/chat/chat-types'
 
 const authStore = useAuthStore()
@@ -51,6 +52,33 @@ const chatInputRef = ref<InstanceType<typeof ChatInput> | null>(null)
 
 function onQuoteText(text: string) {
   chatInputRef.value?.insertText(text)
+}
+
+// ── 会话内检索（正文与思考；工具输出不进结果）────────────────────────────
+const searchOpen = ref(false)
+const searchQuery = ref('')
+const searchCursor = ref(0)
+const searchInputRef = ref<HTMLInputElement | null>(null)
+const searchMatches = computed(() => findMatches(items.value, searchQuery.value))
+watch(searchQuery, () => { searchCursor.value = 0 })
+
+function openSearch() {
+  searchOpen.value = true
+  nextTick(() => searchInputRef.value?.focus())
+}
+
+function closeSearch() {
+  searchOpen.value = false
+  searchQuery.value = ''
+}
+
+/** 循环跳转：命中项用既有的 focusToken 链路（含高亮闪烁与滚动归因） */
+function gotoMatch(delta: number) {
+  const hits = searchMatches.value
+  if (!hits.length) return
+  searchCursor.value = (searchCursor.value + delta + hits.length) % hits.length
+  trajectoryFocus.value = hits[searchCursor.value]!
+  trajectoryToken.value++
 }
 
 // 状态栏：最近一轮用量（turn_stats 由后端在回合结束时下发）
@@ -1457,6 +1485,19 @@ function continueGeneration() {
               </template>
               <span class="toolbar-label">轨迹</span>
             </Button>
+            <Button
+              type="text"
+              size="small"
+              class="toolbar-btn"
+              :class="{ active: searchOpen }"
+              :title="searchOpen ? '关闭搜索' : '在本会话中搜索（正文与思考）'"
+              @click="searchOpen ? closeSearch() : openSearch()"
+            >
+              <template #icon>
+                <SearchOutlined />
+              </template>
+              <span class="toolbar-label">搜索</span>
+            </Button>
             <Dropdown
               :menu="{ items: toolbarMenuItems, onClick: onToolbarMenu }"
               :trigger="['click']"
@@ -1473,6 +1514,55 @@ function continueGeneration() {
                 </template>
               </Button>
             </Dropdown>
+          </div>
+        </div>
+
+        <!-- 会话内检索条：Enter/↓ 下一个、Shift+Enter/↑ 上一个、Esc 关闭 -->
+        <div
+          v-if="searchOpen"
+          class="chat-search"
+        >
+          <SearchOutlined class="chat-search-icon" />
+          <input
+            ref="searchInputRef"
+            v-model="searchQuery"
+            class="chat-search-input"
+            type="text"
+            placeholder="在本会话中搜索正文与思考（Enter 下一个，Esc 关闭）"
+            @keydown.enter.exact.prevent="gotoMatch(1)"
+            @keydown.enter.shift.prevent="gotoMatch(-1)"
+            @keydown.esc.prevent="closeSearch"
+          >
+          <span class="chat-search-count">
+            {{ searchQuery.trim() ? (searchMatches.length ? `${searchCursor + 1} / ${searchMatches.length}` : '无匹配') : '' }}
+          </span>
+          <div class="chat-search-actions">
+            <button
+              class="chat-search-btn"
+              type="button"
+              title="上一个"
+              :disabled="!searchMatches.length"
+              @click="gotoMatch(-1)"
+            >
+              ↑
+            </button>
+            <button
+              class="chat-search-btn"
+              type="button"
+              title="下一个"
+              :disabled="!searchMatches.length"
+              @click="gotoMatch(1)"
+            >
+              ↓
+            </button>
+            <button
+              class="chat-search-btn"
+              type="button"
+              title="关闭"
+              @click="closeSearch"
+            >
+              ✕
+            </button>
           </div>
         </div>
 
@@ -1878,6 +1968,25 @@ function continueGeneration() {
 .toolbar-btn:hover { color: var(--text-primary) !important; background: var(--bg-hover) !important; }
 .toolbar-btn.active { color: var(--primary); background: var(--primary-bg); }
 .toolbar-btn:not(:disabled):active { transform: scale(0.94); }
+
+/* 会话内检索条：贴在工具条下方，不占用消息区高度（无结果时只显示输入框） */
+.chat-search {
+  flex: none;
+  display: flex; align-items: center; gap: 8px;
+  margin: 8px 16px 0; padding: 5px 10px;
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  background: var(--bg-card);
+}
+.chat-search-icon { flex: none; font-size: 13px; color: var(--text-tertiary); }
+.chat-search-input { flex: 1; min-width: 0; border: none; background: none; outline: none; color: var(--text-primary); font-size: 13px; }
+.chat-search-input::placeholder { color: var(--text-quaternary); }
+.chat-search-count { flex: none; font-size: 11px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.chat-search-actions { flex: none; display: flex; gap: 2px; }
+.chat-search-btn { border: none; background: none; color: var(--text-secondary); font-size: 12px; line-height: 18px; padding: 2px 6px; border-radius: var(--radius-sm); cursor: pointer; }
+.chat-search-btn:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
+.chat-search-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.chat-search-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+@media (max-width: 576px) { .chat-search { margin: 6px 12px 0; } .chat-search-input { font-size: 12px; } }
 @media (max-width: 1024px) {
   .chat-toolbar { padding: 0 10px; }
   .toolbar-title { max-width: 32vw; }
@@ -1943,7 +2052,7 @@ function continueGeneration() {
 .share-error { margin-top: 10px; font-size: 12px; color: var(--error); }
 .share-actions { display: flex; justify-content: flex-end; margin-top: 14px; }
 .turn-status {
-  align-self: flex-start; margin: 10px auto 0; max-width: 748px; padding: 0 24px;
+  align-self: flex-start; margin: 10px auto 0; max-width: min(var(--chat-content-width), 92%); padding: 0 24px;
   height: 26px; display: inline-flex; align-items: center;
   font-size: 13px; font-weight: 600; white-space: nowrap;
   background: linear-gradient(90deg, var(--primary) 0%, var(--primary) 40%, var(--accent) 50%, var(--primary) 60%, var(--primary) 100%);
@@ -2040,7 +2149,7 @@ function continueGeneration() {
 .unified-empty { padding: 40px 20px; text-align: center; color: var(--text-muted); font-size: 13px; }
 .kb-hits-tag {
   display: flex; align-items: center;
-  max-width: min(720px, 92%); margin: 2px auto 6px;
+  max-width: min(var(--chat-content-width), 92%); margin: 2px auto 6px;
   padding: 2px 10px; border-radius: 10px;
   background: var(--primary-bg); color: var(--primary);
   font-size: 11px; line-height: 18px;

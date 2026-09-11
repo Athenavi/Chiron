@@ -626,7 +626,7 @@ defineExpose({ insertText })
 .input-card {
   position: relative;
   display: flex; flex-direction: column; gap: 12px;
-  width: 100%; max-width: 780px; margin: 0 auto;
+  width: 100%; max-width: var(--chat-content-width); margin: 0 auto;
   padding: 10px 12px 12px;
   border: var(--sig-border-width) solid var(--border); border-radius: var(--sig-radius-input);
   background: var(--bg-input); box-shadow: var(--sig-input-shadow);

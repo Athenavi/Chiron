@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Modal, Button, Segmented } from 'ant-design-vue'
 import {
+  CONTENT_WIDTH_OPTIONS,
   GAP_OPTIONS,
   LEADING_OPTIONS,
   TEXT_SIZE_OPTIONS,
@@ -43,6 +44,14 @@ const typography = useTypographyStore()
         :value="typography.state.gap"
         :options="GAP_OPTIONS"
         @change="(v: any) => typography.setGap(Number(v))"
+      />
+    </div>
+    <div class="display-row">
+      <span class="display-label">内容宽度</span>
+      <Segmented
+        :value="typography.state.contentWidth"
+        :options="CONTENT_WIDTH_OPTIONS"
+        @change="(v: any) => typography.setContentWidth(Number(v))"
       />
     </div>
     <div class="display-foot">

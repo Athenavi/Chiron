@@ -56,4 +56,13 @@ describe('MessageList 提问导航条', () => {
     })
     expect(wrapper.findAll('.rail-dot')[0]!.attributes('title')).toBe('第一行 第二行 缩进')
   })
+
+  it('focusToken 也能跳到助手消息（会话内检索需要，不限于用户提问）', async () => {
+    const wrapper = await mountList({ items: items(), ...base })
+    const el = wrapper.find('.message-list').element as HTMLElement
+
+    await wrapper.setProps({ focusIndex: 1, focusToken: 1 })   // items 下标 1 = 助手回复
+    await settle()
+    expect(el.scrollTop).toBe(96)                              // 1 × 96px（text 估计值）
+  })
 })

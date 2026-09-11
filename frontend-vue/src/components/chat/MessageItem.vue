@@ -9,7 +9,7 @@ import katex from 'katex'
 import hljs from 'highlight.js/lib/common'
 import { computed, ref, watch, onBeforeUnmount } from 'vue'
 import { message, Input } from 'ant-design-vue'
-import { CopyOutlined, EditOutlined, ReloadOutlined, FileOutlined, LikeOutlined, DislikeOutlined, LikeFilled, DislikeFilled } from '@ant-design/icons-vue'
+import { CopyOutlined, EditOutlined, ReloadOutlined, FileOutlined, LikeOutlined, DislikeOutlined, LikeFilled, DislikeFilled, CommentOutlined } from '@ant-design/icons-vue'
 import ReasoningBlock from './ReasoningBlock.vue'
 import ToolCallCard from './ToolCallCard.vue'
 import ToolResultBlock from './ToolResultBlock.vue'
@@ -33,6 +33,8 @@ const emit = defineEmits<{
   (e: 'continue', itemId: string): void
   /** 失败消息重试：用原文本重发 */
   (e: 'retry-failed', itemId: string): void
+  /** 引用整条消息到输入框（与选中文本引用同一出口） */
+  (e: 'quote', text: string): void
 }>()
 
 // ── 反向定位：消息 → 来源工作台 chips（assistant metadata 驱动）──
@@ -213,6 +215,19 @@ function setFeedback(dir: 'up' | 'down') {
 // ── Markdown 引擎（迁移自原 ChatView） ──
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 md.use(texmath, { engine: katex, delimiters: 'dollars', katexOptions: { throwOnError: false, output: 'html' } })
+/**
+ * 外链一律新窗口打开：SPA 内直接跳走会丢掉当前对话（消息状态、滚动位置、
+ * 正在流的回合）。站内相对链接保持原行为，交给应用自身处理。
+ */
+md.renderer.rules.link_open = (tokens: any[], idx: number, options: any, _env: any, self: any) => {
+  const token = tokens[idx]
+  const href = (token?.attrGet?.('href') as string | null) || ''
+  if (/^https?:\/\//i.test(href)) {
+    token.attrSet('target', '_blank')
+    token.attrSet('rel', 'noopener noreferrer')
+  }
+  return self.renderToken(tokens, idx, options)
+}
 md.renderer.rules.fence = (tokens: any[], idx: number) => {
   const token = tokens[idx]
   const lang = (token.info || '').trim().toLowerCase()
@@ -438,6 +453,16 @@ function handleMsgClick(e: MouseEvent) {
           >
             <CopyOutlined />
           </button>
+          <!-- 引用整条消息：与「选中文本引用」走同一出口，省去手动划选长回复 -->
+          <button
+            v-if="!item.streaming"
+            class="msg-action"
+            type="button"
+            title="引用到输入框"
+            @click.stop="emit('quote', (item as TextItem).content || '')"
+          >
+            <CommentOutlined />
+          </button>
           <!-- 用户消息：编辑重发（非流式、非错误态） -->
           <button
             v-if="item.role === 'user' && !item.streaming && !(item as TextItem).error"
@@ -534,7 +559,7 @@ function handleMsgClick(e: MouseEvent) {
 /* 消息列：748px 内容宽（deepseek --dsh-chat-content-width），16px 节奏。
    注意：虚拟列表 item 为 absolute（left:0 right:0），此处不能设 width:100%，
    否则 left+width+right 超约束会让 right 失效、margin auto 退化为 0（消息列贴左） */
-.msg-row { padding: var(--chat-msg-gap, 6px) 0; max-width: min(720px, 92%); margin: 0 auto; }
+.msg-row { padding: var(--chat-msg-gap, 6px) 0; max-width: min(var(--chat-content-width), 92%); margin: 0 auto; }
 .msg-row.user { display: flex; justify-content: flex-end; }
 /* 轨迹跳转高亮闪烁（deepseek data-current 聚焦反馈） */
 .msg-row.highlighted { background: var(--primary-bg); border-radius: var(--sig-radius-card); animation: trajectoryFlash 2s ease-out; }
@@ -552,7 +577,7 @@ function handleMsgClick(e: MouseEvent) {
 }
 @keyframes streamCursor { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
 /* UI/UX：日期分隔线（deepseek DateDivider） */
-.date-divider { display: flex; align-items: center; gap: 12px; max-width: min(720px, 92%); margin: 18px auto; padding: 0 20px; }
+.date-divider { display: flex; align-items: center; gap: 12px; max-width: min(var(--chat-content-width), 92%); margin: 18px auto; padding: 0 20px; }
 .date-divider-line { flex: 1; height: 1px; background: var(--border); opacity: 0.6; }
 .date-divider-text { font-size: 12px; color: var(--text-tertiary); white-space: nowrap; }
 /* 流式光标：assistant 正在输出时末尾闪烁（打字感） */
@@ -575,7 +600,7 @@ function handleMsgClick(e: MouseEvent) {
   transition: box-shadow 0.2s ease;
 }
 .msg-row.user .msg-text:hover { box-shadow: var(--sig-shadow-hover); }
-.turn-stats { max-width: min(720px, 92%); margin: 0 auto; padding: 4px 0 10px; font-size: 11px; color: var(--text-muted); text-align: right; }
+.turn-stats { max-width: min(var(--chat-content-width), 92%); margin: 0 auto; padding: 4px 0 10px; font-size: 11px; color: var(--text-muted); text-align: right; }
 /* markdown 正文（deepseek MarkdownText：16/28、标题层级、块 gap 16） */
 .msg-text :deep(p) { margin: 16px 0; }
 .msg-text :deep(p:first-child) { margin-top: 0; }

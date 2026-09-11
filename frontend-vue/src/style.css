@@ -1392,8 +1392,9 @@ body {
    ============================================================ */
 
 :root {
-  /* 行式组件的内容列宽与 MessageItem 的 748px 正文列对齐 */
-  --chat-row-width: 720px;
+  /* 对话内容列宽：桌面端阅读与代码/表格可分性的折中，可在「显示设置」里调整。
+     窄屏由 92% 上限兜底，不会横向溢出。 */
+  --chat-content-width: 960px;
   --chat-row-inline-pad: 24px;
   --chat-row-height: 28px;
 
@@ -1405,7 +1406,7 @@ body {
 
 /* 行式容器：宽度 + 水平内边距 + 行间距（卡片式组件只用下面的 chevron/状态点） */
 .chat-row-shell {
-  max-width: min(var(--chat-row-width), 92%);
+  max-width: min(var(--chat-content-width), 92%);
   margin: 2px auto 0;
   padding: 0 var(--chat-row-inline-pad);
 }

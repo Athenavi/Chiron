@@ -465,12 +465,13 @@ function scrollToBottom() {
   unseenCount.value = 0
 }
 
-// 轨迹/导航条跳转：滚动到对应用户消息 + 高亮闪烁
+// 跳转（轨迹面板 / 提问导航条 / 会话内检索）：滚动到目标行 + 高亮闪烁
 watch(() => props.focusToken, async () => {
   if (props.focusIndex == null) return
   await nextTick()
-  // 走单写者的几何偏移：窗口化把历史行换成占位后，目标行可能未挂载，DOM 查询会落空
-  const rowIndex = rows.value.findIndex(row => row.index === props.focusIndex && isUserAnchor(row.item))
+  // 匹配任意文本行（不只用户消息）：会话内检索要能跳到助手回复上。
+  // 走单写者的几何偏移：窗口化把历史行换成占位后，目标行可能未挂载，DOM 查询会落空。
+  const rowIndex = rows.value.findIndex(row => row.index === props.focusIndex && row.item?.kind === 'text')
   if (rowIndex >= 0) jumpToRow(rowIndex)
   highlightIndex.value = props.focusIndex
   setTimeout(() => { if (highlightIndex.value === props.focusIndex) highlightIndex.value = null }, 2000)
@@ -564,6 +565,7 @@ const badgeText = computed(() => (unseenCount.value > 99 ? '99+' : String(unseen
             @regenerate="(id: string) => emit('regenerate', id)"
             @continue="(id: string) => emit('continue', id)"
             @retry-failed="(id: string) => emit('retry-failed', id)"
+            @quote="(text: string) => emit('quote-text', text)"
           />
           <div
             v-else
