@@ -97,10 +97,12 @@ func ClearTokenCookie(w http.ResponseWriter, secure bool) {
 }
 
 // logLoginFailure 统一的登录失败审计日志+验证码记录
-func (h *AuthHandler) logLoginFailure(ctx context.Context, email, tenantID, remoteAddr string) {
+func (h *AuthHandler) logLoginFailure(ctx context.Context, r *http.Request, email, tenantID, remoteAddr string) {
 	db.AuditLog(ctx, "", tenantID, "login_failed", "/v1/auth/login", "email="+maskEmail(email), remoteAddr, nil)
 	if h.captcha != nil {
-		h.captcha.RecordFailure(ctx, nil)
+		// 必须传真实请求：RecordFailure 会经 clientIP(r) 读 r.RemoteAddr，
+		// 传 nil 会让任何登录失败都触发 nil 解引用 panic（表现为 500）。
+		h.captcha.RecordFailure(ctx, r)
 	}
 }
 
@@ -160,13 +162,13 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	).Scan(&user.ID, &user.Email, &user.Name, &user.Role, &tenantID, &passwordHash)
 	if err != nil {
 		slog.Warn("login failed", "email", req.Email, "error", err)
-		h.logLoginFailure(r.Context(), req.Email, DefaultTenantID, r.RemoteAddr)
+		h.logLoginFailure(r.Context(), r, req.Email, DefaultTenantID, r.RemoteAddr)
 		Unauthorized(w, "invalid email or password")
 		return
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(req.Password)); err != nil {
-		h.logLoginFailure(r.Context(), req.Email, tenantID, r.RemoteAddr)
+		h.logLoginFailure(r.Context(), r, req.Email, tenantID, r.RemoteAddr)
 		Unauthorized(w, "invalid email or password")
 		return
 	}

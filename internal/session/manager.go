@@ -413,8 +413,8 @@ func (m *Manager) SaveToolCall(ctx context.Context, sessionID, toolCallID, toolN
 		return
 	}
 	_, err := m.pool.Exec(ctx,
-		`INSERT INTO tool_calls (id, session_id, tool_name, input, turn_id, created_at)
-		 VALUES ($1, $2, $3, $4::jsonb, NULLIF($5, ''), NOW())
+		`INSERT INTO tool_calls (id, session_id, tool_name, input, output, turn_id, created_at)
+		 VALUES ($1, $2, $3, $4::jsonb, '', NULLIF($5, ''), NOW())
 		 ON CONFLICT (id) DO UPDATE SET tool_name = EXCLUDED.tool_name, input = EXCLUDED.input,
 		   turn_id = COALESCE(EXCLUDED.turn_id, tool_calls.turn_id)`,
 		toolCallID, sessionID, toolName, inputJSON, turnID)

@@ -75,7 +75,7 @@ async def get_redis() -> aioredis.Redis:
                 _redis_instance = aioredis.from_url(
                     redis_url_with_timeout,
                     decode_responses=True,
-                    max_connections=settings.redis_pool_size,
+                    max_connections=settings.redis_max_connections,
                     socket_keepalive=True,  # Enable TCP keepalive
                 )
                 logger.info(

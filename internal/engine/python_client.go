@@ -129,7 +129,9 @@ func NewPythonClient(addresses ...string) *PythonClient {
 		Transport: newTransport(false),
 	}
 	streamClient := &http.Client{
-		Timeout:   60 * time.Second, // 对 SSE 流仅覆盖"等待响应头"阶段，头到达后由 ctx 控制时长
+		// 不设 Timeout：http.Client.Timeout 覆盖整个请求（含读 body），会把长回答硬截断在 60s，
+		// 与"仅限制等待响应头"的意图不符。等响应头由 Transport.ResponseHeaderTimeout
+		// （pythonResponseHeaderTimeout）约束，整体时长由调用方 ctx（submit 路径 180s）控制。
 		Transport: newTransport(true),
 	}
 
