@@ -69,9 +69,9 @@ func (m *Manager) GetSession(ctx context.Context, id string) (*model.Session, er
 
 	var s model.Session
 	err := m.pool.QueryRow(ctx,
-		`SELECT id, COALESCE(user_id::text, ''), COALESCE(title, ''), COALESCE(pinned, false), created_at, updated_at
+		`SELECT id, COALESCE(user_id::text, ''), COALESCE(title, ''), COALESCE(pinned, false), COALESCE(tag, ''), created_at, updated_at
 		 FROM sessions WHERE id = $1`, id).
-		Scan(&s.ID, &s.UserID, &s.Title, &s.Pinned, &s.CreatedAt, &s.UpdatedAt)
+		Scan(&s.ID, &s.UserID, &s.Title, &s.Pinned, &s.Tag, &s.CreatedAt, &s.UpdatedAt)
 	if err == pgx.ErrNoRows {
 		return nil, fmt.Errorf("%w: %s", ErrSessionNotFound, id)
 	} else if err != nil {
@@ -148,7 +148,7 @@ func (m *Manager) ListSessions(ctx context.Context, userID string, page, perPage
 	offset := (page - 1) * perPage
 
 	rows, err := m.pool.Query(ctx,
-		`SELECT id, COALESCE(user_id::text, ''), COALESCE(title, ''), COALESCE(pinned, false), created_at, updated_at
+		`SELECT id, COALESCE(user_id::text, ''), COALESCE(title, ''), COALESCE(pinned, false), COALESCE(tag, ''), created_at, updated_at
 		 FROM sessions
 		 WHERE user_id = $1
 		 ORDER BY pinned DESC, updated_at DESC
@@ -161,7 +161,7 @@ func (m *Manager) ListSessions(ctx context.Context, userID string, page, perPage
 	var sessions []model.Session
 	for rows.Next() {
 		var s model.Session
-		if err := rows.Scan(&s.ID, &s.UserID, &s.Title, &s.Pinned, &s.CreatedAt, &s.UpdatedAt); err != nil {
+		if err := rows.Scan(&s.ID, &s.UserID, &s.Title, &s.Pinned, &s.Tag, &s.CreatedAt, &s.UpdatedAt); err != nil {
 			slog.Warn("scan session row", "error", err)
 			continue
 		}
@@ -223,36 +223,57 @@ func (m *Manager) DeleteSession(ctx context.Context, id string) error {
 	return nil
 }
 
-// UpdateSession updates a session's title and/or pinned flag, then refreshes
-// the Redis cache. updated_at advances only when the title changes (pinning is
-// a list-order preference, not activity). At least one field must be non-nil.
-func (m *Manager) UpdateSession(ctx context.Context, id string, title *string, pinned *bool) (*model.Session, error) {
+// SessionUpdate 描述一次会话属性更新：nil 表示不修改该字段。
+// 单独抽出类型是为了让 SQL 组装（buildSessionUpdate）可脱离 DB 单测。
+type SessionUpdate struct {
+	Title  *string
+	Pinned *bool
+	Tag    *string
+}
+
+// empty 表示没有任何字段需要更新。
+func (u SessionUpdate) empty() bool {
+	return u.Title == nil && u.Pinned == nil && u.Tag == nil
+}
+
+// buildSessionUpdate 组装 UPDATE sessions 的语句与参数。
+// 只有 title 变更才推进 updated_at（置顶/标签是列表偏好，不算会话活动）；
+// tag 传空串表示清除标签（写 NULL，避免留下空串标签）。
+func buildSessionUpdate(id string, u SessionUpdate, now time.Time) (string, []interface{}) {
+	var sets []string
+	var args []interface{}
+	if u.Title != nil {
+		sets = append(sets, fmt.Sprintf("title = $%d", len(args)+1))
+		args = append(args, *u.Title)
+		sets = append(sets, fmt.Sprintf("updated_at = $%d", len(args)+1))
+		args = append(args, now)
+	}
+	if u.Pinned != nil {
+		sets = append(sets, fmt.Sprintf("pinned = $%d", len(args)+1))
+		args = append(args, *u.Pinned)
+	}
+	if u.Tag != nil {
+		sets = append(sets, fmt.Sprintf("tag = NULLIF($%d, '')", len(args)+1))
+		args = append(args, *u.Tag)
+	}
+	args = append(args, id)
+	return `UPDATE sessions SET ` + strings.Join(sets, ", ") + ` WHERE id = $` + strconv.Itoa(len(args)), args
+}
+
+// UpdateSession updates a session's title / pinned flag / tag, then refreshes
+// the Redis cache so a subsequent GetSession returns the fresh row.
+// At least one field must be non-nil.
+func (m *Manager) UpdateSession(ctx context.Context, id string, upd SessionUpdate) (*model.Session, error) {
 	if id == "" {
 		return nil, fmt.Errorf("session id is required")
 	}
-	if title == nil && pinned == nil {
+	if upd.empty() {
 		return nil, fmt.Errorf("nothing to update")
 	}
 
-	var sets []string
-	var args []interface{}
-	if title != nil {
-		sets = append(sets, fmt.Sprintf("title = $%d", len(args)+1))
-		args = append(args, *title)
-		sets = append(sets, fmt.Sprintf("updated_at = $%d", len(args)+1))
-		args = append(args, time.Now())
-	}
-	if pinned != nil {
-		sets = append(sets, fmt.Sprintf("pinned = $%d", len(args)+1))
-		args = append(args, *pinned)
-	}
-	args = append(args, id)
-
 	if m.pool != nil {
-		_, err := m.pool.Exec(ctx,
-			`UPDATE sessions SET `+strings.Join(sets, ", ")+` WHERE id = $`+strconv.Itoa(len(args)),
-			args...)
-		if err != nil {
+		query, args := buildSessionUpdate(id, upd, time.Now())
+		if _, err := m.pool.Exec(ctx, query, args...); err != nil {
 			return nil, fmt.Errorf("update session: %w", err)
 		}
 	}
@@ -334,16 +355,9 @@ func (m *Manager) SaveUserMessage(ctx context.Context, sessionID, userID, userCo
 }
 
 // SaveAssistantMessage persists the assistant reply (with optional OpenAI-format
-// tool_calls JSON) after streaming completes.
+// tool_calls JSON) after streaming completes. 分配新 id（一次性写入场景）。
 func (m *Manager) SaveAssistantMessage(ctx context.Context, sessionID, assistantContent, toolCallsJSON, turnID string) {
 	if m.pool == nil {
-		return
-	}
-	if toolCallsJSON == "" {
-		toolCallsJSON = "[]"
-	}
-	// 允许"纯工具调用轮"（content 空 + tool_calls 非空）落库（S 修复）
-	if assistantContent == "" && toolCallsJSON == "[]" {
 		return
 	}
 	msgID, err := genID()
@@ -351,13 +365,35 @@ func (m *Manager) SaveAssistantMessage(ctx context.Context, sessionID, assistant
 		slog.Warn("generate message id", "error", err)
 		return
 	}
-	_, err = m.pool.Exec(ctx,
+	m.UpsertAssistantMessage(ctx, sessionID, msgID, assistantContent, toolCallsJSON, turnID)
+}
+
+// UpsertAssistantMessage 以固定 messageID 写入/更新一条 assistant 消息。
+//
+// 用于"增量落库"：回合进行中按节流反复写入同一行（思考块 + 已产生正文 + 工具调用 id 集合），
+// 使刷新 / 断线 / 网关重启后仍能看到已产生的部分；回合结束时用同一 id 定型，不产生重复消息。
+// 此前只在回合结束才落库，长回合（多轮工具调用，常达数分钟）进行中刷新必然看到"什么都没有"。
+func (m *Manager) UpsertAssistantMessage(ctx context.Context, sessionID, messageID, assistantContent, toolCallsJSON, turnID string) {
+	if m.pool == nil || messageID == "" {
+		return
+	}
+	if toolCallsJSON == "" {
+		toolCallsJSON = "[]"
+	}
+	// 尚无任何内容（既无正文也无工具调用）：不创建空消息行
+	if assistantContent == "" && toolCallsJSON == "[]" {
+		return
+	}
+	_, err := m.pool.Exec(ctx,
 		`INSERT INTO messages (id, session_id, role, content, tool_calls, turn_id, created_at)
-		 VALUES ($1, $2, 'assistant', $3, $4::jsonb, NULLIF($5, ''), NOW())`,
-		msgID, sessionID, assistantContent, toolCallsJSON, turnID)
+		 VALUES ($1, $2, 'assistant', $3, $4::jsonb, NULLIF($5, ''), NOW())
+		 ON CONFLICT (id) DO UPDATE SET content = EXCLUDED.content,
+		   tool_calls = EXCLUDED.tool_calls,
+		   turn_id = COALESCE(EXCLUDED.turn_id, messages.turn_id)`,
+		messageID, sessionID, assistantContent, toolCallsJSON, turnID)
 	if err != nil {
 		// 失败不再静默（000.md 第 14 条）：模型已输出但不落库 => 历史与计费不一致
-		slog.Error("save assistant message", "session", sessionID, "turn", turnID, "error", err)
+		slog.Error("upsert assistant message", "session", sessionID, "message", messageID, "turn", turnID, "error", err)
 	}
 	m.evictCache(ctx, sessionID)
 }

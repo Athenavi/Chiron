@@ -26,7 +26,7 @@ export async function submitApproval(params: {
 }
 
 // ── 会话操作（重命名 / 置顶）──
-export async function updateConversation(id: string, patch: { title?: string; pinned?: boolean }) {
+export async function updateConversation(id: string, patch: { title?: string; pinned?: boolean; tag?: string }) {
   const { data } = await api.put(`/v1/conversations/${encodeURIComponent(id)}`, patch)
   return data?.data
 }

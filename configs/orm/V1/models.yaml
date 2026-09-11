@@ -1253,6 +1253,11 @@ models:
         type: boolean
         description: 是否置顶
         default: false
+      tag:
+        type: string
+        maxLength: 64
+        description: 会话标签（前端分类筛选用，持久化到 DB）
+        nullable: true
 
   BillingRecord:
     table: billing_records

@@ -120,22 +120,31 @@ const routes = [
         meta: { title: 'API Key 管理' },
       },
       {
+        // 运行时监控：原「性能监控 / 队列监控 / 缓存监控」三页合并为一个 Tabs 页面（懒加载）
+        path: 'monitor',
+        name: 'AdminMonitor',
+        component: () => import('../views/admin/MonitorView.vue'),
+        meta: { title: '运行时监控' },
+      },
+      {
+        // 定时任务：从仪表盘拆出的配置类页面
+        path: 'cron',
+        name: 'AdminCron',
+        component: () => import('../views/admin/CronView.vue'),
+        meta: { title: '定时任务' },
+      },
+      // 旧入口保留重定向，避免书签 / 文档 / 告警链接失效
+      {
+        path: 'performance',
+        redirect: { path: '/admin/monitor', query: { tab: 'performance' } },
+      },
+      {
         path: 'queue',
-        name: 'AdminQueue',
-        component: () => import('../views/admin/QueueView.vue'),
-        meta: { title: '队列监控' },
+        redirect: { path: '/admin/monitor', query: { tab: 'queue' } },
       },
       {
         path: 'cache',
-        name: 'AdminCache',
-        component: () => import('../views/admin/CacheView.vue'),
-        meta: { title: '缓存监控' },
-      },
-      {
-        path: 'performance',
-        name: 'AdminPerformance',
-        component: () => import('../views/admin/PerformanceView.vue'),
-        meta: { title: '性能监控' },
+        redirect: { path: '/admin/monitor', query: { tab: 'cache' } },
       },
       {
         path: 'settings',

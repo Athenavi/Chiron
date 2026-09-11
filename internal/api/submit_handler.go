@@ -92,11 +92,16 @@ func (h *SubmitHandler) HandleSubmit(ctx context.Context, userID, sessionID, con
 		defer sessionCancels.Delete(sessionID)
 	}
 
-	// 落库专用 ctx：不继承主 ctx 的取消/超时。
-	// 流可能被 180s 超时、前端断开、会话取消等截断，但已产生的消息
-	// （user/assistant/tool_call）必须写入，否则刷新后对话丢失。
-	storeCtx, storeCancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-	defer storeCancel()
+	// 落库专用 ctx 工厂（S 修复）：不继承主 ctx 的取消/期限 —— 流可能被超时、前端断开、
+	// 会话取消等截断，但已产生的消息（user/assistant/tool_call）必须写入，否则刷新后丢失。
+	//
+	// 关键：超时窗口必须从「每次落库那一刻」开始计时。此前只在回合开始时创建一个 10s
+	// 窗口，任何长于 10s 的回合（多轮 LLM + 工具调用是常态）都会让之后的落库全部
+	// `context deadline exceeded` —— 表现为思考过程、工具调用与助手回复刷新/重启后全丢。
+	const storeWriteTimeout = 10 * time.Second
+	storeCtxFor := func() (context.Context, context.CancelFunc) {
+		return context.WithTimeout(context.WithoutCancel(ctx), storeWriteTimeout)
+	}
 
 	// turn 一致性（000.md 第 14 条）：本轮回合 ID，贯穿消息/工具调用/计费落库，
 	// 收尾时收敛 turns 状态（completed/failed/cancelled），不再"只记日志"。
@@ -106,9 +111,13 @@ func (h *SubmitHandler) HandleSubmit(ctx context.Context, userID, sessionID, con
 		turnID = ""
 	}
 	// S 修复：上下文丢失 — 提交时立即持久化用户消息（SSE 中断/停止也不丢历史）
-	h.sessionMgr.SaveUserMessage(storeCtx, sessionID, userID, content, turnID)
-	if turnID != "" {
-		h.sessionMgr.CreateTurn(storeCtx, turnID, sessionID, userID)
+	{
+		sctx, cancelStore := storeCtxFor()
+		h.sessionMgr.SaveUserMessage(sctx, sessionID, userID, content, turnID)
+		if turnID != "" {
+			h.sessionMgr.CreateTurn(sctx, turnID, sessionID, userID)
+		}
+		cancelStore()
 	}
 
 	histMsgs := make([]map[string]string, 0)
@@ -185,6 +194,31 @@ func (h *SubmitHandler) HandleSubmit(ctx context.Context, userID, sessionID, con
 		lastTextFlush = time.Now()
 	}
 
+	// ── 增量落库 ──
+	// 回合进行中把已产生的思考块/正文/工具调用按节流写进同一条 assistant 消息，
+	// 使刷新、断线、网关重启后都能看到已完成的部分；回合结束时用同一 id 定型，不产生重复行。
+	// 此前只在回合结束才落库：长回合（多轮工具调用，常达数分钟）进行中刷新会看到"什么都没有"。
+	assistantMsgID, msgIDErr := id.UUID()
+	if msgIDErr != nil {
+		slog.Warn("submit: generate assistant message id failed", "error", msgIDErr)
+		assistantMsgID = ""
+	}
+	const draftInterval = 3 * time.Second
+	lastDraftAt := time.Now()
+	saveDraft := func(force bool) {
+		if assistantMsgID == "" {
+			return
+		}
+		if !force && time.Since(lastDraftAt) < draftInterval {
+			return
+		}
+		lastDraftAt = time.Now()
+		tcJSON, _ := json.Marshal(turnToolCallIDs)
+		sctx, cancelStore := storeCtxFor()
+		h.sessionMgr.UpsertAssistantMessage(sctx, sessionID, assistantMsgID, finalContent, string(tcJSON), turnID)
+		cancelStore()
+	}
+
 	for evt := range events {
 		// 思考事件（[thinking] 前缀）不参与合帧：过程性内容需即时逐段推送，
 		// 否则毫秒级到达的 thinking 片段会被 50ms 合帧合并成整段（思考不流式）。
@@ -205,20 +239,33 @@ func (h *SubmitHandler) HandleSubmit(ctx context.Context, userID, sessionID, con
 			}
 			h.eventHub.Publish(broadcast.Event{Type: evt.Type, SessionID: sessionID, Data: evt})
 		}
-		// S 修复：工具调用过程落库（tool_call 记录 + tool_result 回填），刷新后显示一致
+		// S 修复：工具调用过程落库（tool_call 记录 + tool_result 回填），刷新后显示一致。
+		// 每次写入都用独立的短超时（storeCtxFor），避免回合跑久后写入被 deadline 掐掉。
 		switch evt.Type {
 		case "tool_call":
-			h.sessionMgr.SaveToolCall(storeCtx, sessionID, evt.ID, evt.Name, evt.Arguments, turnID)
+			{
+				sctx, cancelStore := storeCtxFor()
+				h.sessionMgr.SaveToolCall(sctx, sessionID, evt.ID, evt.Name, evt.Arguments, turnID)
+				cancelStore()
+			}
 			if evt.ID != "" {
 				turnToolCallIDs = append(turnToolCallIDs, evt.ID)
 			}
 		case "tool_result":
-			h.sessionMgr.UpdateToolCall(storeCtx, evt.ID, evt.Content, strings.Contains(evt.Content, `"error"`), turnID)
+			{
+				sctx, cancelStore := storeCtxFor()
+				h.sessionMgr.UpdateToolCall(sctx, evt.ID, evt.Content, strings.Contains(evt.Content, `"error"`), turnID)
+				cancelStore()
+			}
 		case "guardrail_blocked":
 			// SaaS 合规：栅栏拒绝留痕（输入注入/输出泄露/工具 block 审计）
-			h.sessionMgr.SaveToolCall(storeCtx, sessionID,
-				"guard_"+evt.ID, "guardrail",
-				fmt.Sprintf(`{"reason":%q}`, evt.Content), turnID)
+			{
+				sctx, cancelStore := storeCtxFor()
+				h.sessionMgr.SaveToolCall(sctx, sessionID,
+					"guard_"+evt.ID, "guardrail",
+					fmt.Sprintf(`{"reason":%q}`, evt.Content), turnID)
+				cancelStore()
+			}
 		case "error":
 			// 引擎侧异常：记录原因，回合终态判为 failed（000.md 第 14 条：失败不再静默）
 			streamErr = evt.Content
@@ -229,21 +276,34 @@ func (h *SubmitHandler) HandleSubmit(ctx context.Context, userID, sessionID, con
 		if evt.OutputTokens > 0 {
 			outputTokens += evt.OutputTokens
 		}
+		// 增量落库：工具事件是关键节点，立即写；其余事件走 3s 节流
+		saveDraft(evt.Type == "tool_call" || evt.Type == "tool_result" || evt.Type == "guardrail_blocked")
 	}
 	flushText() // 流结束兜底冲刷
+	saveDraft(true) // 定型：覆盖正常结束、被取消、断线等所有路径
 
-	// 可观测性：区分正常结束与中断（前端断开 / 会话取消 / 180s 超时）。
-	// 取消时已产生的事件仍已落库与计费（storeCtx 为 WithoutCancel），此处仅记录原因。
+	// 可观测性：区分正常结束与中断（前端断开 / 会话取消 / DefaultAgentTimeout 超时）。
+	// 取消时已产生的事件仍会落库与计费（落库用 storeCtxFor 的独立上下文），此处仅记录原因。
 	if err := ctx.Err(); err != nil {
 		slog.Info("submit stream ended with cancellation",
 			"session_id", sessionID, "error", err)
 	}
 
+	// 收尾落库/计费：用「从现在起算」的独立短超时上下文。
+	// 不能用回合开始时创建的窗口 —— 回合通常远超 10s，那会让这里的写入全部超时。
+	storeCtx, storeCancel := storeCtxFor()
+	defer storeCancel()
+
 	if finalContent != "" || len(turnToolCallIDs) > 0 {
-		// S 修复：纯工具调用轮（无文本）也保存 assistant 消息；
-		// messages.tool_calls 列只存 id 集合（内容在 tool_calls 表，避免重复存储）
+		// 纯工具调用轮（无文本）也保存 assistant 消息；
+		// messages.tool_calls 列只存 id 集合（内容在 tool_calls 表，避免重复存储）。
+		// 复用增量落库的 message id：收尾只更新同一行，不新增重复消息。
 		toolCallsJSON, _ := json.Marshal(turnToolCallIDs)
-		h.sessionMgr.SaveAssistantMessage(storeCtx, sessionID, finalContent, string(toolCallsJSON), turnID)
+		if assistantMsgID != "" {
+			h.sessionMgr.UpsertAssistantMessage(storeCtx, sessionID, assistantMsgID, finalContent, string(toolCallsJSON), turnID)
+		} else {
+			h.sessionMgr.SaveAssistantMessage(storeCtx, sessionID, finalContent, string(toolCallsJSON), turnID)
+		}
 	} else {
 		// 无文本无工具：仅用户消息已由 SaveUserMessage 持久化
 	}

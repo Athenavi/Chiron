@@ -108,6 +108,10 @@ type Config struct {
 	AgentMaxTokens      int // max output tokens per LLM call (default 8192)
 	AgentContextLimit   int // max messages before pruning (default 20)
 	AgentMaxConcurrency int // max concurrent agent runs (default 20)
+	// AgentSubmitTimeout 单次提交（一条 SSE 回合）在网关侧的后台执行上限。
+	// 必须 >= api.DefaultAgentTimeout（300s）：曾经硬编码 180s，比它短，
+	// 长回合（多轮工具调用）必然被提前取消，表现为"思考/工具调用做一半就断"。
+	AgentSubmitTimeout time.Duration
 
 	// Python AI 引擎
 	PythonEngineAddress string // HTTP 地址，如 "localhost:8000"
@@ -223,6 +227,8 @@ func loadConfig() *Config {
 		AgentMaxTokens:        getInt("AGENT_MAX_TOKENS", 8192),
 		AgentContextLimit:     getInt("AGENT_CONTEXT_LIMIT", 20),
 		AgentMaxConcurrency:   getInt("AGENT_MAX_CONCURRENCY", 20),
+		// 默认 5 分钟，与 api.DefaultAgentTimeout 对齐（env AGENT_SUBMIT_TIMEOUT 可调大）
+		AgentSubmitTimeout: getDuration("AGENT_SUBMIT_TIMEOUT", 5*time.Minute),
 
 		PythonEngineAddress: getEnv("PYTHON_ENGINE_ADDRESS", "localhost:8000"),
 		PythonEngineTimeout: getDuration("PYTHON_ENGINE_TIMEOUT", 5*time.Minute),

@@ -1,8 +1,10 @@
 package session
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
+	"time"
 )
 
 // 回归保护：tool_calls.input 是 jsonb 列，模型的 arguments 可能是空串（无参调用）
@@ -35,4 +37,78 @@ func TestNormalizeToolInput(t *testing.T) {
 			t.Errorf("normalizeToolInput(%q) 输出非法 JSON: %q", in, out)
 		}
 	}
+}
+
+// 回归保护：会话标签必须能落库（此前 tag 仅存前端 localStorage，刷新即丢）。
+// 置顶/标签都不该推进 updated_at（它们是列表偏好，不是会话活动），
+// 空标签要写 NULL（而不是空串），否则读取端会拿到 "" 与 null 两种“无标签”状态。
+func TestBuildSessionUpdate(t *testing.T) {
+	const id = "11111111-2222-3333-4444-555555555555"
+	now := time.Date(2026, 9, 11, 12, 0, 0, 0, time.UTC)
+	title := "新标题"
+	pinned := true
+	tag := "工作"
+	blank := ""
+
+	cases := []struct {
+		name     string
+		upd      SessionUpdate
+		wantSQL  string
+		wantArgs []interface{}
+	}{
+		{
+			name:     "仅置顶：不推进 updated_at",
+			upd:      SessionUpdate{Pinned: &pinned},
+			wantSQL:  `UPDATE sessions SET pinned = $1 WHERE id = $2`,
+			wantArgs: []interface{}{true, id},
+		},
+		{
+			name:     "仅标签",
+			upd:      SessionUpdate{Tag: &tag},
+			wantSQL:  `UPDATE sessions SET tag = NULLIF($1, '') WHERE id = $2`,
+			wantArgs: []interface{}{"工作", id},
+		},
+		{
+			name:     "空标签走 NULLIF（清除标签）",
+			upd:      SessionUpdate{Tag: &blank},
+			wantSQL:  `UPDATE sessions SET tag = NULLIF($1, '') WHERE id = $2`,
+			wantArgs: []interface{}{"", id},
+		},
+		{
+			name:     "标题+置顶+标签：占位符与参数严格对应",
+			upd:      SessionUpdate{Title: &title, Pinned: &pinned, Tag: &tag},
+			wantSQL:  `UPDATE sessions SET title = $1, updated_at = $2, pinned = $3, tag = NULLIF($4, '') WHERE id = $5`,
+			wantArgs: []interface{}{"新标题", now, true, "工作", id},
+		},
+	}
+	for _, c := range cases {
+		gotSQL, gotArgs := buildSessionUpdate(id, c.upd, now)
+		if gotSQL != c.wantSQL {
+			t.Errorf("%s: SQL = %q, want %q", c.name, gotSQL, c.wantSQL)
+		}
+		if len(gotArgs) != len(c.wantArgs) {
+			t.Fatalf("%s: args len = %d, want %d", c.name, len(gotArgs), len(c.wantArgs))
+		}
+		for i := range c.wantArgs {
+			if gotArgs[i] != c.wantArgs[i] {
+				t.Errorf("%s: args[%d] = %v, want %v", c.name, i, gotArgs[i], c.wantArgs[i])
+			}
+		}
+	}
+
+	if !(SessionUpdate{}).empty() {
+		t.Error("零值 SessionUpdate 应判定为 empty")
+	}
+	if (SessionUpdate{Tag: &tag}).empty() {
+		t.Error("只改 tag 不应判定为 empty")
+	}
+}
+
+// 增量落库会在流式过程中高频调用 UpsertAssistantMessage：
+// 无数据库连接或空 message id 时必须安全返回，不能 panic。
+func TestUpsertAssistantMessageGuards(t *testing.T) {
+	m := &Manager{}
+	m.UpsertAssistantMessage(context.Background(), "sess", "", "content", "[]", "turn")
+	m.UpsertAssistantMessage(context.Background(), "sess", "msg-id", "content", "[]", "turn")
+	m.UpsertAssistantMessage(context.Background(), "sess", "msg-id", "", "", "")
 }

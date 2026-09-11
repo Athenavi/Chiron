@@ -888,13 +888,24 @@ async function togglePin(id: string, pinned: boolean) {
   }
 }
 
-// 设置会话标签（前端 localStorage 持久化，无需后端支持）
-function setSessionTag(id: string, tag: string) {
+// 设置会话标签（DB 持久化：写 sessions.tag；失败回滚本地状态）
+// 注意：旧实现只写 localStorage，而 loadSessions 每次都用 API 数据覆盖 sessions 数组，
+// 刷新后标签必然丢失 —— 故必须落库。
+async function setSessionTag(id: string, tag: string) {
   const s = sessions.value.find(x => x.id === id)
   if (!s) return
+  const prev = s.tag
   s.tag = tag || undefined
-  persistSessions()
-  message.success(tag ? `已设置标签：${tag}` : '已清除标签')
+  sortSessions(); persistSessions()
+  try {
+    // 空串表示清除标签（后端 NULLIF 写 NULL）
+    await updateConversation(id, { tag: tag || '' })
+    message.success(tag ? `已设置标签：${tag}` : '已清除标签')
+  } catch {
+    s.tag = prev
+    sortSessions(); persistSessions()
+    message.error('标签保存失败')
+  }
 }
 
 // ── 分享（chat.deepseek.com/share/{id} 风格：选消息 → 生成链接 → 可取消） ──

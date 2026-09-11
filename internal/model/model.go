@@ -25,6 +25,7 @@ type Session struct {
 	UserID    string    `json:"user_id"`
 	Title     string    `json:"title"`
 	Pinned    bool      `json:"pinned"`
+	Tag       string    `json:"tag,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

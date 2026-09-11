@@ -385,7 +385,7 @@ func NewGatewayRouter(
 	// ── Route registration by functional domain ──
 
 	registerPublicEndpoints(mux, authMW, rlMW, publicMW, searchHandler, shareHandler, systemHandler, cfg)
-	registerAgentRoutes(mux, authMW, rlMW, publicMW, sanitizeMW, submitHandler, billingMgr, agentSem, eventHub, sessionMgr, authenticator, rpaHub, cfg.InternalToken)
+	registerAgentRoutes(mux, authMW, rlMW, publicMW, sanitizeMW, submitHandler, billingMgr, agentSem, eventHub, sessionMgr, authenticator, rpaHub, cfg.InternalToken, cfg.AgentSubmitTimeout)
 	registerAuthRoutes(mux, authHandler, authMW, rlMW)
 
 	// ── SSO 三方登录（公开流程 rlMW；用户自助 authMW；管理 authMW + sso:manage）──
@@ -557,6 +557,9 @@ func registerAgentRoutes(
 	authenticator *auth.Authenticator,
 	rpaHub *RPAHub,
 	internalToken string,
+	// submitTimeout 单次提交（一条 SSE 回合）的后台执行上限；
+	// 来自 config.AgentSubmitTimeout，<=0 时回退 DefaultAgentTimeout。
+	submitTimeout time.Duration,
 ) {
 	mux.Handle("POST /v1/agent/approval", authMW(rlMW(http.HandlerFunc(submitHandler.SubmitApproval))))
 
@@ -601,8 +604,16 @@ func registerAgentRoutes(
 		// 修复：后台任务不得挂在 r.Context() 上——202 响应返回后客户端连接可关闭/断开，
 		// 会立即取消整条 submit 链路（曾致 "request cancelled before attempt 1" 的
 		// "Service temporarily unavailable"）。WithoutCancel 保留 ctx 携带值（trace 等），
-		// 仅剥离取消/超时；下方 180s 独立超时兜底。
-		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 180*time.Second)
+		// 仅剥离取消/超时；下方独立超时兜底。
+		//
+		// 修复：此前硬编码 180s，比 api.DefaultAgentTimeout(300s) 更短，长回合
+		// （多轮 LLM + 工具调用）必然被提前取消，表现为"思考/工具调用做一半就断"。
+		// 现取配置项 AGENT_SUBMIT_TIMEOUT（默认 5 分钟），并兜底不低于 DefaultAgentTimeout。
+		limit := submitTimeout
+		if limit < DefaultAgentTimeout {
+			limit = DefaultAgentTimeout
+		}
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), limit)
 		// 批 E2：每次 run 唯一 token（锁归属校验：续期/释放均需匹配，防旧 run 误删新锁）
 		var rnd [12]byte
 		_, _ = rand.Read(rnd[:])

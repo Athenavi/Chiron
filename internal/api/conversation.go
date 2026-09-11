@@ -29,6 +29,7 @@ type Conversation struct {
 	ID        string     `json:"id"`
 	Title     string     `json:"title"`
 	Pinned    bool       `json:"pinned"`
+	Tag       string     `json:"tag,omitempty"` // 会话标签（前端分类筛选；DB 持久化）
 	CreatedAt time.Time  `json:"created_at"`
 	UpdatedAt time.Time  `json:"updated_at"`
 	Messages  []Message  `json:"messages,omitempty"`
@@ -77,6 +78,7 @@ func (h *ConversationHandler) List(w http.ResponseWriter, r *http.Request) {
 			ID:        s.ID,
 			Title:     s.Title,
 			Pinned:    s.Pinned,
+			Tag:       s.Tag,
 			CreatedAt: s.CreatedAt,
 			UpdatedAt: s.UpdatedAt,
 		})
@@ -152,6 +154,7 @@ func (h *ConversationHandler) Get(w http.ResponseWriter, r *http.Request) {
 		ID:        sess.ID,
 		Title:     sess.Title,
 		Pinned:    sess.Pinned,
+		Tag:       sess.Tag,
 		CreatedAt: sess.CreatedAt,
 		UpdatedAt: sess.UpdatedAt,
 		Messages:  make([]Message, 0),
@@ -251,7 +254,7 @@ func (h *ConversationHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	OK(w, map[string]string{"status": "deleted"})
 }
 
-// Update updates a session's title and/or pinned flag (session menu: 重命名/置顶).
+// Update updates a session's title / pinned flag / tag (session menu: 重命名/置顶/标签).
 func (h *ConversationHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
@@ -262,18 +265,28 @@ func (h *ConversationHandler) Update(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Title  *string `json:"title"`
 		Pinned *bool   `json:"pinned"`
+		Tag    *string `json:"tag"`
 	}
 	if err := DecodeJSON(w, r, &body); err != nil {
 		BadRequest(w, "invalid request")
 		return
 	}
-	if body.Title == nil && body.Pinned == nil {
-		BadRequest(w, "title or pinned is required")
+	if body.Title == nil && body.Pinned == nil && body.Tag == nil {
+		BadRequest(w, "title, pinned or tag is required")
 		return
 	}
 	if body.Title != nil && strings.TrimSpace(*body.Title) == "" {
 		BadRequest(w, "title is required")
 		return
+	}
+	if body.Tag != nil {
+		// 长度与 sessions.tag 列（varchar(64)）一致；trim 后空串表示清除标签
+		trimmed := strings.TrimSpace(*body.Tag)
+		if len([]rune(trimmed)) > 64 {
+			BadRequest(w, "tag is too long")
+			return
+		}
+		body.Tag = &trimmed
 	}
 
 	claims := auth.GetClaims(r.Context())
@@ -289,7 +302,11 @@ func (h *ConversationHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updated, err := h.sessionMgr.UpdateSession(r.Context(), id, body.Title, body.Pinned)
+	updated, err := h.sessionMgr.UpdateSession(r.Context(), id, session.SessionUpdate{
+		Title:  body.Title,
+		Pinned: body.Pinned,
+		Tag:    body.Tag,
+	})
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "update session failed")
 		return
@@ -299,6 +316,7 @@ func (h *ConversationHandler) Update(w http.ResponseWriter, r *http.Request) {
 		ID:        updated.ID,
 		Title:     updated.Title,
 		Pinned:    updated.Pinned,
+		Tag:       updated.Tag,
 		CreatedAt: updated.CreatedAt,
 		UpdatedAt: updated.UpdatedAt,
 	})

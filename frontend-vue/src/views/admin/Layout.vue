@@ -26,6 +26,7 @@ import {
   DatabaseOutlined,
   ThunderboltOutlined,
   SettingOutlined,
+  ClockCircleOutlined,
   BellOutlined,
   UserOutlined,
   LogoutOutlined,
@@ -76,15 +77,14 @@ const breadcrumbs = computed(() => {
   }))
 })
 
-// 菜单分组：总览监控 / 访问安全 / 系统 / 平台 四组，归类 19 项后台功能
+// 菜单分组：总览监控 / 访问安全 / 系统 / 平台 四组
 const menuGroups = computed(() => [
   {
     key: 'g-monitor', label: '总览监控',
     children: [
       { key: '/admin/dashboard', label: '仪表盘', icon: () => h(DashboardOutlined) },
-      { key: '/admin/performance', label: '性能监控', icon: () => h(ThunderboltOutlined) },
-      { key: '/admin/queue', label: '队列监控', icon: () => h(OrderedListOutlined) },
-      { key: '/admin/cache', label: '缓存监控', icon: () => h(DatabaseOutlined) },
+      // 原「性能监控 / 队列监控 / 缓存监控」三页已合并为运行时监控（Tabs）
+      { key: '/admin/monitor', label: '运行时监控', icon: () => h(ThunderboltOutlined) },
     ],
   },
   {
@@ -103,6 +103,8 @@ const menuGroups = computed(() => [
     key: 'g-system', label: '系统',
     children: [
       { key: '/admin/settings', label: '系统设置', icon: () => h(SettingOutlined) },
+      // 定时任务：原在仪表盘内，属配置类操作 → 归入系统组
+      { key: '/admin/cron', label: '定时任务', icon: () => h(ClockCircleOutlined) },
       { key: '/admin/tenants', label: '租户管理', icon: () => h(TeamOutlined) },
       { key: '/admin/redis', label: 'Redis 管理', icon: () => h(DatabaseOutlined) },
       { key: '/admin/database', label: '数据库管理', icon: () => h(DatabaseOutlined) },
