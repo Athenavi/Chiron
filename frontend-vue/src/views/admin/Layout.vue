@@ -22,7 +22,6 @@ import {
 import {
   DashboardOutlined,
   KeyOutlined,
-  OrderedListOutlined,
   DatabaseOutlined,
   ThunderboltOutlined,
   SettingOutlined,
@@ -31,11 +30,9 @@ import {
   UserOutlined,
   LogoutOutlined,
   TeamOutlined,
-  GlobalOutlined,
   SafetyOutlined,
   FileSearchOutlined,
   IdcardOutlined,
-  ClusterOutlined,
   WalletOutlined,
   ControlOutlined,
   ShopOutlined,
@@ -91,12 +88,12 @@ const menuGroups = computed(() => [
     key: 'g-access', label: '访问安全',
     children: [
       { key: '/admin/api-keys', label: 'API Key 管理', icon: () => h(KeyOutlined) },
-      { key: '/admin/roles', label: '角色管理', icon: () => h(IdcardOutlined) },
-      { key: '/admin/groups', label: '群组管理', icon: () => h(ClusterOutlined) },
-      { key: '/admin/oauth-providers', label: '三方登录与人机验证', icon: () => h(SafetyOutlined) },
-      { key: '/admin/privacy', label: '隐私模式管控', icon: () => h(SafetyOutlined) },
-      { key: '/admin/model-policy', label: '模型策略管控', icon: () => h(ControlOutlined) },
-      { key: '/admin/model-router', label: '模型路由管控', icon: () => h(ClusterOutlined) },
+      // 原「角色管理 + 群组管理」合并为权限与组织（Tabs）
+      { key: '/admin/access', label: '权限与组织', icon: () => h(IdcardOutlined) },
+      // 原「三方登录与人机验证 + 隐私模式管控」合并为认证与防护（Tabs）
+      { key: '/admin/identity', label: '认证与防护', icon: () => h(SafetyOutlined) },
+      // 原「模型策略管控 + 模型路由管控」合并为模型管控（Tabs）
+      { key: '/admin/models', label: '模型管控', icon: () => h(ControlOutlined) },
     ],
   },
   {
@@ -105,10 +102,10 @@ const menuGroups = computed(() => [
       { key: '/admin/settings', label: '系统设置', icon: () => h(SettingOutlined) },
       // 定时任务：原在仪表盘内，属配置类操作 → 归入系统组
       { key: '/admin/cron', label: '定时任务', icon: () => h(ClockCircleOutlined) },
-      { key: '/admin/tenants', label: '租户管理', icon: () => h(TeamOutlined) },
-      { key: '/admin/redis', label: 'Redis 管理', icon: () => h(DatabaseOutlined) },
-      { key: '/admin/database', label: '数据库管理', icon: () => h(DatabaseOutlined) },
-      { key: '/admin/domains', label: '域名管理', icon: () => h(GlobalOutlined) },
+      // 原「Redis 管理 + 数据库管理」合并为数据存储（Tabs）
+      { key: '/admin/datastores', label: '数据存储', icon: () => h(DatabaseOutlined) },
+      // 原「租户管理 + 域名管理」合并为租户与域名（Tabs）
+      { key: '/admin/tenancy', label: '租户与域名', icon: () => h(TeamOutlined) },
       { key: '/admin/audit', label: '操作审计', icon: () => h(FileSearchOutlined) },
     ],
   },

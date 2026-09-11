@@ -152,35 +152,19 @@ const routes = [
         component: () => import('../views/admin/SettingsView.vue'),
         meta: { title: '系统设置' },
       },
+      // ── 数据存储（原「Redis 管理」+「数据库管理」合并）──
       {
-        path: 'tenants',
-        name: 'AdminTenants',
-        component: () => import('../views/admin/TenantManagementView.vue'),
-        meta: { title: '租户管理' },
+        path: 'datastores',
+        name: 'AdminDataStores',
+        component: () => import('../views/admin/DataStoresView.vue'),
+        meta: { title: '数据存储' },
       },
+      // ── 租户与域名（原「租户管理」+「域名管理」合并）──
       {
-        path: 'redis',
-        name: 'AdminRedis',
-        component: () => import('../views/admin/RedisManagementView.vue'),
-        meta: { title: 'Redis 管理' },
-      },
-      {
-        path: 'database',
-        name: 'AdminDatabase',
-        component: () => import('../views/admin/DatabaseManagementView.vue'),
-        meta: { title: '数据库管理' },
-      },
-      {
-        path: 'domains',
-        name: 'AdminDomains',
-        component: () => import('../views/admin/DomainManagementView.vue'),
-        meta: { title: '域名管理' },
-      },
-      {
-        path: 'oauth-providers',
-        name: 'AdminOAuthProviders',
-        component: () => import('../views/admin/OAuthProvidersView.vue'),
-        meta: { title: '三方登录与人机验证' },
+        path: 'tenancy',
+        name: 'AdminTenancy',
+        component: () => import('../views/admin/TenancyView.vue'),
+        meta: { title: '租户与域名' },
       },
       {
         path: 'audit',
@@ -188,41 +172,34 @@ const routes = [
         component: () => import('../views/admin/AuditView.vue'),
         meta: { title: '操作审计' },
       },
+      // ── 访问安全 ──
       {
-        path: 'roles',
-        name: 'AdminRoles',
-        component: () => import('../views/admin/RolesView.vue'),
-        meta: { title: '角色管理' },
+        // 角色 + 群组合并
+        path: 'access',
+        name: 'AdminAccess',
+        component: () => import('../views/admin/AccessView.vue'),
+        meta: { title: '权限与组织' },
       },
       {
-        path: 'groups',
-        name: 'AdminGroups',
-        component: () => import('../views/admin/GroupsView.vue'),
-        meta: { title: '群组管理' },
+        // 三方登录与人机验证 + 隐私模式管控合并
+        path: 'identity',
+        name: 'AdminIdentity',
+        component: () => import('../views/admin/IdentityView.vue'),
+        meta: { title: '认证与防护' },
       },
+      {
+        // 模型策略 + 模型路由合并
+        path: 'models',
+        name: 'AdminModels',
+        component: () => import('../views/admin/ModelGovernanceView.vue'),
+        meta: { title: '模型管控' },
+      },
+      // ── 平台 ──
       {
         path: 'costcenter',
         name: 'AdminCostCenter',
         component: () => import('../views/admin/CostCenterView.vue'),
         meta: { title: '成本中心' },
-      },
-      {
-        path: 'privacy',
-        name: 'AdminPrivacy',
-        component: () => import('../views/admin/PrivacyView.vue'),
-        meta: { title: '隐私模式管控' },
-      },
-      {
-        path: 'model-policy',
-        name: 'AdminModelPolicy',
-        component: () => import('../views/admin/ModelPolicyView.vue'),
-        meta: { title: '模型策略管控' },
-      },
-      {
-        path: 'model-router',
-        name: 'AdminModelRouter',
-        component: () => import('../views/admin/ModelRouterView.vue'),
-        meta: { title: '模型路由管控' },
       },
       {
         path: 'market',
@@ -231,17 +208,28 @@ const routes = [
         meta: { title: '企业能力市场' },
       },
       {
-        path: 'api-docs',
-        name: 'AdminApiDocs',
-        component: () => import('../views/admin/ApiDocsView.vue'),
-        meta: { title: 'API 文档' },
-      },
-      {
         path: 'eval',
         name: 'AdminEval',
         component: () => import('../views/admin/EvalView.vue'),
         meta: { title: 'Agent 评估' },
       },
+      {
+        path: 'api-docs',
+        name: 'AdminApiDocs',
+        component: () => import('../views/admin/ApiDocsView.vue'),
+        meta: { title: 'API 文档' },
+      },
+      // ── 旧入口重定向（书签 / 文档 / 告警链接兼容）──
+      { path: 'roles', redirect: { path: '/admin/access', query: { tab: 'roles' } } },
+      { path: 'groups', redirect: { path: '/admin/access', query: { tab: 'groups' } } },
+      { path: 'oauth-providers', redirect: { path: '/admin/identity', query: { tab: 'oauth' } } },
+      { path: 'privacy', redirect: { path: '/admin/identity', query: { tab: 'privacy' } } },
+      { path: 'model-policy', redirect: { path: '/admin/models', query: { tab: 'policy' } } },
+      { path: 'model-router', redirect: { path: '/admin/models', query: { tab: 'routing' } } },
+      { path: 'redis', redirect: { path: '/admin/datastores', query: { tab: 'redis' } } },
+      { path: 'database', redirect: { path: '/admin/datastores', query: { tab: 'database' } } },
+      { path: 'tenants', redirect: { path: '/admin/tenancy', query: { tab: 'tenants' } } },
+      { path: 'domains', redirect: { path: '/admin/tenancy', query: { tab: 'domains' } } },
     ],
   },
   // 404 兜底：避免未知地址白屏

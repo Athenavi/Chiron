@@ -63,11 +63,13 @@ func (h *AdminHandler) RegisterRoutes(r *http.ServeMux) {
 	r.HandleFunc("PUT /redis", h.UpdateRedis)
 	r.HandleFunc("POST /redis/test", h.TestRedis)
 
-	// 新增端点：队列管�?	r.HandleFunc("GET /queue", h.GetQueueStats)
+	// 新增端点：队列管理
+	r.HandleFunc("GET /queue", h.GetQueueStats)
 	r.HandleFunc("POST /queue/flush", h.FlushQueue)
 	r.HandleFunc("POST /queue/pause", h.PauseQueue)
 
-	// 新增端点：缓存监�?	r.HandleFunc("GET /cache/stats", h.GetCacheStats)
+	// 新增端点：缓存监控
+	r.HandleFunc("GET /cache/stats", h.GetCacheStats)
 
 	// 新增端点：性能监控
 	r.HandleFunc("GET /performance", h.GetPerformance)
@@ -80,7 +82,8 @@ func (h *AdminHandler) RegisterRoutes(r *http.ServeMux) {
 	r.HandleFunc("PUT /api-keys/{id}", h.UpdateApiKey)
 	r.HandleFunc("DELETE /api-keys/{id}", h.DeleteApiKey)
 
-	// 新增端点：系统设�?	r.HandleFunc("PUT /settings", h.SaveSettings)
+	// 新增端点：系统设置
+	r.HandleFunc("PUT /settings", h.SaveSettings)
 	r.HandleFunc("GET /settings", h.GetSettings)
 }
 
@@ -463,7 +466,8 @@ func (h *AdminHandler) RestoreBackup(w http.ResponseWriter, r *http.Request) {
 	}
 	tmpFile.Close()
 	if written >= maxSize {
-		// 已读满限流器，可能有更多数据被截�?		BadRequest(w, "backup file too large (max 512MB)")
+		// 已读满限流器，可能有更多数据被截断
+		BadRequest(w, "backup file too large (max 512MB)")
 		return
 	}
 
