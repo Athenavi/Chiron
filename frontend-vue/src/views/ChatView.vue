@@ -5,7 +5,7 @@ import { MenuOutlined, CopyOutlined, LinkOutlined, CloseOutlined } from '@ant-de
 import {
   api, createSSEConnection, submitApproval,
   updateConversation, createShare, getActiveShare, revokeShare,
-  getChatSessionMessages, resolveMediaUrl,
+  getChatSessionMessages, resolveMediaUrl, getSessionMode, setSessionMode,
 } from '../api'
 import type { ShareInfo } from '../api'
 import { useAuthStore } from '../stores/auth'
@@ -45,8 +45,36 @@ interface PendingApproval {
   id: string
   toolName: string
   arguments: string
+  /** 审批截止时间（ms）：与后端 300s 超时对齐，用于卡片倒计时与过期清理 */
+  expiresAt?: number
 }
 const pendingApprovals = ref<PendingApproval[]>([])
+// 审批卡片倒计时：approval 事件到达时记录截止时间（后端 _await_approval 默认 300s，
+// 超时按"拒绝"处理），前端展示剩余时间并在过期后移除卡片。
+const approvalTick = ref(0)
+const APPROVAL_TIMEOUT_MS = 300_000
+let approvalTimer: ReturnType<typeof setInterval> | null = null
+
+function approvalRemain(a: any): number {
+  void approvalTick.value // 依赖 tick 触发重算
+  if (!a?.expiresAt) return 0
+  return Math.max(0, Math.ceil((a.expiresAt - Date.now()) / 1000))
+}
+
+function ensureApprovalTimer() {
+  if (approvalTimer) return
+  approvalTimer = setInterval(() => {
+    approvalTick.value++
+    const now = Date.now()
+    pendingApprovals.value = pendingApprovals.value.filter(
+      (p) => !(p as any).expiresAt || (p as any).expiresAt > now,
+    )
+    if (pendingApprovals.value.length === 0 && approvalTimer) {
+      clearInterval(approvalTimer)
+      approvalTimer = null
+    }
+  }, 1000)
+}
 
 async function resolveApproval(a: PendingApproval, approved: boolean) {
   try {
@@ -59,6 +87,50 @@ async function resolveApproval(a: PendingApproval, approved: boolean) {
     // 静默失败
   } finally {
     pendingApprovals.value = pendingApprovals.value.filter(p => p.id !== a.id)
+  }
+}
+
+// ── 工具授权模式（ask/auto/yolo）──────────────────────────────────────────
+// 与下方「对话模式」(mode: normal/minimal/ptc/creative) 是两个不同维度：
+// 本项控制**工具执行是否需要用户确认**，状态存后端 Redis（多副本一致），
+// 实际判定在 Python 侧 guards.py（模式读取失败会 fail-safe 到最严格的 ask）。
+const toolsMode = ref<'ask' | 'auto' | 'yolo'>('auto')
+const toolsModeOptions = [
+  { label: '询问', value: 'ask' },
+  { label: '自动', value: 'auto' },
+  { label: '全自动', value: 'yolo' },
+]
+
+async function loadToolsMode(sessionId: string) {
+  if (!sessionId) {
+    toolsMode.value = 'auto'
+    return
+  }
+  try {
+    const m = await getSessionMode(sessionId)
+    if (m === 'ask' || m === 'auto' || m === 'yolo') toolsMode.value = m
+  } catch {
+    // 读取失败：界面保持 auto；判定侧会按 fail-safe 取最严格模式
+  }
+}
+
+async function onToolsModeChange(v: any) {
+  const m = String(v) as 'ask' | 'auto' | 'yolo'
+  toolsMode.value = m
+  const sid = activeSessionId.value
+  if (!sid) {
+    message.warning('请先创建或选择会话，再设置工具授权模式')
+    return
+  }
+  try {
+    await setSessionMode(sid, m)
+    message.success(
+      m === 'yolo'
+        ? '已切换为全自动：跳过工具确认（该操作会留审计）'
+        : `工具授权模式已设为「${toolsModeOptions.find(o => o.value === m)?.label || m}」`,
+    )
+  } catch {
+    message.error('工具授权模式保存失败')
   }
 }
 
@@ -674,6 +746,8 @@ async function switchSession(id: string) {
   if (id === activeSessionId.value) return
   const mySeq = ++switchSeq.value
   activeSessionId.value = id; items.value = []; loading.value = true
+  // 工具授权模式是会话级状态（存后端 Redis）：切会话时同步拉取，避免沿用上一个会话的模式
+  void loadToolsMode(id)
   hasMore.value = false; earliestCursor.value = ''; loadingEarlier.value = false
   initialLoading.value = true
   try {
@@ -1101,7 +1175,10 @@ function onSSEMessage(raw: any) {
       id: callId,
       toolName: d?.name ?? 'tool',
       arguments: d?.arguments ?? '',
-    })
+      // 倒计时：与后端 _await_approval 的 300s 超时对齐（超时按拒绝处理）
+      expiresAt: Date.now() + APPROVAL_TIMEOUT_MS,
+    } as PendingApproval)
+    ensureApprovalTimer()
   } else if (type === 'guardrail_blocked') {
     flushStreamingFlags()
     loading.value = false
@@ -1447,6 +1524,19 @@ function continueGeneration() {
         </template>
       </div>
 
+      <!-- 工具授权模式（ask/auto/yolo）：与「对话模式」(normal/minimal/ptc/creative) 是
+           两个不同维度 —— 本项控制工具执行是否需要用户确认，故独立成行不与之混放 -->
+      <div class="tools-mode-bar">
+        <span class="tools-mode-label">工具授权</span>
+        <a-segmented
+          :value="toolsMode"
+          :options="toolsModeOptions"
+          size="small"
+          @change="onToolsModeChange"
+        />
+        <span class="tools-mode-hint">询问=写类工具需确认 · 自动=仅危险工具 · 全自动=跳过确认</span>
+      </div>
+
       <div
         v-if="pendingApprovals.length"
         class="approval-zone"
@@ -1459,6 +1549,10 @@ function continueGeneration() {
           <div class="approval-info">
             <span class="approval-tag">工具确认</span>
             <span class="approval-name">{{ a.toolName }}</span>
+            <span
+              v-if="approvalRemain(a) > 0"
+              class="approval-countdown"
+            >{{ approvalRemain(a) }}s 后自动拒绝</span>
           </div>
           <div class="approval-args">
             {{ a.arguments }}
@@ -1698,6 +1792,12 @@ function continueGeneration() {
 }
 .approval-zone { padding: 0 20px 8px; display: flex; flex-direction: column; gap: 8px; }
 .approval-card { background: var(--bg-card); border: 1px solid var(--border); border-left: 3px solid var(--primary); border-radius: 10px; padding: 10px 14px; }
+/* 工具授权模式栏（与「对话模式」并列但语义独立的第二个维度） */
+.tools-mode-bar { display: flex; align-items: center; gap: 10px; padding: 6px 20px 0; flex-wrap: wrap; }
+.tools-mode-label { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.tools-mode-hint { font-size: 11px; color: var(--text-muted); }
+@media (max-width: 576px) { .tools-mode-bar { padding: 6px 12px 0; } .tools-mode-hint { display: none; } }
+.approval-countdown { margin-left: auto; font-size: 11px; color: var(--warning, #f59e0b); }
 .approval-info { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .approval-tag { font-size: 11px; color: var(--primary); background: var(--primary-bg); padding: 2px 8px; border-radius: 10px; }
 .approval-name { font-weight: 600; font-size: 13px; color: var(--text-primary); }

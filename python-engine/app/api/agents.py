@@ -93,3 +93,34 @@ async def dispatch_agent(body: AgentDispatchRequest) -> dict[str, Any]:
     from app.tools.agent import agent_dispatch
 
     return await agent_dispatch(task=body.task, agent_type=body.agent_type)
+
+
+class AgentApprovalRequest(BaseModel):
+    """工具审批决策请求（Go 网关 /v1/agent/approval 转发而来）。"""
+
+    tool_call_id: str
+    approved: bool
+    reason: str = ""
+    session_id: str = ""
+    user_id: str = ""
+
+
+@router.post("/v1/agent/approval")
+async def submit_agent_approval(body: AgentApprovalRequest) -> dict[str, Any]:
+    """处理工具审批决策（三态栅栏"确认"态的回调）。
+
+    多副本语义：优先唤醒**本实例**正在等待的 runtime（零延迟）；若本实例无人等待
+    （决策被路由到其它副本），则写 Redis 决策键，由正在等待的副本取走 ——
+    这样审批不再依赖会话亲和路由，副本扩缩容期间也能正确送达。
+    """
+    from app.agent.runtime import submit_approval_global
+
+    if not body.tool_call_id:
+        return {"ok": False, "error": "tool_call_id is required"}
+
+    ok = await submit_approval_global(body.tool_call_id, body.approved, body.reason)
+    return {
+        "ok": ok,
+        "tool_call_id": body.tool_call_id,
+        "approved": body.approved,
+    }

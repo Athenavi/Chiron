@@ -31,6 +31,20 @@ export async function updateConversation(id: string, patch: { title?: string; pi
   return data?.data
 }
 
+// ── 会话工具授权模式（ask/auto/yolo）──
+// 状态由后端存 Redis（多副本一致），判定在 Python 侧 guards.py：
+//   ask  = 写类工具（执行/文件写/git 写/浏览器与网络访问）需用户确认
+//   auto = 仅危险工具需确认（默认）
+//   yolo = 全部自动执行
+export async function getSessionMode(sessionId: string): Promise<string> {
+  const { data } = await api.get('/v1/mode', { params: { session_id: sessionId } })
+  return (data?.data?.mode ?? data?.mode ?? 'auto') as string
+}
+
+export async function setSessionMode(sessionId: string, mode: string): Promise<void> {
+  await api.post('/v1/mode', { session_id: sessionId, mode })
+}
+
 // ── Agents（DB 驱动：CRUD + 运行会话） ──
 export interface Agent {
   id: string

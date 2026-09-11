@@ -13,9 +13,12 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # ═══════════════════════════════ 输入栅栏 ═══════════════════════════════
 
@@ -84,6 +87,44 @@ DANGEROUS_TOOLS: frozenset[str] = frozenset(
     }
 )
 
+# 会话授权模式（与 Go 侧 ModeStore / 前端选择器一致）
+SESSION_MODE_ASK = "ask"
+SESSION_MODE_AUTO = "auto"
+SESSION_MODE_YOLO = "yolo"
+_VALID_SESSION_MODES = frozenset({SESSION_MODE_ASK, SESSION_MODE_AUTO, SESSION_MODE_YOLO})
+
+# ask 模式下需要用户确认的「写类工具」：执行类 + 文件写 + git 写 + 浏览器/网络访问类。
+# 口径比 DANGEROUS_TOOLS 更宽：凡对宿主或外部世界产生动作的都算。
+WRITE_TOOLS: frozenset[str] = frozenset(
+    {
+        # 执行类
+        "shell_exec",
+        "execute_command",
+        "persistent_shell",
+        "execute_python",
+        "run_code",
+        "skill_install",
+        # 文件写
+        "write_file",
+        "edit_file",
+        # git 写操作
+        "git_commit",
+        "git_branch",
+        # 浏览器交互
+        "browser_click",
+        "browser_type",
+        "browser_navigate",
+        "browser_refresh",
+        "browser_close",
+        # 网络访问
+        "web_fetch",
+        "web_search",
+        # 外部状态创建
+        "graph_create",
+        "agent_session_create",
+    }
+)
+
 
 @dataclass
 class ToolVerdict:
@@ -96,14 +137,24 @@ class ToolVerdict:
 
 
 class ToolGuard:
-    """工具栅栏：每次工具调用前评估，返回三态裁决。
+    """工具栅栏：每次工具调用前按会话授权模式评估，返回三态裁决。
 
-    优先级：secret 参数 → block；命令逃逸 → sanitize（替换为安全值）或 block；
-    危险工具 → confirm；其余 → allow。
+    模式语义（与 Go 侧 ModeStore、前端模式选择器一致）：
+    - ``ask`` ：WRITE_TOOLS（执行/文件写/git 写/浏览器与网络访问类）→ confirm
+    - ``auto``：DANGEROUS_TOOLS → confirm（默认）
+    - ``yolo``：全部放行
+
+    **安全底线**：无论哪种模式，参数级硬拦截（secret 参数、绝对路径/父目录逃逸）始终生效 ——
+    yolo 只放开"是否需要用户确认"，不放行泄露密钥或逃逸沙箱的调用。
     """
 
-    def evaluate(self, tool_name: str, args: dict[str, Any]) -> ToolVerdict:
-        # 1. secret 参数 → 直接拒绝
+    def evaluate(
+        self,
+        tool_name: str,
+        args: dict[str, Any],
+        mode: str = SESSION_MODE_AUTO,
+    ) -> ToolVerdict:
+        # 1. secret 参数 → 直接拒绝（与模式无关）
         for key, value in (args or {}).items():
             if isinstance(value, str):
                 for pat in _SECRET_RES:
@@ -114,8 +165,7 @@ class ToolGuard:
                             risk_level="high",
                         )
 
-        # 2. 命令/路径逃逸 → 替换或拒绝
-        sanitized: dict[str, Any] | None = None
+        # 2. 命令/路径逃逸 → 直接拒绝（与模式无关）
         for key in ("command", "path", "root", "cwd"):
             value = args.get(key)
             if not isinstance(value, str) or not value:
@@ -129,11 +179,15 @@ class ToolGuard:
                     risk_level="high",
                 )
 
-        # 3. 危险工具 → 需要用户确认
-        if tool_name in DANGEROUS_TOOLS:
+        # 3. 按模式决定是否需要用户确认
+        if mode == SESSION_MODE_YOLO:
+            return ToolVerdict("allow", risk_level="low")
+
+        confirm_set = WRITE_TOOLS if mode == SESSION_MODE_ASK else DANGEROUS_TOOLS
+        if tool_name in confirm_set:
             return ToolVerdict(
                 "confirm",
-                reason=f"tool '{tool_name}' requires user approval",
+                reason=f"tool '{tool_name}' requires user approval (mode={mode})",
                 risk_level="high",
             )
 
@@ -197,3 +251,42 @@ class OutputGuard:
     def reset(self) -> None:
         self.hits.clear()
         self._blocked = False
+
+
+# ═══════════════════════ 会话授权模式读取（多副本共享） ═══════════════════════
+
+
+async def load_session_mode(tenant_id: str, session_id: str) -> str:
+    """从 Redis 读取会话授权模式（由 Go 网关的 /v1/mode 写入）。
+
+    键与 Go 侧 ``db.RedisKey`` 同源：``{REDIS_KEY_PREFIX}session:mode:{tenant}:{session}``。
+
+    **fail-safe（关键安全设计）**：Redis 不可用 / 键不存在 / 值非法时返回 ``ask``（最严格）——
+    宁可让用户多确认几次，也绝不在"模式状态未知"时按 yolo 静默放开全部工具。
+    唯一的例外是"键确实不存在"，此时返回 ``auto``（与 Go 侧 DefaultSessionMode 一致，
+    保持未设置模式的历史行为）。
+    """
+    if not session_id:
+        return SESSION_MODE_ASK
+    try:
+        from app.redis_client import get_redis
+        from app.redis_keys import rkey
+
+        redis = await get_redis()
+        if redis is None:
+            logger.warning("session mode lookup skipped (redis unavailable) -> ask")
+            return SESSION_MODE_ASK
+
+        raw = await redis.get(
+            rkey(f"session:mode:{tenant_id or 'default'}:{session_id}")
+        )
+        if raw is None:
+            return SESSION_MODE_AUTO  # 未设置 = 默认 auto
+        mode = raw.decode() if isinstance(raw, (bytes, bytearray)) else str(raw)
+        if mode in _VALID_SESSION_MODES:
+            return mode
+        logger.warning("session mode %r invalid -> ask", mode)
+        return SESSION_MODE_ASK
+    except Exception as e:  # noqa: BLE001 - 读取失败必须 fail-safe 到最严格模式
+        logger.warning("session mode lookup failed (%s) -> ask", e)
+        return SESSION_MODE_ASK

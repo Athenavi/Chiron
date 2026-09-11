@@ -32,6 +32,10 @@ TOOL_RESULT_MAX_CHARS = 16000  # 增加到 16K chars (原 8K)
 TOOL_RESULT_HEAD = 2000  # head 保留长度
 TOOL_RESULT_TAIL = 1000  # tail 保留长度
 
+#: 跨副本审批决策键的 TTL（秒）：与 _await_approval 的默认 timeout 对齐。
+#: 超时后键自动过期，避免残留决策被后续同 id 的调用误取（单次消费由 GET+DEL 保证）。
+APPROVAL_TTL_SECONDS = 300.0
+
 
 @dataclass(frozen=True)
 class CompactionConfig:
@@ -436,13 +440,21 @@ class AgentRuntime:
         self._session_store = session_store
         self._memory = memory  # MemoryService | None（None 时行为不变）
         # 三栅栏（S 安全修复：输入/工具/输出）
-        from app.agent.guards import InputGuard, OutputGuard, ToolGuard
+        from app.agent.guards import (
+            SESSION_MODE_AUTO,
+            InputGuard,
+            OutputGuard,
+            ToolGuard,
+        )
 
         self._input_guard = InputGuard()
         self._tool_guard = ToolGuard()
         self._output_guard = OutputGuard(max_hits=3)
         # 待确认工具调用 future（外部经 submit_approval 解决）
         self._pending_approvals: dict[str, asyncio.Future] = {}
+        # 会话授权模式（ask/auto/yolo）：任务开始时从 Redis 读取一次并缓存，
+        # 供每次工具调用裁决使用（读取失败的 fail-safe 语义见 guards.load_session_mode）
+        self._current_mode: str = SESSION_MODE_AUTO
         # Trace writer 引用 (延迟初始化)
         self._trace_writer = None
 
@@ -473,6 +485,16 @@ class AgentRuntime:
 
         # ── 0.5 生成 trace_id (跨实例链路追踪) ───────────────────────────
         trace_id = uuid_mod.uuid4().hex[:12]
+
+        # ── 0.4 会话授权模式（任务级缓存）────────────────────────────────
+        # 模式由 Go 网关写入 Redis（/v1/mode），此处仅在任务开始时读取一次并缓存。
+        # 读取失败 fail-safe 到 ask（最严格），避免"模式未知"时按 yolo 静默放开全部工具。
+        from app.agent.guards import load_session_mode
+
+        if task.session_id:
+            self._current_mode = await load_session_mode(
+                task.tenant_id, task.session_id
+            )
 
         # ── 0. 输入栅栏：注入检测（S 安全修复）────────────────────────────
         injection = self._input_guard.check(task.content)
@@ -1131,7 +1153,7 @@ class AgentRuntime:
             )
         except (json.JSONDecodeError, TypeError):
             targs = {}
-        verdict = self._tool_guard.evaluate(tool_name, targs or {})
+        verdict = self._tool_guard.evaluate(tool_name, targs or {}, self._current_mode)
         if verdict.action == "block":
             logger.warning("Tool guard blocked %s reason=%s", tool_name, verdict.reason)
             return {
@@ -1163,37 +1185,123 @@ class AgentRuntime:
     async def _await_approval(
         self, tool_call: dict, task: AgentTask, timeout: float = 300.0
     ) -> dict:
-        """等待用户对确认工具调用的决定（前端经 /v1/agent/approval 解决 future）。
+        """等待用户对确认工具调用的决定（前端经 /v1/agent/approval → 本方法）。
 
         必须在 yield approval 事件**之后**调用；批准后执行工具，拒绝/超时返回错误。
+
+        多副本：本实例的 Future 只在"审批决定恰好回到本副本"时命中。为摆脱对会话亲和路由的
+        依赖（副本扩缩容会导致亲和漂移、审批静默超时），这里同时等待两条通道：
+        1. 本地 Future —— 同副本命中，零延迟；
+        2. Redis 决策键 ``{prefix}approval:{tool_call_id}`` —— 任意副本写入，单次消费（GET+DEL）。
+        先到者胜；超时仍视为拒绝（与单副本语义一致）。
         """
         tool_name = tool_call.get("name", "")
         tc_id = tool_call.get("id") or tool_name
         future = self._pending_approvals.get(tc_id)
         if future is None:
             return {"error": f"Tool '{tool_name}' approval state missing"}
+
+        # 注册到进程内注册表：让 HTTP 审批端点（可能由任意请求触发）能定位到本实例
+        register_pending_approval(tc_id, self)
         try:
-            approved = await asyncio.wait_for(future, timeout=timeout)
-        except asyncio.TimeoutError:
-            logger.warning("Tool %s approval timed out (id=%s)", tool_name, tc_id)
-            return {"error": f"Tool '{tool_name}' approval timed out"}
+            approved = await self._wait_approval_decision(tc_id, future, timeout)
         finally:
             self._pending_approvals.pop(tc_id, None)
+            unregister_pending_approval(tc_id)
+
+        if approved is None:
+            logger.warning("Tool %s approval timed out (id=%s)", tool_name, tc_id)
+            return {"error": f"Tool '{tool_name}' approval timed out"}
         if not approved:
             logger.info("Tool %s denied by user (id=%s)", tool_name, tc_id)
             return {"error": f"Tool '{tool_name}' denied by user"}
         logger.info("Tool %s approved by user (id=%s)", tool_name, tc_id)
         return await self._execute_tool(tool_call, task)
 
+    async def _wait_approval_decision(
+        self, tc_id: str, future: asyncio.Future, timeout: float
+    ) -> Optional[bool]:
+        """本地 Future 与 Redis 决策键竞争，返回 True/False；超时返回 None。"""
+        poll = asyncio.create_task(self._poll_remote_decision(tc_id, timeout))
+        waiters: list[asyncio.Future] = [poll, asyncio.ensure_future(future)]
+        try:
+            done, _pending = await asyncio.wait(
+                waiters, return_when=asyncio.FIRST_COMPLETED
+            )
+        finally:
+            for w in waiters:
+                if not w.done():
+                    w.cancel()
+        for w in done:
+            try:
+                res = w.result()
+            except Exception:  # noqa: BLE001 - 单通道异常不应中断审批
+                continue
+            if isinstance(res, bool):
+                return res
+        return None
+
+    async def _poll_remote_decision(
+        self, tc_id: str, timeout: float, interval: float = 0.15
+    ) -> Optional[bool]:
+        """轮询 Redis 决策键（跨副本通道）；命中即取走（单次消费）。超时返回 None。"""
+        deadline = asyncio.get_running_loop().time() + timeout
+        try:
+            from app.redis_client import get_redis
+            from app.redis_keys import rkey
+
+            redis = await get_redis()
+        except Exception as e:  # noqa: BLE001
+            logger.warning("approval poll: redis unavailable (%s)", e)
+            return None
+        if redis is None:
+            return None
+
+        key = rkey(f"approval:{tc_id}")
+        loop = asyncio.get_running_loop()
+        while loop.time() < deadline:
+            try:
+                raw = await redis.get(key)
+                if raw is not None:
+                    await redis.delete(key)  # 单次消费：决策只被一个副本读取
+                    val = raw.decode() if isinstance(raw, (bytes, bytearray)) else str(raw)
+                    return val == "1"
+            except Exception as e:  # noqa: BLE001 - 轮询失败不致命，继续等待
+                logger.debug("approval poll error: %s", e)
+            await asyncio.sleep(interval)
+        return None
+
     async def submit_approval(
         self, tool_call_id: str, approved: bool, reason: str = ""
     ) -> bool:
-        """外部（HTTP 端点）解决待确认的工具调用。返回是否已解决。"""
+        """外部（HTTP 端点，可能落在任一网关副本）解决待确认的工具调用。
+
+        1) 本实例持有该 Future → 直接唤醒（同副本快路径，零延迟）；
+        2) 否则写 Redis 决策键，由正在等待的副本（可能在其它实例）取走 —— 这样审批
+           不再依赖会话亲和路由，副本扩缩容期间也能正确送达。
+        """
         future = self._pending_approvals.get(tool_call_id)
-        if future is None or future.done():
+        if future is not None and not future.done():
+            future.set_result(approved)
+            return True
+
+        try:
+            from app.redis_client import get_redis
+            from app.redis_keys import rkey
+
+            redis = await get_redis()
+            if redis is None:
+                logger.warning("submit_approval: redis unavailable, decision dropped")
+                return False
+            await redis.set(
+                rkey(f"approval:{tool_call_id}"),
+                "1" if approved else "0",
+                ex=int(APPROVAL_TTL_SECONDS),
+            )
+            return True
+        except Exception as e:  # noqa: BLE001
+            logger.warning("submit_approval: redis write failed (%s)", e)
             return False
-        future.set_result(approved)
-        return True
 
     async def _execute_tool(self, tool_call: dict, task: AgentTask) -> dict:
         """执行工具"""
@@ -1279,3 +1387,66 @@ async def run_agent(
             "output_tokens": event.output_tokens,
             "message": event.error,
         }
+
+
+# ═══════════════ 跨实例审批入口（供 HTTP 端点 /v1/agent/approval）═══════════════
+#
+# 一次工具审批的决策可能落在三种位置：
+#   1. 本实例正在等待（_pending_approvals 有对应 Future）→ 直接唤醒（零延迟）；
+#   2. 另一实例正在等待（多副本 / 会话亲和漂移）→ 写 Redis 决策键，由等待方轮询取走；
+#   3. 已无实例等待（任务结束/超时）→ 无人消费，由 TTL 自动过期。
+#
+# 注册表把 "tool_call_id → 正在等待的 runtime 实例" 记在进程内，
+# 使 HTTP 端点（由任意请求线程触发）能定位到正确的实例。
+
+_PENDING_APPROVAL_OWNERS: dict[str, "AgentRuntime"] = {}
+
+
+def register_pending_approval(tool_call_id: str, runtime: "AgentRuntime") -> None:
+    """登记"正在等待该工具审批"的运行时实例。"""
+    if tool_call_id:
+        _PENDING_APPROVAL_OWNERS[tool_call_id] = runtime
+
+
+def unregister_pending_approval(tool_call_id: str) -> None:
+    """等待结束（批准/拒绝/超时）后注销，避免注册表泄漏。"""
+    _PENDING_APPROVAL_OWNERS.pop(tool_call_id, None)
+
+
+async def _write_approval_decision(tool_call_id: str, approved: bool) -> bool:
+    """把审批决策写入 Redis 决策键（跨副本通道，等待方 GET+DEL 单次消费）。"""
+    try:
+        from app.redis_client import get_redis
+        from app.redis_keys import rkey
+
+        redis = await get_redis()
+        if redis is None:
+            return False
+        await redis.set(
+            rkey(f"approval:{tool_call_id}"),
+            "1" if approved else "0",
+            ex=int(APPROVAL_TTL_SECONDS),
+        )
+        return True
+    except Exception as e:  # noqa: BLE001
+        logger.warning("approval decision write failed (%s)", e)
+        return False
+
+
+async def submit_approval_global(
+    tool_call_id: str, approved: bool, reason: str = ""
+) -> bool:
+    """全局审批入口：唤醒本实例等待者，否则写 Redis 决策键（跨副本）。
+
+    返回值表示"决策已投递"（不等于已被消费）：
+    - True：已唤醒本地等待者，或已成功写入 Redis 决策键；
+    - False：本实例无人等待且 Redis 不可用（决策无处送达）。
+    """
+    if not tool_call_id:
+        return False
+
+    runtime = _PENDING_APPROVAL_OWNERS.get(tool_call_id)
+    if runtime is not None:
+        if await runtime.submit_approval(tool_call_id, approved, reason):
+            return True
+    return await _write_approval_decision(tool_call_id, approved)
