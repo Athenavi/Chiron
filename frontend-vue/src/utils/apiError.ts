@@ -37,12 +37,23 @@ export function statusMessage(status?: number): string | null {
   }
 }
 
+/** 5xx 是服务端问题：只给通用文案会让用户和运维都无从下手 */
+const SERVER_ERROR_MIN = 500
+
 export function describeApiError(error: unknown, fallback = '请求失败，请稍后重试'): string {
   const err = (error ?? {}) as ApiErrorLike
   const status = err.response?.status
   const serverMessage = err.response?.data?.error || err.response?.data?.message
 
   const known = statusMessage(status)
+
+  // 服务端错误把后端原文一并带出：那是定位问题的唯一线索
+  // （例如 500 背后的 "failed to create payment order" / "支付下单失败"）
+  if (status && status >= SERVER_ERROR_MIN) {
+    if (known && serverMessage && serverMessage !== known) return `${known}（${serverMessage}）`
+    return known ?? serverMessage ?? `服务器错误（HTTP ${status}）`
+  }
+
   if (known) return known
   if (serverMessage) return serverMessage
   if (status) return `请求失败（HTTP ${status}）`

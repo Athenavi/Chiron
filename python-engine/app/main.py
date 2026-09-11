@@ -984,6 +984,8 @@ async def agent_submit(
         max_turns=max(
             1, min(body.get("max_turns") or settings.max_turns, settings.max_turns)
         ),
+        # 工作台上下文（网关透传）：知识库 / Agent / 技能 / 工作流
+        workbench_context=body.get("context") or {},
     )
 
     # ── 深度推理模式：设置 system_prompt 要求输出思考过程 ──

@@ -382,6 +382,9 @@ class AgentTask:
     llm_config: dict = field(default_factory=dict)
     max_turns: int = 5
     subagent_depth: int = 0  # S3: 委派深度（subagent 递归限制，MAX_DEPTH=3）
+    #: 工作台上下文（前端 ChatView.buildContext 组装并经 Go 透传）：
+    #: kb_id / agent / agent_id / skill_names[] / workflow_id。引擎侧按需消费。
+    workbench_context: dict = field(default_factory=dict)
 
     @classmethod
     def parse(cls, data: dict) -> "AgentTask":

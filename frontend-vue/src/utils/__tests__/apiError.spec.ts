@@ -49,3 +49,26 @@ describe('describeApiError（错误文案翻译）', () => {
     expect(statusMessage(undefined)).toBeNull()
   })
 })
+
+describe('describeApiError（服务端错误要能定位）', () => {
+  const withStatus = (status: number, data?: Record<string, string>) => ({ response: { status, data } })
+
+  it('5xx 附带后端给出的具体原因，而不是只留一句"服务器错误"', () => {
+    expect(describeApiError(withStatus(500, { error: 'failed to create payment order' })))
+      .toBe('服务暂时不可用，请稍后重试（failed to create payment order）')
+    expect(describeApiError(withStatus(500, { error: '支付下单失败' })))
+      .toBe('服务暂时不可用，请稍后重试（支付下单失败）')
+  })
+
+  it('5xx 没有后端文案时只给通用说明', () => {
+    expect(describeApiError(withStatus(500))).toBe('服务暂时不可用，请稍后重试')
+    expect(describeApiError(withStatus(502))).toContain('服务暂时不可用')
+    expect(describeApiError(withStatus(503))).toContain('服务暂时不可用')
+  })
+
+  it('客户端错误（4xx）不把后端英文原文附在中文说明后，保持可读', () => {
+    const text = describeApiError(withStatus(402, { error: 'insufficient credits — please recharge in Billing' }))
+    expect(text).toContain('额度已用尽')
+    expect(text).not.toContain('insufficient credits')
+  })
+})

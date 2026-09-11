@@ -24,6 +24,7 @@ import { HistoryOutlined, ExportOutlined, BulbOutlined, BulbFilled, MoreOutlined
 import { splitThinking, stripUserInputTag, formatClock, formatSize, countItemsAfter } from '../components/chat/chat-types'
 import { findMatches } from '../components/chat/transcriptSearch'
 import { describeApiError } from '../utils/apiError'
+import { buildWorkbenchContext, parseContextQuery, type ContextChip } from '../components/chat/contextChips'
 import type { ChatItem, ChatSession, ChatAttachment, TurnStatsItem } from '../components/chat/chat-types'
 
 const authStore = useAuthStore()
@@ -304,12 +305,8 @@ function normalizeMeta(raw: any): Record<string, any> | undefined {
 //   ?task=<sessionId>          统一会话（拉历史 + 继续追问）
 //   ?task=&error=xxx           仅错误提示
 //   ?kb=<id> / ?agent=<id> / ?skill=<name> / ?workflow=<id|name>   上下文附加
+//   同名参数可重复（?kb=a&kb=b）=> 同类可多选
 //   ?mode=<auto|agent|workflow> 创建时模式（WorkflowView 为 workflow）
-interface ContextChip {
-  type: 'kb' | 'agent' | 'skill' | 'workflow'
-  label: string
-  value: string
-}
 const contextChips = ref<ContextChip[]>([])
 // Agent 配置（从 /v1/agents 尽力取；取不到则只传 agent_id，由后端兼容）
 const agentCfg = ref<{ id: string; name?: string; system_prompt?: string; model?: string; max_turns?: number } | null>(null)
@@ -350,15 +347,12 @@ async function applyRouteQuery() {
 }
 
 async function initContextChips(q: Record<string, any>) {
-  const kb = typeof q.kb === 'string' && q.kb ? q.kb : ''
-  const agent = typeof q.agent === 'string' && q.agent ? q.agent : ''
-  const skill = typeof q.skill === 'string' && q.skill ? q.skill : ''
-  const workflow = typeof q.workflow === 'string' && q.workflow ? q.workflow : ''
-  const chips: ContextChip[] = []
-  if (kb) chips.push({ type: 'kb', label: `知识库 #${kb.slice(0, 8)}`, value: kb })
-  if (agent) chips.push({ type: 'agent', label: `Agent #${agent.slice(0, 8)}`, value: agent })
-  if (skill) chips.push({ type: 'skill', label: `技能 ${skill}`, value: skill })
-  if (workflow) chips.push({ type: 'workflow', label: `工作流 ${workflow}`, value: workflow })
+  // URL 约定与多值解析统一在 contextChips 模块里（同名参数可重复 => 可多选）
+  const chips = parseContextQuery(q)
+  const kb = chips.find(c => c.type === 'kb')?.value || ''
+  const agent = chips.find(c => c.type === 'agent')?.value || ''
+  const skill = chips.find(c => c.type === 'skill')?.value || ''
+  const workflow = chips.find(c => c.type === 'workflow')?.value || ''
   contextChips.value = chips
   agentCfg.value = null
   // ── 尽力补全展示用的 Agent 配置（失败则保留 id 占位） ──
@@ -452,26 +446,18 @@ function openKb(kbId: string) {
 
 /** 组装发送时附带的 context（普通 SSE 模式与统一任务模式共用） */
 function buildContext(): Record<string, any> | undefined {
-  const ctx: Record<string, any> = {}
-  const kb = contextChips.value.find(c => c.type === 'kb')
-  if (kb) ctx.kb_id = kb.value
+  // 单值字段 + 多值数组的组装规则集中在 contextChips 模块（新旧后端都能工作）
+  const ctx = buildWorkbenchContext(contextChips.value)
   const agent = contextChips.value.find(c => c.type === 'agent')
-  if (agent) {
-    ctx.agent_id = agent.value
-    if (agentCfg.value) {
-      ctx.agent = {
-        ...(agentCfg.value.name ? { name: agentCfg.value.name } : {}),
-        ...(agentCfg.value.system_prompt ? { system_prompt: agentCfg.value.system_prompt } : {}),
-        ...(agentCfg.value.model ? { model: agentCfg.value.model } : {}),
-        ...(agentCfg.value.max_turns ? { max_turns: agentCfg.value.max_turns } : {}),
-      }
+  if (agent && ctx && agentCfg.value) {
+    ctx.agent = {
+      ...(agentCfg.value.name ? { name: agentCfg.value.name } : {}),
+      ...(agentCfg.value.system_prompt ? { system_prompt: agentCfg.value.system_prompt } : {}),
+      ...(agentCfg.value.model ? { model: agentCfg.value.model } : {}),
+      ...(agentCfg.value.max_turns ? { max_turns: agentCfg.value.max_turns } : {}),
     }
   }
-  const skills = contextChips.value.filter(c => c.type === 'skill').map(c => c.value)
-  if (skills.length) ctx.skill_names = skills
-  const wf = contextChips.value.find(c => c.type === 'workflow')
-  if (wf) ctx.workflow_id = wf.value
-  return Object.keys(ctx).length ? ctx : undefined
+  return ctx
 }
 
 /** 安全改造：附件签名 URL 解析，/media/ 公开路径转短时效签名 URL；非 /media/ 前缀原样；失败回退原 url */

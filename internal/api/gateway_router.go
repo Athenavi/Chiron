@@ -569,6 +569,10 @@ func registerAgentRoutes(
 			Content   string                 `json:"content"`
 			SessionID string                 `json:"session_id"`
 			LLMConfig map[string]interface{} `json:"llm_config"`
+			// 工作台上下文（kb_id / agent / skill_names / workflow_id 等）：由前端
+			// ChatView.buildContext 组装。此前该字段未被解析 → 前端的"带知识库/技能/
+			// Agent 进入对话"在网关就被丢弃，是六大工作台互通的根断点。
+			Context map[string]interface{} `json:"context"`
 		}
 		if err := DecodeJSON(w, r, &body); err != nil {
 			BadRequest(w, "invalid request")
@@ -684,7 +688,7 @@ func registerAgentRoutes(
 			}()
 			defer cancel()
 			defer sessionCancels.Delete(body.SessionID)
-			submitHandler.HandleSubmit(ctx, userID, body.SessionID, body.Content, body.LLMConfig)
+			submitHandler.HandleSubmit(ctx, userID, body.SessionID, body.Content, body.LLMConfig, body.Context)
 		}()
 	}
 	submitMW := authMW(sanitizeMW(http.HandlerFunc(submitHandlerFunc)))

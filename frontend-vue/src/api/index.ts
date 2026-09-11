@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { describeApiError } from '../utils/apiError'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 
@@ -207,9 +208,11 @@ api.interceptors.response.use(
       // 短延迟让 toast 显示后再跳转
       setTimeout(() => { window.location.href = '/login' }, 500)
     } else if (error.response?.status >= 500) {
-      // 触发全局错误事件，App.vue 中的监听器会显示提示
+      // 触发全局错误事件，App.vue 中的监听器会显示提示。
+      // 文案走统一翻译：把后端给出的具体原因一并带出 —— 只显示"服务器错误"会让用户
+      // 与运维都无从定位（充值接口的 500 就属于这种）。
       window.dispatchEvent(new CustomEvent('api:error', {
-        detail: { message: `服务器错误 (${error.response.status})，请稍后重试` }
+        detail: { message: describeApiError(error) }
       }))
     } else if (error.code === 'ECONNABORTED' || !error.response) {
       // 网络超时或无法连接

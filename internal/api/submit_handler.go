@@ -80,7 +80,9 @@ func (h *SubmitHandler) SubmitApproval(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleSubmit proxies the submit request to Python engine and streams SSE events.
-func (h *SubmitHandler) HandleSubmit(ctx context.Context, userID, sessionID, content string, llmConfig map[string]interface{}) {
+// HandleSubmit 执行一次聊天提交。workbenchCtx 是前端组装的工作台上下文
+// （kb_id / agent / skill_names / workflow_id），透传给引擎消费 —— 网关不再丢弃它。
+func (h *SubmitHandler) HandleSubmit(ctx context.Context, userID, sessionID, content string, llmConfig, workbenchCtx map[string]interface{}) {
 	// P1 修复：与 Python 引擎 5min 客户端超时对齐，避免长任务被 180s 硬超时截断
 	ctx, cancel := context.WithTimeout(ctx, DefaultAgentTimeout)
 	defer cancel()
@@ -160,6 +162,10 @@ func (h *SubmitHandler) HandleSubmit(ctx context.Context, userID, sessionID, con
 	}
 	if llmConfig != nil {
 		pythonReq["llm_config"] = llmConfig
+	}
+	// 工作台上下文原样透传：引擎侧决定如何消费（RAG 注入、技能装配、Agent 覆盖）
+	if len(workbenchCtx) > 0 {
+		pythonReq["context"] = workbenchCtx
 	}
 
 	events, err := h.python.RunSSE(ctx, "/v1/agent/submit", pythonReq,

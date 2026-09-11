@@ -319,9 +319,9 @@ class PromptEngine:
         if self._rag_builder is None:
             return ""
 
-        # RAGBuilder.query needs a kb_id.  We use the tenant_id as a
-        # convention; a production system would resolve this differently.
-        kb_id = task.tenant_id or "default"
+        # 优先用用户在对话里选定的知识库（前端 → Go 网关 → task.workbench_context）；
+        # tenant_id 只是历史约定下的兜底，它并不等于某个知识库。
+        kb_id = str(task.workbench_context.get("kb_id") or "") or task.tenant_id or "default"
         try:
             results = await self._rag_builder.query(
                 kb_id=kb_id,

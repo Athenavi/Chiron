@@ -9,6 +9,7 @@ import {
 } from 'ant-design-vue'
 import EmptyState from '../components/common/EmptyState.vue'
 import PageSkeleton from '../components/common/PageSkeleton.vue'
+import { describeApiError } from '../utils/apiError'
 import {
   CreditCardOutlined, WalletOutlined, ThunderboltOutlined, BarChartOutlined,
   ShoppingOutlined, QrcodeOutlined, PayCircleOutlined,
@@ -252,7 +253,7 @@ async function handlePurchase() {
     renderQRCode()
     startPolling()
   } catch (error: any) {
-    message.error(error.message || '创建支付订单失败')
+    message.error(describeApiError(error, '创建支付订单失败'))
   } finally {
     checkoutLoading.value = false
   }
