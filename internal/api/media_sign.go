@@ -15,6 +15,7 @@ import (
 
 	"github.com/athenavi/chiron/internal/auth"
 	"github.com/athenavi/chiron/internal/db"
+	"github.com/athenavi/chiron/internal/storage"
 )
 
 // 媒体签名 URL（P0 修复：媒体不再裸公开可猜测；本地后端 HMAC，S3 后端走原生预签名）。
@@ -122,6 +123,25 @@ func (h *MediaHandler) ServeSignedMedia(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 	
+	// 归一化 file_path：历史数据里直传路径写入的是完整对象键（含 "media/" 前缀），
+	// 分片路径写入/推导的是相对媒体根的路径。统一为「相对媒体根」，否则与 mediaRoot
+	// 叠加会出现 StorageRoot/media/media/... 的错位路径。
+	filePath = strings.TrimPrefix(filepath.ToSlash(filePath), "media/")
+
+	// S3 后端：签名已校验通过，直接 302 到对象存储的预签名 URL
+	// （对象存储自行处理 Range/断点续传，网关不中转大文件）。
+	// 本地后端：继续走下方 ServeFile，保留 Range 支持。
+	if s3 := h.s3Store(); s3 != nil {
+		url, perr := s3.PresignedGetURL(r.Context(), "media/"+filePath, mediaSignTTL)
+		if perr != nil {
+			slog.Error("ServeSignedMedia: presign failed", "assetID", assetID, "error", perr)
+			http.Error(w, "media unavailable", http.StatusBadGateway)
+			return
+		}
+		http.Redirect(w, r, url, http.StatusFound)
+		return
+	}
+
 	full := filepath.Join(h.mediaRoot(), filepath.FromSlash(filePath))
 	// 防御：确保解析后仍在媒体根目录内
 	root := filepath.Clean(h.mediaRoot())
@@ -168,4 +188,20 @@ func (h *MediaHandler) ServeSignedMedia(w http.ResponseWriter, r *http.Request) 
 // mediaRoot 返回媒体存储根（与路由注册时 FileServer 同源）。
 func (h *MediaHandler) mediaRoot() string {
 	return h.root
+}
+
+// s3Store 返回底层后端为 S3 时的实例（AtomicStore 支持热切换，需解包判断）。
+// 用于决定媒体下载走「预签名 302」还是「本地 ServeFile」。
+func (h *MediaHandler) s3Store() *storage.S3Store {
+	if h.store == nil {
+		return nil
+	}
+	inner := h.store
+	if atomic, ok := inner.(*storage.AtomicStore); ok {
+		inner = atomic.LoadRaw()
+	}
+	if s3, ok := inner.(*storage.S3Store); ok {
+		return s3
+	}
+	return nil
 }

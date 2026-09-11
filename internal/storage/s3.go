@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -91,6 +92,32 @@ func (s *S3Store) Write(ctx context.Context, path string, data []byte) error {
 	}
 
 	return nil
+}
+
+// WriteStream 流式上传对象；size 未知传 -1（minio 自动分块）。
+// perm 在对象存储语义下无意义，忽略。
+func (s *S3Store) WriteStream(ctx context.Context, path string, r io.Reader, size int64, perm os.FileMode) error {
+	objPath := s.objectPath(path)
+	if _, err := s.client.PutObject(ctx, s.bucket, objPath, r, size, minio.PutObjectOptions{
+		ContentType: detectContentType(path),
+	}); err != nil {
+		return fmt.Errorf("s3 put object %q: %w", objPath, err)
+	}
+	return nil
+}
+
+// OpenStream 返回对象读取流；先 Stat 一次，让"对象不存在"在打开阶段即暴露。
+func (s *S3Store) OpenStream(ctx context.Context, path string) (io.ReadCloser, error) {
+	objPath := s.objectPath(path)
+	obj, err := s.client.GetObject(ctx, s.bucket, objPath, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("s3 get object %q: %w", objPath, err)
+	}
+	if _, err := obj.Stat(); err != nil {
+		_ = obj.Close()
+		return nil, fmt.Errorf("s3 stat object %q: %w", objPath, err)
+	}
+	return obj, nil
 }
 
 func (s *S3Store) Delete(ctx context.Context, path string) error {

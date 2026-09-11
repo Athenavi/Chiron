@@ -19,11 +19,19 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+#: 沙箱根环境变量名（多副本部署必须指向共享卷；启动校验见 app.main.verify_sandbox_root）
+SANDBOX_ROOT_ENV = "SANDBOX_ROOT"
+
 
 def sandbox_root() -> Path:
     """沙箱根：默认置于进程 cwd 上两级（项目外），避免 workspace 路径
-    泄露服务器项目结构（S 安全修复：cwd 泄露项目/python-engine 前缀）。"""
-    env = os.environ.get("SANDBOX_ROOT")
+    泄露服务器项目结构（S 安全修复：cwd 泄露项目/python-engine 前缀）。
+
+    注意：默认值是**进程本地路径**，仅适用于单机开发。多副本部署必须显式设置
+    SANDBOX_ROOT 指向共享卷（NFS/PVC），否则同一用户的任务落到不同副本时
+    看不到彼此写入的文件（agent 文件工作流"间歇性失忆"）。
+    """
+    env = os.environ.get(SANDBOX_ROOT_ENV)
     if env:
         return Path(env).resolve()
     # 无论 cwd 是项目根还是子目录（python-engine），上两级都到项目外

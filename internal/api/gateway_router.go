@@ -334,7 +334,7 @@ func NewGatewayRouter(
 	mediaHandler.SetMediaRoot(cfg.StorageRoot + "/media")
 
 	// 通用分片上传（断点续传）
-	uploadHandler := NewUploadHandler(authenticator, cfg.StorageRoot)
+	uploadHandler := NewUploadHandler(authenticator, cfg.StorageRoot, fileStore)
 	uploadHandler.RegisterRoutes(mux, authMW, rlMW)
 
 	// 用户侧市场（技能/Agent/MCP 浏览与一键安装）
@@ -356,11 +356,11 @@ func NewGatewayRouter(
 	// Skill handler (proxies to Python)
 	skillHandler := NewSkillHandler(pythonClient)
 
-	// Mode + Permission (no Python dependency)
-	modeStore := NewModeStore()
+	// Mode（会话授权模式 ask/auto/yolo）：状态存 Redis 以保持多副本一致；
+	// 审批本身在 Python 侧（guards + /v1/agent/approval），Go 侧不再保留第二套实现。
+	modeStore := NewModeStore(atomicRedis)
 	modeStore.StartCleanup(lifecycleCtx)
-	permMgr := NewPermissionManager()
-	modeHandler := NewModeHandler(modeStore, permMgr, eventHub)
+	modeHandler := NewModeHandler(modeStore, sessionMgr, eventHub)
 
 	// Trace handler (Redis-backed, tenant-isolated)
 	var traceHandler *TraceHandler
@@ -491,8 +491,8 @@ func NewGatewayRouter(
 	// Mode (auth + rate limited)
 	mux.Handle("GET /v1/mode", authMW(rlMW(http.HandlerFunc(modeHandler.GetMode))))
 	mux.Handle("POST /v1/mode", authMW(rlMW(http.HandlerFunc(modeHandler.SetMode))))
-	mux.Handle("POST /v1/permission/approve", authMW(rlMW(http.HandlerFunc(modeHandler.ApprovePermission))))
-	mux.Handle("POST /v1/permission/reject", authMW(rlMW(http.HandlerFunc(modeHandler.RejectPermission))))
+	// 旧 /v1/permission/approve|reject 已移除：审批统一由 Python 侧处理
+	// （前端经 /v1/agent/approval 提交决定），避免 Go/Python 双实现漂移。
 
 	registerAdminRoutes(mux, authMW, rlMW, adminHandler, pythonClient)
 

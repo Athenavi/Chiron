@@ -2,6 +2,8 @@ package storage
 
 import (
 	"context"
+	"io"
+	"os"
 	"sync/atomic"
 )
 
@@ -27,6 +29,14 @@ func (a *AtomicStore) Read(ctx context.Context, path string) ([]byte, error) {
 
 func (a *AtomicStore) Write(ctx context.Context, path string, data []byte) error {
 	return a.load().Write(ctx, path, data)
+}
+
+func (a *AtomicStore) WriteStream(ctx context.Context, path string, r io.Reader, size int64, perm os.FileMode) error {
+	return a.load().WriteStream(ctx, path, r, size, perm)
+}
+
+func (a *AtomicStore) OpenStream(ctx context.Context, path string) (io.ReadCloser, error) {
+	return a.load().OpenStream(ctx, path)
 }
 
 func (a *AtomicStore) Delete(ctx context.Context, path string) error {

@@ -50,48 +50,43 @@ func keysetActiveProviders(ctx context.Context) []llmKeysetProvider {
 	}
 	out := []llmKeysetProvider{}
 	prefix := db.RedisKey("llm:keys:")
-	var cursor uint64
-	for {
-		keys, next, err := db.Redis.Scan(ctx, cursor, prefix+"*", 100).Result()
-		if err != nil {
-			slog.Debug("llm keyset scan failed", "error", err)
-			break
+	// 跨节点扫描：Cluster 下 SCAN 只覆盖被路由到的单个节点，会漏读其它 master 上的
+	// provider key（llm:keys:{provider} 按 slot 分散在各 master），导致可用模型列表不全。
+	keys, err := db.Redis.ScanAll(ctx, prefix+"*", 100)
+	if err != nil {
+		slog.Debug("llm keyset scan failed", "error", err)
+		return out
+	}
+	for _, k := range keys {
+		provider := strings.TrimPrefix(k, prefix)
+		if provider == "" || provider == "ver" {
+			continue
 		}
-		for _, k := range keys {
-			provider := strings.TrimPrefix(k, prefix)
-			if provider == "" || provider == "ver" {
-				continue
-			}
-			res := db.Redis.Do(ctx, "HGETALL", k)
-			if res.Err() != nil {
-				continue
-			}
-			rawPairs, ok := res.Val().([]interface{})
+		res := db.Redis.Do(ctx, "HGETALL", k)
+		if res.Err() != nil {
+			continue
+		}
+		rawPairs, ok := res.Val().([]interface{})
+		if !ok {
+			continue
+		}
+		for i := 0; i+1 < len(rawPairs); i += 2 {
+			payload, ok := rawPairs[i+1].(string)
 			if !ok {
 				continue
 			}
-			for i := 0; i+1 < len(rawPairs); i += 2 {
-				payload, ok := rawPairs[i+1].(string)
-				if !ok {
-					continue
-				}
-				var item struct {
-					K string `json:"k"`
-					S string `json:"s"`
-				}
-				if json.Unmarshal([]byte(payload), &item) != nil || item.K == "" {
-					continue
-				}
-				if item.S != "" && item.S != "active" {
-					continue
-				}
-				out = append(out, llmKeysetProvider{Name: provider, Key: item.K})
-				break // 一个 provider 取一个 key 即可发现模型列表
+			var item struct {
+				K string `json:"k"`
+				S string `json:"s"`
 			}
-		}
-		cursor = next
-		if cursor == 0 {
-			break
+			if json.Unmarshal([]byte(payload), &item) != nil || item.K == "" {
+				continue
+			}
+			if item.S != "" && item.S != "active" {
+				continue
+			}
+			out = append(out, llmKeysetProvider{Name: provider, Key: item.K})
+			break // 一个 provider 取一个 key 即可发现模型列表
 		}
 	}
 	return out

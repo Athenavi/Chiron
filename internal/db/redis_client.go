@@ -42,6 +42,13 @@ type RedisClient interface {
 	XClaim(ctx context.Context, a *redis.XClaimArgs) *redis.XMessageSliceCmd
 	Exists(ctx context.Context, keys ...string) *redis.IntCmd
 	Publish(ctx context.Context, channel string, message interface{}) *redis.IntCmd
+	// ScanAll 跨节点遍历所有匹配 match 的键。
+	// 单机/哨兵：普通 SCAN 游标循环；Cluster：遍历全部 master（每 master 独立游标）。
+	// 注意：直接用 Scan 在 Cluster 下只覆盖单个节点，会漏键（模型发现曾因此漏读 provider key）。
+	ScanAll(ctx context.Context, match string, count int64) ([]string, error)
+	// ForEachMaster 在每个 master 上执行 fn（单机/哨兵仅执行一次）。
+	// 用于 FLUSHDB 这类必须逐节点执行、无法跨节点的管理命令。
+	ForEachMaster(ctx context.Context, fn func(ctx context.Context, rdb RedisClient) error) error
 }
 
 // SingleRedis implements RedisClient for a single Redis instance.
@@ -121,6 +128,36 @@ func (s *SingleRedis) Stats() *redis.PoolStats {
 
 func (s *SingleRedis) Scan(ctx context.Context, cursor uint64, match string, count int64) *redis.ScanCmd {
 	return s.client.Scan(ctx, cursor, match, count)
+}
+
+// scanAllOn 在单个节点上完成 SCAN 游标循环（单机/哨兵与 Cluster 的每个 master 复用）。
+func scanAllOn(ctx context.Context, client *redis.Client, match string, count int64) ([]string, error) {
+	if count <= 0 {
+		count = 500
+	}
+	var cursor uint64
+	var out []string
+	for {
+		keys, next, err := client.Scan(ctx, cursor, match, count).Result()
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, keys...)
+		cursor = next
+		if cursor == 0 {
+			return out, nil
+		}
+	}
+}
+
+// ScanAll 单机只有一组键空间：直接做完整游标扫描。
+func (s *SingleRedis) ScanAll(ctx context.Context, match string, count int64) ([]string, error) {
+	return scanAllOn(ctx, s.client, match, count)
+}
+
+// ForEachMaster 单机只有一个节点：直接执行一次。
+func (s *SingleRedis) ForEachMaster(ctx context.Context, fn func(ctx context.Context, rdb RedisClient) error) error {
+	return fn(ctx, s)
 }
 
 func (s *SingleRedis) Eval(ctx context.Context, script string, keys []string, args ...interface{}) *redis.Cmd {
@@ -266,6 +303,31 @@ func (c *ClusterRedis) Scan(ctx context.Context, cursor uint64, match string, co
 	return c.client.Scan(ctx, cursor, match, count)
 }
 
+// ScanAll 遍历全部 master：Cluster 下 SCAN 只作用于被路由到的单个节点，
+// 必须逐 master 扫描才能不漏键（模型发现据此修复 provider key 漏读）。
+func (c *ClusterRedis) ScanAll(ctx context.Context, match string, count int64) ([]string, error) {
+	var out []string
+	err := c.client.ForEachMaster(ctx, func(ctx context.Context, node *redis.Client) error {
+		keys, err := scanAllOn(ctx, node, match, count)
+		if err != nil {
+			return err
+		}
+		out = append(out, keys...)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ForEachMaster 在每个 master 上执行 fn（FLUSHDB 等命令无法跨节点执行）。
+func (c *ClusterRedis) ForEachMaster(ctx context.Context, fn func(ctx context.Context, rdb RedisClient) error) error {
+	return c.client.ForEachMaster(ctx, func(ctx context.Context, node *redis.Client) error {
+		return fn(ctx, &SingleRedis{client: node})
+	})
+}
+
 func (c *ClusterRedis) Eval(ctx context.Context, script string, keys []string, args ...interface{}) *redis.Cmd {
 	return c.client.Eval(ctx, script, keys, args...)
 }
@@ -409,6 +471,16 @@ func (f *FailoverRedis) Stats() *redis.PoolStats {
 
 func (f *FailoverRedis) Scan(ctx context.Context, cursor uint64, match string, count int64) *redis.ScanCmd {
 	return f.client.Scan(ctx, cursor, match, count)
+}
+
+// ScanAll 哨兵模式下只有一个 master：做完整游标扫描即可。
+func (f *FailoverRedis) ScanAll(ctx context.Context, match string, count int64) ([]string, error) {
+	return scanAllOn(ctx, f.client, match, count)
+}
+
+// ForEachMaster 哨兵模式只有一个 master：直接执行一次。
+func (f *FailoverRedis) ForEachMaster(ctx context.Context, fn func(ctx context.Context, rdb RedisClient) error) error {
+	return fn(ctx, f)
 }
 
 func (f *FailoverRedis) Eval(ctx context.Context, script string, keys []string, args ...interface{}) *redis.Cmd {

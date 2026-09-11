@@ -361,14 +361,30 @@ func (h *AdminHandler) TriggerMaintenance(w http.ResponseWriter, r *http.Request
 	case "flush_cache":
 		if db.Redis != nil {
 			const prefix = "chiron_cache:*"
-			// P0 性能优化：使�?Lua 脚本原子�?SCAN + UNLINK
-			script := `local c="0" local n=0 repeat local r=redis.call("SCAN",c,"MATCH",KEYS[1],"COUNT",500) c=r[1] local k=r[2] if #k>0 then redis.call("UNLINK",unpack(k)) n=n+#k end until c=="0" return n`
-			deleted, err := db.Redis.Eval(r.Context(), script, []string{prefix}).Int()
+			// 跨节点扫描：Cluster 下 SCAN 只覆盖单个节点，直接用 Lua/Scan 会漏清其它 master 的缓存。
+			keys, err := db.Redis.ScanAll(r.Context(), prefix, 500)
 			if err != nil {
 				logAndRespond(w, err, http.StatusInternalServerError, "flush_cache failed")
 				return
 			}
-			slog.Info("cache flushed", "prefix", prefix, "deleted", deleted)
+			// 分批 UNLINK（非阻塞释放，避免 DEL 大 key 时卡住服务端，也避免单命令过大）
+			deleted := 0
+			const batch = 500
+			for i := 0; i < len(keys); i += batch {
+				end := i + batch
+				if end > len(keys) {
+					end = len(keys)
+				}
+				args := make([]interface{}, 0, end-i+1)
+				args = append(args, "UNLINK")
+				for _, k := range keys[i:end] {
+					args = append(args, k)
+				}
+				if n, err := db.Redis.Do(r.Context(), args...).Int(); err == nil {
+					deleted += n
+				}
+			}
+			slog.Info("cache flushed", "prefix", prefix, "matched", len(keys), "deleted", deleted)
 		}
 	default:
 		BadRequest(w, fmt.Sprintf("unknown action: %s", body.Action))

@@ -130,6 +130,14 @@ func (a *AtomicRedis) Publish(ctx context.Context, channel string, message inter
 	return a.load().Publish(ctx, channel, message)
 }
 
+func (a *AtomicRedis) ScanAll(ctx context.Context, match string, count int64) ([]string, error) {
+	return a.load().ScanAll(ctx, match, count)
+}
+
+func (a *AtomicRedis) ForEachMaster(ctx context.Context, fn func(ctx context.Context, rdb RedisClient) error) error {
+	return a.load().ForEachMaster(ctx, fn)
+}
+
 // Swap atomically replaces the underlying RedisClient backend.
 func (a *AtomicRedis) Swap(new RedisClient) {
 	a.current.Store(&new)

@@ -650,11 +650,25 @@ func (h *AdminHandler) RedisFlushAll(w http.ResponseWriter, r *http.Request) {
 		BadRequest(w, "confirm=true is required to flush redis")
 		return
 	}
-	if _, err := h.redisDo(r.Context(), "FLUSHDB"); err != nil {
+	if db.Redis == nil {
+		logAndRespond(w, fmt.Errorf("redis unavailable"), http.StatusInternalServerError, "flush failed")
+		return
+	}
+	// Cluster 下 FLUSHDB 只作用于被路由到的单个节点：必须逐 master 执行，
+	// 否则其余节点数据残留（单机/哨兵只有一个 master，仅执行一次）。
+	masters := 0
+	if err := db.Redis.ForEachMaster(r.Context(), func(ctx context.Context, node db.RedisClient) error {
+		if _, err := node.Do(ctx, "FLUSHDB").Result(); err != nil {
+			return err
+		}
+		masters++
+		return nil
+	}); err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "flush failed")
 		return
 	}
-	OK(w, map[string]interface{}{"status": "flushed"})
+	slog.Info("redis flushed", "masters", masters)
+	OK(w, map[string]interface{}{"status": "flushed", "masters": masters})
 }
 
 // ── 模型注册表 ──

@@ -247,6 +247,12 @@ func main() {
 			return
 		}
 		atomicStore := storage.NewAtomicStore(fileStore)
+		if cfg.StorageBackend == "local" {
+			// 分片上传与媒体下载都经由存储后端寻址：多副本 + 本地盘会让"写分片/读分片"
+			// 落到不同实例，上传损坏、媒体 404。多副本部署必须用共享卷或 STORAGE_BACKEND=s3。
+			slog.Warn("storage backend is local — multi-replica deployments must mount a shared volume at this path, or set STORAGE_BACKEND=s3",
+				"root", cfg.StorageRoot)
+		}
 		slog.Info("storage initialized", "backend", cfg.StorageBackend)
 
 		// ── Session Manager ──

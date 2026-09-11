@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,6 +18,7 @@ import (
 	"github.com/athenavi/chiron/internal/auth"
 	"github.com/athenavi/chiron/internal/db"
 	"github.com/athenavi/chiron/internal/id"
+	"github.com/athenavi/chiron/internal/storage"
 )
 
 // UploadHandler 提供通用分片上传（断点续传）：
@@ -25,14 +27,18 @@ import (
 //   - GetProgress GET    /v1/uploads/{id}       → received_chunks（断点续传依据）
 //   - Complete    POST   /v1/uploads/{id}/complete → 合并并按 purpose 落库
 //
-// 分片存于 <storageRoot>/uploads/{upload_id}/chunk_{index}；小文件可走既有 multipart 直传。
+// 分片与最终对象都写入 storage.FileStore（local/s3 统一）—— 旧实现直接写本地盘，
+// 多副本部署下"写分片"与"合并分片"会落在不同实例导致上传损坏/失败。
 type UploadHandler struct {
 	authenticator *auth.Authenticator
-	storageRoot   string
+	// storageRoot 仅用于合并阶段的本地临时缓冲（请求生命周期内的中间态，无需跨副本共享）
+	storageRoot string
+	// store 分片与最终对象的持久化后端（多副本下状态共享）
+	store *storage.AtomicStore
 }
 
-func NewUploadHandler(a *auth.Authenticator, storageRoot string) *UploadHandler {
-	return &UploadHandler{authenticator: a, storageRoot: storageRoot}
+func NewUploadHandler(a *auth.Authenticator, storageRoot string, store *storage.AtomicStore) *UploadHandler {
+	return &UploadHandler{authenticator: a, storageRoot: storageRoot, store: store}
 }
 
 const defaultChunkSize = 2 << 20 // 2MB
@@ -68,18 +74,14 @@ func sanitizeUploadName(name string) string {
 	return name
 }
 
-// chunkDir 返回 upload_id 的临时分片目录（自动创建）。
-// 验证 uploadID 为 UUID 格式，防止路径穿越。
-func (h *UploadHandler) chunkDir(uploadID string) (string, error) {
+// chunkObjectKey 返回分片在存储后端中的对象路径。
+// 验证 uploadID 为 UUID 格式，防止路径穿越（s3 与 local 都按此路径寻址）。
+func chunkObjectKey(uploadID string, idx int) (string, error) {
 	// 只允许标准 UUID 格式（十六进制+连字符），拒绝 ../ 等路径穿越
 	if !uuidRe.MatchString(uploadID) {
 		return "", fmt.Errorf("invalid upload ID: %q", uploadID)
 	}
-	dir := filepath.Join(h.storageRoot, "uploads", uploadID)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
-	}
-	return dir, nil
+	return fmt.Sprintf("uploads/%s/chunk_%d", uploadID, idx), nil
 }
 
 func (h *UploadHandler) userID(r *http.Request) (string, bool) {
@@ -214,26 +216,14 @@ func (h *UploadHandler) PutChunk(w http.ResponseWriter, r *http.Request) {
 
 	// 限制单分片大小，防止恶意客户端发送超大 chunk 撑爆磁盘（P1-1）
 	r.Body = http.MaxBytesReader(w, r.Body, 64<<20)
-	dir, err := h.chunkDir(uploadID)
+	// P0 扩展性：分片写入存储后端（local/s3 统一），多副本下任意实例都能读取并合并。
+	// 0o600 保持原有"分片仅本进程可读"的隔离语义（本地后端生效；对象存储由 bucket 策略约束）。
+	key, err := chunkObjectKey(uploadID, idx)
 	if err != nil {
-		logAndRespond(w, err, http.StatusInternalServerError, "create chunk dir failed")
+		BadRequest(w, "invalid upload id")
 		return
 	}
-	dst := filepath.Join(dir, fmt.Sprintf("chunk_%d", idx))
-	out, err := os.Create(dst)
-	if err != nil {
-		logAndRespond(w, err, http.StatusInternalServerError, "create chunk failed")
-		return
-	}
-	// P0-安全：分片文件仅允许当前进程读写，防止多租户服务器上其他进程读取
-	if err := os.Chmod(dst, 0o600); err != nil {
-		out.Close()
-		os.Remove(dst)
-		logAndRespond(w, err, http.StatusInternalServerError, "set chunk permission failed")
-		return
-	}
-	defer out.Close()
-	if _, err := io.Copy(out, r.Body); err != nil {
+	if err := h.store.WriteStream(r.Context(), key, r.Body, -1, 0o600); err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "write chunk failed")
 		return
 	}
@@ -334,13 +324,8 @@ func (h *UploadHandler) Complete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 按序合并分片
-	dir, err := h.chunkDir(uploadID)
-	if err != nil {
-		logAndRespond(w, err, http.StatusInternalServerError, "read chunk dir failed")
-		return
-	}
-	merged, err := h.mergeChunks(dir, up.ChunkCnt)
+	// 按序合并分片（分片来自存储后端，任意实例都能读）
+	merged, err := h.mergeChunks(r.Context(), uploadID, up.ChunkCnt)
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "merge chunks failed")
 		return
@@ -372,8 +357,12 @@ func (h *UploadHandler) Complete(w http.ResponseWriter, r *http.Request) {
 		`UPDATE uploads SET status = 'completed', updated_at = NOW() WHERE id = $1 AND tenant_id = $2`, uploadID, claims.TenantID); err != nil {
 		slog.Warn("failed to record upload", "error", err)
 	}
-	// 清理临时分片
-	_ = os.RemoveAll(dir)
+	// 清理存储后端上的分片（对象存储无 RemoveAll 语义，按 index 逐个删除）
+	for i := 0; i < up.ChunkCnt; i++ {
+		if key, kerr := chunkObjectKey(uploadID, i); kerr == nil {
+			_ = h.store.Delete(r.Context(), key)
+		}
+	}
 
 	OK(w, map[string]interface{}{
 		"upload_id": uploadID, "file_url": fileURL,
@@ -381,14 +370,22 @@ func (h *UploadHandler) Complete(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// mergeChunks 按 index 顺序拼接分片为单个临时文件。
-func (h *UploadHandler) mergeChunks(dir string, count int) (*os.File, error) {
+// mergeChunks 按 index 顺序把存储后端的分片拼接为单个本地临时文件。
+// 临时文件是请求生命周期内的中间态（非持久状态），故保留本地实现；
+// 分片本身来自 FileStore，多副本下任意实例都能读取。
+func (h *UploadHandler) mergeChunks(ctx context.Context, uploadID string, count int) (*os.File, error) {
 	merged, err := os.CreateTemp(h.storageRoot, "merged_*.tmp")
 	if err != nil {
 		return nil, err
 	}
 	for i := 0; i < count; i++ {
-		part, err := os.Open(filepath.Join(dir, fmt.Sprintf("chunk_%d", i)))
+		key, err := chunkObjectKey(uploadID, i)
+		if err != nil {
+			merged.Close()
+			os.Remove(merged.Name())
+			return nil, err
+		}
+		part, err := h.store.OpenStream(ctx, key)
 		if err != nil {
 			merged.Close()
 			os.Remove(merged.Name())
@@ -430,16 +427,11 @@ func (h *UploadHandler) finalizeMedia(r *http.Request, tenantID string, up struc
 		return "", fmt.Errorf("invalid upload name")
 	}
 	objectKey := fmt.Sprintf("media/%s/%s_%s", dir, shortAssetID(up.ID), name)
-	dest := filepath.Join(h.storageRoot, objectKey)
-	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+	// 落盘到存储后端（多副本统一可见）。旧实现直接写本地盘：s3 后端下会"上传成功但下载 404"。
+	if _, err := merged.Seek(0, io.SeekStart); err != nil {
 		return "", err
 	}
-	out, err := os.Create(dest)
-	if err != nil {
-		return "", err
-	}
-	defer out.Close()
-	if _, err := io.Copy(out, merged); err != nil {
+	if err := h.store.WriteStream(r.Context(), objectKey, merged, up.Size, 0o644); err != nil {
 		return "", err
 	}
 
@@ -448,10 +440,12 @@ func (h *UploadHandler) finalizeMedia(r *http.Request, tenantID string, up struc
 		return "", err
 	}
 	assetType := detectType(up.MimeType)
+	// file_path 写「相对媒体根」的路径（不含 "media/" 前缀），与签名下载侧的归一化语义一致
+	relPath := strings.TrimPrefix(objectKey, "media/")
 	if _, err := db.GlobalDBManager.Exec(r.Context(),
-		`INSERT INTO media_assets (id, tenant_id, user_id, type, name, file_url, mime_type, category, size, parent_id, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())`,
-		assetID, tenantID, up.UserID, assetType, up.Name, "/"+objectKey,
+		`INSERT INTO media_assets (id, tenant_id, user_id, type, name, file_url, file_path, mime_type, category, size, parent_id, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())`,
+		assetID, tenantID, up.UserID, assetType, up.Name, "/"+objectKey, relPath,
 		truncateMIME(up.MimeType), nullableStr(up.Category), up.Size, up.ParentID); err != nil {
 		return "", err
 	}
@@ -531,16 +525,11 @@ func (h *UploadHandler) finalizeGeneric(up struct {
 		return "", fmt.Errorf("invalid upload name")
 	}
 	objectKey := fmt.Sprintf("uploads/final/%s_%s", shortAssetID(up.ID), name)
-	dest := filepath.Join(h.storageRoot, objectKey)
-	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+	// 落盘到存储后端（多副本统一可见）
+	if _, err := merged.Seek(0, io.SeekStart); err != nil {
 		return "", err
 	}
-	out, err := os.Create(dest)
-	if err != nil {
-		return "", err
-	}
-	defer out.Close()
-	if _, err := io.Copy(out, merged); err != nil {
+	if err := h.store.WriteStream(context.Background(), objectKey, merged, up.Size, 0o644); err != nil {
 		return "", err
 	}
 	return "/" + objectKey, nil
