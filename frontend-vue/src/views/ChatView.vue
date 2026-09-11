@@ -23,6 +23,7 @@ import CallChainTimeline from '../components/CallChainTimeline.vue'
 import { HistoryOutlined, ExportOutlined, BulbOutlined, BulbFilled, MoreOutlined, FontSizeOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import { splitThinking, stripUserInputTag, formatClock, formatSize, countItemsAfter } from '../components/chat/chat-types'
 import { findMatches } from '../components/chat/transcriptSearch'
+import { describeApiError } from '../utils/apiError'
 import type { ChatItem, ChatSession, ChatAttachment, TurnStatsItem } from '../components/chat/chat-types'
 
 const authStore = useAuthStore()
@@ -565,8 +566,9 @@ async function sendUnified(text: string, attachments?: ChatAttachment[]) {
     appendAssistantWithKb(d.output || '', d.metadata || {})
     flashUnifiedDone()
   } catch (e: any) {
-    markMessageFailed(userItemId, e.message || '网络错误')
-    message.error('发送失败 ' + (e.message || '网络错误'))
+    const reason = describeApiError(e)
+    markMessageFailed(userItemId, reason)
+    message.error('发送失败：' + reason)
   } finally {
     loading.value = false
     stopTurnTimer()
@@ -1357,8 +1359,9 @@ async function sendMessage(text: string, attachments?: ChatAttachment[]) {
     loading.value = false
     stopTurnTimer()
     flushStreamingFlags()
-    markMessageFailed(userItemId, e.message || '网络错误')
-    message.error('发送失败 ' + (e.message || '网络错误'))
+    const reason = describeApiError(e)
+    markMessageFailed(userItemId, reason)
+    message.error('发送失败：' + reason)
   }
 }
 

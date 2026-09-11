@@ -197,6 +197,59 @@ describe('MessageItem（图片查看）', () => {
   })
 })
 
+describe('MessageItem（超长正文让位渲染）', () => {
+  /** 捕获 requestIdleCallback，手动触发才能确定性地验证"让位" */
+  let idleQueue: (() => void)[] = []
+  const originalIdle = (window as any).requestIdleCallback
+
+  beforeEach(() => {
+    idleQueue = []
+    ;(window as any).requestIdleCallback = (cb: () => void) => { idleQueue.push(cb); return idleQueue.length }
+  })
+
+  afterEach(() => { (window as any).requestIdleCallback = originalIdle })
+
+  /** 超过 LARGE_MESSAGE_CHARS（30000）才进让位；助手长文默认折叠，需先展开 */
+  const hugeBody = (chars: number) => '正文段落内容。'.repeat(Math.ceil(chars / 7)).slice(0, chars)
+
+  it('超长正文展开后先让位（纯文本），idle 回调才渲染 markdown', async () => {
+    const wrapper = mountText(hugeBody(40000))
+    await settleAsync()
+
+    await wrapper.find('.collapse-toggle').trigger('click')   // 展开全文
+    await settleAsync()
+
+    expect(idleQueue).toHaveLength(1)                          // 进了让位，没有同步渲染
+    expect(wrapper.find('.msg-text.streaming-text').exists()).toBe(true)
+    expect(wrapper.find('.msg-text').html()).not.toContain('<p>')   // 让位期间还不是 markdown
+
+    idleQueue[0]!()
+    await settleAsync()
+    expect(wrapper.find('.msg-text').html()).toContain('<p>')  // 渲染完成，markdown 接管
+  })
+
+  it('普通短正文同步渲染，不进入让位', async () => {
+    mountText('普通短正文')
+    await settleAsync()
+    expect(idleQueue).toHaveLength(0)
+  })
+
+  it('让位期间内容又变，旧回调作废（不会用过期内容覆盖）', async () => {
+    const wrapper = mountText(hugeBody(40000))
+    await settleAsync()
+    await wrapper.find('.collapse-toggle').trigger('click')
+    await settleAsync()
+    expect(idleQueue).toHaveLength(1)
+
+    await wrapper.find('.collapse-toggle').trigger('click')     // 又收起
+    await settleAsync()
+    idleQueue[0]!()                                             // 执行过期的让位回调
+    await settleAsync()
+
+    expect(wrapper.html()).toContain('已折叠')                  // 仍是折叠预览，没被全文覆盖
+  })
+})
+
 describe('MessageItem（长内容渲染让位）', () => {
   it('普通长度同步渲染 markdown（不出现纯文本过渡）', () => {
     const wrapper = mountText('普通**加粗**文本')
