@@ -16,10 +16,12 @@ import MessageList from '../components/chat/MessageList.vue'
 import MessageItem from '../components/chat/MessageItem.vue'
 import ChatEmptyHero from '../components/chat/ChatEmptyHero.vue'
 import ChatInput from '../components/chat/ChatInput.vue'
+import ChatStatusBar from '../components/chat/ChatStatusBar.vue'
+import ChatDisplaySettings from '../components/chat/ChatDisplaySettings.vue'
 import CallChainTimeline from '../components/CallChainTimeline.vue'
-import { HistoryOutlined, ExportOutlined, BulbOutlined, BulbFilled, MoreOutlined } from '@ant-design/icons-vue'
+import { HistoryOutlined, ExportOutlined, BulbOutlined, BulbFilled, MoreOutlined, FontSizeOutlined } from '@ant-design/icons-vue'
 import { splitThinking, stripUserInputTag, formatClock, formatSize } from '../components/chat/chat-types'
-import type { ChatItem, ChatSession, ChatAttachment } from '../components/chat/chat-types'
+import type { ChatItem, ChatSession, ChatAttachment, TurnStatsItem } from '../components/chat/chat-types'
 
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
@@ -31,13 +33,33 @@ const router = useRouter()
 const toolbarMenuItems = computed(() => [
   { key: 'export', label: '导出为 Markdown', icon: () => h(ExportOutlined), disabled: !items.value.length },
   { type: 'divider' as const },
+  { key: 'display', label: '显示设置', icon: () => h(FontSizeOutlined) },
   { key: 'theme', label: themeStore.isDark ? '切换到亮色模式' : '切换到暗色模式', icon: () => h(themeStore.isDark ? BulbFilled : BulbOutlined) },
 ])
 
+const displaySettingsOpen = ref(false)
+
 function onToolbarMenu(info: { key: string | number }) {
   if (info.key === 'export') exportMarkdown()
+  else if (info.key === 'display') displaySettingsOpen.value = true
   else if (info.key === 'theme') themeStore.toggleTheme()
 }
+
+// 消息区「引用到输入框」：把选中文本交给输入框（ChatInput 暴露 insertText）
+const chatInputRef = ref<InstanceType<typeof ChatInput> | null>(null)
+
+function onQuoteText(text: string) {
+  chatInputRef.value?.insertText(text)
+}
+
+// 状态栏：最近一轮用量（turn_stats 由后端在回合结束时下发）
+const lastTurnStats = computed<TurnStatsItem | null>(() => {
+  for (let i = items.value.length - 1; i >= 0; i--) {
+    const item = items.value[i]
+    if (item?.kind === 'turn_stats') return item
+  }
+  return null
+})
 
 // ── 会话状态 ──
 const sessions = ref<ChatSession[]>([])
@@ -1521,7 +1543,9 @@ function continueGeneration() {
             :focus-token="trajectoryToken"
             :has-more="hasMore"
             :loading-earlier="loadingEarlier"
+            :session-key="activeSessionId"
             @load-earlier="loadEarlier"
+            @quote-text="onQuoteText"
             @retry-from="retryFromUserMessage"
             @regenerate="regenerateAssistant"
             @continue="continueGeneration"
@@ -1588,6 +1612,7 @@ function continueGeneration() {
       </div>
 
       <ChatInput
+        ref="chatInputRef"
         :loading="loading"
         :mode="mode"
         :mode-options="modeOptions"
@@ -1600,6 +1625,14 @@ function continueGeneration() {
         @command="onSlashCommand"
         @open-panel="openContextPanel"
       />
+
+      <ChatStatusBar
+        :model="llmModel"
+        :stats="lastTurnStats"
+        :online="isOnline && !connectionLost"
+      />
+
+      <ChatDisplaySettings v-model:open="displaySettingsOpen" />
     </div>
 
     <!-- 侧面板 -->

@@ -36,6 +36,10 @@ export interface TranscriptViewport {
   restore(el: ViewportHost, offset: number): void
   /** 滚动到顶部（触顶加载更早消息时）。 */
   toTop(el: ViewportHost): void
+  /** 结构性几何变化（折叠/展开）后保持锚点：写入的落点可能被浏览器钳制（总高变小），
+   * 因此按**实际落点**登记 provenance —— 否则下一个原生 scroll 事件会被误判成用户
+   * 滚动，折叠后 1.2s 内自动跟随会被无谓阻断。 */
+  afterStructuralChange(el: ViewportHost, offset: number): void
   /** 当前是否处于用户输入租约中。 */
   isUserOwned(): boolean
   /** 是否已贴底（供"回到底部"按钮/未读徽标）。 */
@@ -112,6 +116,11 @@ export function createTranscriptViewport(
 
     toTop(el: ViewportHost) {
       write(el, 0)
+    },
+
+    afterStructuralChange(el: ViewportHost, offset: number) {
+      // 登记钳制后的真实落点：折叠使 scrollHeight 变小时浏览器会改写 scrollTop
+      if (write(el, offset)) pendingOffset = el.scrollTop
     },
 
     isUserOwned,

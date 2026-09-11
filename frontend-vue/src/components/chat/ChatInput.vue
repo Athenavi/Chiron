@@ -75,28 +75,105 @@ onMounted(async () => {
   }
 })
 
+// ── 本地存储（草稿 / 历史共用）：隐私模式下访问 localStorage 会抛异常，静默降级 ──
+function readLocal(key: string): string | null {
+  try { return localStorage.getItem(key) } catch { return null }
+}
+function writeLocal(key: string, value: string | null): void {
+  try {
+    if (value === null) localStorage.removeItem(key)
+    else localStorage.setItem(key, value)
+  } catch { /* 配额满 / 被禁用：放弃持久化，本次会话内的输入不受影响 */ }
+}
+
+// ── 输入历史召回（↑/↓，shell 语义；Esc 放弃召回并恢复草稿） ──
+// 与会话无关：它记的是「我刚问过什么」，跨会话沿用才是符合直觉的行为。
+const HISTORY_KEY = 'chiron:composer-history:v1'
+const HISTORY_LIMIT = 50
+const history = ref<string[]>(loadHistory())
+/** 召回游标：null = 未在召回（显示自己写的草稿） */
+const historyCursor = ref<number | null>(null)
+/** 首次召回前的草稿，用于「越过最近一条」时回到自己写的内容 */
+let draftBeforeRecall = ''
+
+function loadHistory(): string[] {
+  const raw = readLocal(HISTORY_KEY)
+  if (!raw) return []
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function pushHistory(text: string) {
+  // 重复提问移到最近，而不是堆第二份
+  const next = history.value.filter(v => v !== text)
+  next.push(text)
+  history.value = next.slice(-HISTORY_LIMIT)
+  writeLocal(HISTORY_KEY, JSON.stringify(history.value))
+}
+
+function recalledText(): string | null {
+  const cursor = historyCursor.value
+  return cursor === null ? null : history.value[cursor] ?? null
+}
+
+/** 返回是否消费了这次按键 */
+function recallHistory(delta: 1 | -1): boolean {
+  if (!history.value.length) return false
+  const cursor = historyCursor.value
+  if (cursor === null) {
+    if (delta === 1) return false            // 还没进入召回，没有「下一条」可去
+    draftBeforeRecall = input.value
+    historyCursor.value = history.value.length - 1
+  } else {
+    const next = cursor + delta
+    if (next >= history.value.length) {      // 越过最近一条 → 回到自己写的草稿
+      historyCursor.value = null
+      input.value = draftBeforeRecall
+      return true
+    }
+    if (next < 0) return true                // 已到最早一条：停住，不绕回
+    historyCursor.value = next
+  }
+  input.value = history.value[historyCursor.value!] ?? ''
+  return true
+}
+
+function cancelRecall(): boolean {
+  if (historyCursor.value === null) return false
+  historyCursor.value = null
+  input.value = draftBeforeRecall
+  return true
+}
+
+/** 不在首行时 ↑/↓ 属于光标移动，不召回 */
+function caretOnFirstLine(el: HTMLTextAreaElement): boolean {
+  const caret = el.selectionStart ?? 0
+  return !el.value.slice(0, caret).includes('\n')
+}
+
 // 草稿持久化（按会话 ID 存 localStorage）
 const DRAFT_PREFIX = 'chiron:draft:'
 function draftKey(sid?: string) { return sid ? DRAFT_PREFIX + sid : '' }
 function loadDraft() {
   const key = draftKey(props.sessionId)
-  if (key) {
-    input.value = localStorage.getItem(key) || ''
-  } else {
-    input.value = ''
-  }
+  input.value = key ? (readLocal(key) || '') : ''
+  historyCursor.value = null
 }
 function saveDraft() {
   const key = draftKey(props.sessionId)
   if (!key) return
-  if (input.value) localStorage.setItem(key, input.value)
-  else localStorage.removeItem(key)
+  writeLocal(key, input.value || null)
 }
 // 会话切换时加载草稿
 watch(() => props.sessionId, () => loadDraft(), { immediate: true })
-// 输入变化时保存草稿（防抖避免频繁写入）
+// 输入变化时保存草稿（防抖避免频繁写入）；手动编辑即退出历史召回
 let saveTimer: ReturnType<typeof setTimeout> | null = null
-watch(input, () => {
+watch(input, value => {
+  if (value !== recalledText()) historyCursor.value = null
   if (saveTimer) clearTimeout(saveTimer)
   saveTimer = setTimeout(saveDraft, 300)
 })
@@ -119,6 +196,16 @@ function onKeydown(e: KeyboardEvent) {
       return
     }
   }
+  // ↑/↓ 召回历史（shell 语义）：斜杠菜单打开时不抢键；不在首行时留给光标移动
+  if (!showSlashMenu.value && !e.altKey && !e.ctrlKey && !e.metaKey
+    && (e.key === 'ArrowUp' || e.key === 'ArrowDown')
+    && caretOnFirstLine(e.target as HTMLTextAreaElement)) {
+    if (recallHistory(e.key === 'ArrowUp' ? -1 : 1)) {
+      e.preventDefault()
+      return
+    }
+  }
+  if (e.key === 'Escape' && cancelRecall()) return
   // Enter 发送（无修饰键）；Shift+Enter 换行；Cmd/Ctrl+Enter 也发送（兼容）
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
     e.preventDefault()
@@ -138,6 +225,8 @@ function submit() {
   const text = input.value.trim()
   if ((!text && !pendingAttachments.value.length) || props.loading) return
   const atts = pendingAttachments.value.length ? [...pendingAttachments.value] : undefined
+  if (text) pushHistory(text)
+  historyCursor.value = null
   input.value = ''
   pendingAttachments.value = []
   // 发送后清空草稿
@@ -325,6 +414,19 @@ function onSlashInput() {
   showSlashMenu.value = filteredCommands.value.length > 0
   slashIndex.value = 0
 }
+
+/**
+ * 供父组件引用选中内容（消息区「引用到输入框」）：
+ * 用 `>` 引用块保留原文换行，插入后把光标交回输入框。
+ */
+function insertText(text: string) {
+  const quoted = text.split('\n').map(line => `> ${line}`).join('\n')
+  input.value = input.value ? `${input.value}\n\n${quoted}\n\n` : `${quoted}\n\n`
+  historyCursor.value = null
+  nextTick(() => textareaRef.value?.focus?.())
+}
+
+defineExpose({ insertText })
 </script>
 
 <template>
@@ -421,7 +523,7 @@ function onSlashInput() {
         v-model:value="input"
         :rows="1"
         :auto-size="{ minRows: 1, maxRows: 5 }"
-        :placeholder="dragOver ? '松开以上传文件' : '发送消息...（输入 / 查看命令）'"
+        :placeholder="dragOver ? '松开以上传文件' : '发送消息...（/ 查看命令 · ↑ 召回历史）'"
         class="input-field"
         :disabled="disabled"
         aria-label="消息输入框"

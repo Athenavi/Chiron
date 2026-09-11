@@ -43,8 +43,12 @@ export interface RenderSegment {
 export interface WindowOptions {
   /** 视口上下各预渲染的像素量（滚动时避免先白后填）。 */
   overscanPx?: number
-  /** 常驻尾部行数：活跃轮 + 最近若干轮。 */
+  /** 常驻尾部的**按行**兜底值（投影不可用时才用）。 */
   residentTail?: number
+  /** 投影给出的尾部起点（按回合对齐）：常驻语义以回合为单位，给定时优先于 residentTail。 */
+  residentTailStart?: number
+  /** 常驻行数上限：单个巨型回合不得把常驻预算撑爆（超出的部分正常参与卸载）。 */
+  residentMaxRows?: number
 }
 
 /** 未测量行的尺寸估计：按 kind 给不同默认值，避免初值偏差过大。 */
@@ -54,6 +58,10 @@ export function estimateRowSize(kind: string): number {
       return 36
     case 'turn_stats':
       return 28
+    // 折叠头是 28px 行 + 上下 2px 行距，估计值略大以免窗口边界低估
+    case 'turn_header':
+    case 'tool_group_header':
+      return 32
     case 'tool_call':
       return 56
     case 'tool_result':
@@ -121,18 +129,21 @@ export function computeWindowRange(
   if (rowCount <= 0) return { start: 0, end: 0, tailStart: 0, tailEnd: 0 }
 
   const overscan = Math.max(0, opts.overscanPx ?? 400)
-  const residentTail = Math.max(0, Math.min(opts.residentTail ?? 0, rowCount))
+  // 尾部起点 = max(投影给的回合起点 / 按行兜底, 按行上限截断点)，再夹到 [0, rowCount]。
+  // 上限防止单个巨型回合把常驻预算撑爆（常驻行不参与卸载）。
+  const byRows = rowCount - Math.max(0, Math.min(opts.residentTail ?? 0, rowCount))
+  const byCap = opts.residentMaxRows ? rowCount - Math.max(0, opts.residentMaxRows) : 0
+  const tailStart = Math.max(0, Math.min(rowCount, Math.max(opts.residentTailStart ?? byRows, byCap)))
 
   const from = Math.max(0, scrollTop - overscan)
   const to = scrollTop + Math.max(0, viewportHeight) + overscan
 
-  let start = firstRowBelow(geo, rowCount, from)
+  const start = firstRowBelow(geo, rowCount, from)
   let end = firstRowAtOrBelow(geo, rowCount, to)
   if (end <= start) end = Math.min(rowCount, start + 1)
 
   // 常驻尾部独立于主窗口（二者可能重叠），重叠与相邻由 toSegments 负责合并
   const tailEnd = rowCount
-  const tailStart = Math.max(0, rowCount - residentTail)
 
   return { start, end, tailStart, tailEnd }
 }

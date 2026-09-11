@@ -534,13 +534,13 @@ function handleMsgClick(e: MouseEvent) {
 /* 消息列：748px 内容宽（deepseek --dsh-chat-content-width），16px 节奏。
    注意：虚拟列表 item 为 absolute（left:0 right:0），此处不能设 width:100%，
    否则 left+width+right 超约束会让 right 失效、margin auto 退化为 0（消息列贴左） */
-.msg-row { padding: 6px 0; max-width: min(720px, 92%); margin: 0 auto; }
+.msg-row { padding: var(--chat-msg-gap, 6px) 0; max-width: min(720px, 92%); margin: 0 auto; }
 .msg-row.user { display: flex; justify-content: flex-end; }
 /* 轨迹跳转高亮闪烁（deepseek data-current 聚焦反馈） */
 .msg-row.highlighted { background: var(--primary-bg); border-radius: var(--sig-radius-card); animation: trajectoryFlash 2s ease-out; }
 @keyframes trajectoryFlash { 0% { background: var(--primary-bg); } 100% { background: transparent; } }
 .msg-content { min-width: 0; }
-.msg-text { font-size: 16px; line-height: 28px; color: var(--text-primary); }
+.msg-text { font-size: var(--chat-text-size, 16px); line-height: var(--chat-text-leading, 1.75); color: var(--text-primary); }
 .streaming-text { white-space: pre-wrap; word-break: break-word; }
 /* UI/UX：流式生成光标（deepseek 打字效果） */
 .streaming-text::after {
@@ -570,7 +570,8 @@ function handleMsgClick(e: MouseEvent) {
   display: inline-block; padding: 10px 16px;
   background: var(--bubble-user); color: var(--bubble-user-text);
   border-radius: var(--sig-radius-bubble); border-bottom-right-radius: var(--sig-radius-bubble-assistant); max-width: min(525px, 88%);
-  line-height: 24px;
+  /* 气泡行高比正文紧一档，但随字号缩放（16px 字号下仍是 24px） */
+  line-height: calc(var(--chat-text-size, 16px) * 1.5);
   transition: box-shadow 0.2s ease;
 }
 .msg-row.user .msg-text:hover { box-shadow: var(--sig-shadow-hover); }

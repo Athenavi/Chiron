@@ -1396,6 +1396,11 @@ body {
   --chat-row-width: 720px;
   --chat-row-inline-pad: 24px;
   --chat-row-height: 28px;
+
+  /* 阅读排版偏好：设置面板写入 <html> 内联样式覆盖，默认值与接入前的硬编码一致 */
+  --chat-text-size: 16px;
+  --chat-text-leading: 1.75;
+  --chat-msg-gap: 6px;
 }
 
 /* 行式容器：宽度 + 水平内边距 + 行间距（卡片式组件只用下面的 chevron/状态点） */

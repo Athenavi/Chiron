@@ -1,0 +1,59 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+import { CloudServerOutlined, DisconnectOutlined } from '@ant-design/icons-vue'
+import type { TurnStatsItem } from './chat-types'
+
+const props = defineProps<{
+  model?: string
+  /** 最近一轮的用量（后端在回合结束时下发 turn_stats；没有则整段隐藏） */
+  stats?: TurnStatsItem | null
+  online: boolean
+}>()
+
+const hasUsage = computed(() => Boolean(props.stats && (props.stats.inputTokens || props.stats.outputTokens)))
+</script>
+
+<template>
+  <div class="chat-status">
+    <span class="cs-item cs-model">{{ model || '默认模型' }}</span>
+    <template v-if="hasUsage">
+      <span
+        class="cs-sep"
+        aria-hidden
+      />
+      <span class="cs-item">{{ stats?.inputTokens ?? 0 }} in / {{ stats?.outputTokens ?? 0 }} out</span>
+      <span
+        v-if="stats?.durationSec"
+        class="cs-item"
+      >{{ stats.durationSec }}s</span>
+    </template>
+    <span class="cs-spacer" />
+    <span
+      class="cs-item cs-conn"
+      :class="{ offline: !online }"
+    >
+      <CloudServerOutlined v-if="online" />
+      <DisconnectOutlined v-else />
+      <span>{{ online ? '已连接' : '离线' }}</span>
+    </span>
+  </div>
+</template>
+
+<!-- 状态栏只读展示：字号与颜色都走 token，切主题自动跟随 -->
+<style scoped>
+.chat-status {
+  flex: none;
+  display: flex; align-items: center; gap: 8px;
+  height: 26px; padding: 0 16px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-page);
+  font-size: 11px; color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.cs-item { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.cs-model { max-width: 38%; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-mono); }
+.cs-sep { flex: none; width: 2px; height: 2px; border-radius: 1px; background: var(--text-muted); }
+.cs-spacer { flex: 1; }
+.cs-conn.offline { color: var(--warning); }
+@media (max-width: 576px) { .chat-status { padding: 0 12px; } .cs-model { max-width: 30%; } }
+</style>
