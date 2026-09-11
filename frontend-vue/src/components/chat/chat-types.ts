@@ -180,3 +180,14 @@ export function throttleRaf<T extends (...args: any[]) => void>(fn: T): T {
   }) as T
   return wrapped
 }
+
+/**
+ * 指定消息之后还有多少条（不含它自己）。
+ *
+ * 用于删除类操作（重发 / 重新生成 / 重试）前的代价提示：这些操作会截断到该消息，
+ * 后端没有回滚接口，所以必须让用户在动手前知道会丢几条。找不到该消息时返回 0。
+ */
+export function countItemsAfter(items: readonly ChatItem[], itemId: string): number {
+  const index = items.findIndex(item => item.id === itemId)
+  return index < 0 ? 0 : items.length - index - 1
+}

@@ -21,7 +21,7 @@ import ChatDisplaySettings from '../components/chat/ChatDisplaySettings.vue'
 import AskCard from '../components/chat/AskCard.vue'
 import CallChainTimeline from '../components/CallChainTimeline.vue'
 import { HistoryOutlined, ExportOutlined, BulbOutlined, BulbFilled, MoreOutlined, FontSizeOutlined, SearchOutlined } from '@ant-design/icons-vue'
-import { splitThinking, stripUserInputTag, formatClock, formatSize } from '../components/chat/chat-types'
+import { splitThinking, stripUserInputTag, formatClock, formatSize, countItemsAfter } from '../components/chat/chat-types'
 import { findMatches } from '../components/chat/transcriptSearch'
 import type { ChatItem, ChatSession, ChatAttachment, TurnStatsItem } from '../components/chat/chat-types'
 
@@ -1383,10 +1383,39 @@ function truncateFrom(itemId: string): { text?: string; attachments?: ChatAttach
   return userMsg ? { text: userMsg.content, attachments: userMsg.attachments } : {}
 }
 
+/** 指定消息之后还有多少条（不含自身）：重发会连带删除，先让用户知道代价 */
+function messagesAfter(itemId: string): number {
+  return countItemsAfter(items.value, itemId)
+}
+
+/**
+ * 删除类操作前的确认。
+ *
+ * `truncateFrom` 是**不可逆**的（后续消息直接从前端状态里消失，后端也没有回滚接口），
+ * 而「重发 / 重新生成」是消息操作栏里的高频按钮 —— 误点一次就丢掉整段后续内容。
+ * 代价为 0 时（消息已在末尾）不打扰。
+ */
+function confirmDestructive(removeCount: number, action: string, run: () => void) {
+  if (removeCount <= 0) {
+    run()
+    return
+  }
+  Modal.confirm({
+    title: `这会删除后面的 ${removeCount} 条消息`,
+    content: `${action}需要截断到这条消息，其后 ${removeCount} 条消息（含助手回复）会被删除，且无法恢复。`,
+    okText: '删除并继续',
+    okType: 'danger',
+    cancelText: '取消',
+    onOk: () => { run() },
+  })
+}
+
 /** 用户消息编辑后重发：删除该消息及之后所有，用新文本重发 */
 function retryFromUserMessage(itemId: string, newText: string) {
-  truncateFrom(itemId)
-  sendMessage(newText)
+  confirmDestructive(messagesAfter(itemId), '重发', () => {
+    truncateFrom(itemId)
+    sendMessage(newText)
+  })
 }
 
 /** 助手消息重新生成：删除该消息及之后所有，取上一条用户消息重发 */
@@ -1398,12 +1427,14 @@ function regenerateAssistant(itemId: string) {
     const it = items.value[i]
     if (it.kind === 'text' && it.role === 'user') { userMsg = it; break }
   }
-  truncateFrom(itemId)
-  if (userMsg) {
-    sendMessage(userMsg.content, userMsg.attachments)
-  } else {
+  if (!userMsg) {
     message.warning('未找到对应的用户消息，无法重新生成')
+    return
   }
+  confirmDestructive(messagesAfter(itemId), '重新生成', () => {
+    truncateFrom(itemId)
+    sendMessage(userMsg.content, userMsg.attachments)
+  })
 }
 
 /** 失败消息重试：清除错误状态，用原文本重发 */
@@ -1414,8 +1445,10 @@ function retryFailedMessage(itemId: string) {
   if (it.kind !== 'text') return
   const text = it.content
   const attachments = it.attachments
-  truncateFrom(itemId)
-  sendMessage(text, attachments)
+  confirmDestructive(messagesAfter(itemId), '重试', () => {
+    truncateFrom(itemId)
+    sendMessage(text, attachments)
+  })
 }
 
 function stopGeneration() {

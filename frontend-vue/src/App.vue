@@ -5,6 +5,7 @@ import { ConfigProvider, theme } from 'ant-design-vue'
 import AppLayout from './components/AppLayout.vue'
 import RouteProgressBar from './components/common/RouteProgressBar.vue'
 import ErrorBoundary from './components/common/ErrorBoundary.vue'
+import ImageViewer from './components/common/ImageViewer.vue'
 import { useThemeStore } from './stores/theme'
 import { useTypographyStore } from './stores/typography'
 
@@ -38,6 +39,8 @@ watchEffect(() => {
       <AppLayout v-if="showLayout" />
       <router-view v-else />
     </ErrorBoundary>
+    <!-- 全局单例：任何位置的图片都能唤起同一个查看器 -->
+    <ImageViewer />
   </ConfigProvider>
 </template>
 

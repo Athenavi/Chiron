@@ -6,13 +6,15 @@ import 'highlight.js/styles/github.css'
 // P3-A: 暗色模式下的代码高亮配色覆盖（避免引入两个冲突的 hljs 主题）
 import texmath from 'markdown-it-texmath'
 import katex from 'katex'
-import hljs from 'highlight.js/lib/common'
-import { computed, ref, watch, onBeforeUnmount } from 'vue'
+import { computed, ref, watch, onMounted, onUpdated, onBeforeUnmount } from 'vue'
 import { message, Input } from 'ant-design-vue'
 import { CopyOutlined, EditOutlined, ReloadOutlined, FileOutlined, LikeOutlined, DislikeOutlined, LikeFilled, DislikeFilled, CommentOutlined } from '@ant-design/icons-vue'
 import ReasoningBlock from './ReasoningBlock.vue'
 import ToolCallCard from './ToolCallCard.vue'
 import ToolResultBlock from './ToolResultBlock.vue'
+import { renderMermaidBlocks } from './mermaidRenderer'
+import { highlightCodeBlocks } from './codeHighlighter'
+import { openImageViewer } from '../common/imageViewerState'
 import type { ChatItem, ToolCallItem, ToolResultItem, TextItem, ChatAttachment } from './chat-types'
 import { formatSize } from './chat-types'
 import { resolveMediaUrl } from '../../api'
@@ -23,6 +25,9 @@ const props = defineProps<{
   anchorKey?: number
   highlighted?: boolean
 }>()
+
+/** 正文容器：mermaid 渲染需要拿到已挂载的 DOM */
+const msgTextRef = ref<HTMLElement | null>(null)
 
 const emit = defineEmits<{
   /** 用户消息编辑后重发：删除该消息及其后所有消息，用新文本重发 */
@@ -232,24 +237,26 @@ md.renderer.rules.fence = (tokens: any[], idx: number) => {
   const token = tokens[idx]
   const lang = (token.info || '').trim().toLowerCase()
   const code = token.content
-  if (lang === 'mermaid') return `<div class="mermaid">${md.utils.escapeHtml(code)}</div>`
-  // P2-A: 接入 highlight.js 语法高亮
-  let highlighted: string
+  if (lang === 'mermaid') {
+    // 先输出原始源码（未渲染/渲染失败时可读），data-code 供渲染器取用
+    return `<div class="mermaid" data-code="${encodeURIComponent(code)}">${md.utils.escapeHtml(code)}</div>`
+  }
+  // 代码块先输出纯转义文本（带语言标记），高亮由 codeHighlighter 在挂载后按需增强：
+  // 首屏不必为用不到的 highlight.js 付体积，高亮失败也不影响代码可读可复制
   const safeLang = md.utils.escapeHtml(lang || 'code')
   const encoded = encodeURIComponent(code)
-  try {
-    if (lang && hljs.getLanguage(lang)) {
-      highlighted = hljs.highlight(code, { language: lang }).value
-    } else {
-      // 未知语言：自动检测（hljs.highlightAuto 返回最可能的结果）
-      highlighted = hljs.highlightAuto(code).value
-    }
-  } catch {
-    // 高亮失败：回退到纯转义
-    highlighted = md.utils.escapeHtml(code)
-  }
-  return `<div class="code-block-wrapper"><div class="code-block-header"><span class="code-lang">${safeLang}</span><button class="code-copy-btn" data-code="${encoded}">复制</button></div><pre><code class="hljs language-${safeLang}">${highlighted}</code></pre></div>`
+  const lineCount = code.replace(/\n$/, '').split('\n').length
+  const collapsible = lineCount > CODE_COLLAPSE_LINES
+  const header = `<div class="code-block-header"><span class="code-lang">${safeLang}</span><span class="code-lines">${lineCount} 行</span><button class="code-copy-btn" data-code="${encoded}">复制</button></div>`
+  const body = `<pre><code class="language-${safeLang}" data-lang="${safeLang}">${md.utils.escapeHtml(code)}</code></pre>`
+  const toggle = collapsible
+    ? `<button class="code-expand-btn" type="button" data-lines="${lineCount}">展开全部（共 ${lineCount} 行）</button>`
+    : ''
+  return `<div class="code-block-wrapper"${collapsible ? ' data-collapsed="1"' : ''}>${header}${body}${toggle}</div>`
 }
+
+/** 超过该行数默认折叠：长代码会挤掉整屏消息，先给一段可读的预览 */
+const CODE_COLLAPSE_LINES = 28
 
 // P 性能：图片懒加载（长列表/历史中大量图片不阻塞首屏，滚动到才加载）
 md.renderer.rules.image = (tokens: any[], idx: number) => {
@@ -287,16 +294,92 @@ function renderMarkdown(src: string): string {
 const mdCache = new Map<string, string>()
 const MD_CACHE_MAX = 300
 
-function handleMsgClick(e: MouseEvent) {
-  const btn = (e.target as HTMLElement).closest('.code-copy-btn') as HTMLElement | null
-  if (!btn) return
-  const code = decodeURIComponent(btn.dataset.code || '')
-  if (!code) return
-  navigator.clipboard.writeText(code).then(() => {
-    btn.textContent = '已复制'
-    setTimeout(() => { btn.textContent = '复制' }, 2000)
-  }).catch(() => { /* clipboard not available */ })
+// ── 长内容的渲染让位 ─────────────────────────────────────────
+// markdown + sanitize 对超长正文是重活：同步做会占住主线程，输入与滚动都卡一下。
+// 这里只在超长时让位（先显示纯文本，空闲后再渲染替换）；普通长度仍同步渲染，
+// 以免每条消息都"先纯文本后格式"地闪一下。
+const LARGE_MESSAGE_CHARS = 30000
+const renderedHtml = ref('')
+const pendingLargeRender = ref(false)
+let renderToken = 0
+
+function scheduleRender() {
+  const src = displayContent.value
+  const token = ++renderToken
+  if (!src) {
+    renderedHtml.value = ''
+    pendingLargeRender.value = false
+    return
+  }
+
+  const cached = mdCache.get(src)
+  if (cached !== undefined) {
+    renderedHtml.value = cached
+    pendingLargeRender.value = false
+    return
+  }
+
+  if (src.length <= LARGE_MESSAGE_CHARS) {
+    renderedHtml.value = renderMarkdown(src)
+    pendingLargeRender.value = false
+    return
+  }
+
+  pendingLargeRender.value = true
+  const run = () => {
+    if (token !== renderToken) return   // 让位期间内容又变了：本次作废
+    renderedHtml.value = renderMarkdown(src)
+    pendingLargeRender.value = false
+  }
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(run, { timeout: 400 })
+  else setTimeout(run, 0)
 }
+
+watch(displayContent, scheduleRender, { immediate: true })
+
+function handleMsgClick(e: MouseEvent) {
+  const target = e.target as HTMLElement
+  const toggle = target.closest('.code-expand-btn') as HTMLElement | null
+  if (toggle) {
+    const box = toggle.closest('.code-block-wrapper') as HTMLElement | null
+    if (box) {
+      const collapsed = box.dataset.collapsed === '1'
+      box.dataset.collapsed = collapsed ? '0' : '1'
+      const lines = toggle.dataset.lines || ''
+      toggle.textContent = collapsed ? `收起（共 ${lines} 行）` : `展开全部（共 ${lines} 行）`
+    }
+    return
+  }
+  const btn = target.closest('.code-copy-btn') as HTMLElement | null
+  if (btn) {
+    const code = decodeURIComponent(btn.dataset.code || '')
+    if (!code) return
+    navigator.clipboard.writeText(code).then(() => {
+      btn.textContent = '已复制'
+      setTimeout(() => { btn.textContent = '复制' }, 2000)
+    }).catch(() => { /* clipboard not available */ })
+    return
+  }
+  // 正文里的图片（markdown 图片由 v-html 生成，挂不上 Vue 事件）交查看器放大
+  const img = target.closest('img') as HTMLImageElement | null
+  if (img?.src) openImageViewer({ src: img.src, alt: img.alt })
+}
+
+/**
+ * 正文增强（图表渲染 + 代码高亮）：只在 DOM 完成 patch 后触发，内容变化由 onUpdated 覆盖。
+ * 两者都是纯增强 —— 加载或渲染失败时正文保持可读，不影响消息本身。
+ */
+function enhanceContent() {
+  const host = msgTextRef.value
+  if (!host) return
+  if (props.item.kind !== 'text' || (props.item as TextItem).streaming) return
+  const dark = document.documentElement.classList.contains('dark')
+  void renderMermaidBlocks(host, { dark })
+  void highlightCodeBlocks(host)
+}
+
+onMounted(enhanceContent)
+onUpdated(enhanceContent)
 </script>
 
 <template>
@@ -352,10 +435,18 @@ function handleMsgClick(e: MouseEvent) {
         >
           {{ item.content }}
         </div>
+        <!-- 超长正文让位期间先给纯文本，避免空白；渲染完成后由下方 v-html 分支接管 -->
+        <div
+          v-else-if="pendingLargeRender"
+          class="msg-text streaming-text"
+        >
+          {{ displayContent }}
+        </div>
         <div
           v-else
+          ref="msgTextRef"
           class="msg-text"
-          v-html="renderMarkdown(displayContent)"
+          v-html="renderedHtml"
         />
         <!-- P3-B: 长消息展开/折叠按钮 -->
         <button
@@ -382,6 +473,7 @@ function handleMsgClick(e: MouseEvent) {
               class="msg-attachment-img"
               loading="lazy"
               @error="onAttachmentImgError(att)"
+              @click.stop="openImageViewer({ src: attachmentUrl(att), alt: att.name })"
             >
             <div
               v-else-if="att.isAudio"
@@ -623,10 +715,48 @@ function handleMsgClick(e: MouseEvent) {
 .msg-text :deep(.code-block-wrapper) { margin: 16px 0; background: var(--bg-code); border-radius: var(--sig-radius-code); overflow: hidden; }
 .msg-text :deep(.code-block-header) { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 9px 14px; background: var(--bg-secondary); }
 .msg-text :deep(.code-lang) { font-family: var(--font-mono); font-size: 12px; line-height: 18px; color: var(--text-primary); }
+.msg-text :deep(.code-lines) { flex: 1; min-width: 0; font-size: 11px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
 .msg-text :deep(.code-copy-btn) { background: none; border: none; color: var(--text-tertiary); cursor: pointer; font-size: 12px; padding: 0; }
 .msg-text :deep(.code-copy-btn:hover) { color: var(--primary); }
+/* 长代码默认折叠：给一段可读预览 + 底部渐隐提示，展开按钮写明总行数 */
+.msg-text :deep(.code-block-wrapper[data-collapsed='1'] pre) { max-height: 460px; overflow: hidden; }
+.msg-text :deep(.code-block-wrapper[data-collapsed='1']) { position: relative; }
+.msg-text :deep(.code-block-wrapper[data-collapsed='1'])::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 31px; height: 56px;
+  background: linear-gradient(to bottom, transparent, var(--bg-code));
+  pointer-events: none;
+}
+.msg-text :deep(.code-expand-btn) {
+  display: block; width: 100%; padding: 6px;
+  border: none; border-top: 1px solid var(--border-subtle);
+  background: var(--bg-secondary); color: var(--text-secondary);
+  font-size: 12px; cursor: pointer;
+}
+.msg-text :deep(.code-expand-btn:hover) { color: var(--primary); }
+.msg-text :deep(.code-expand-btn:focus-visible) { outline: 2px solid var(--primary); outline-offset: -2px; }
 .msg-text :deep(pre) { margin: 0 !important; padding: 16px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
 .msg-text :deep(pre code) { background: none; padding: 0; font-size: 0.9em; color: var(--text-code); }
+/* 行号：两列布局（行号列不可选中，复制代码时不会带上行号） */
+.msg-text :deep(.code-line) { display: flex; }
+.msg-text :deep(.code-line-no) {
+  flex: none; width: 2.6em; padding-right: 12px;
+  text-align: right; color: var(--text-tertiary); user-select: none;
+}
+.msg-text :deep(.code-line-body) { flex: 1; min-width: 0; white-space: pre-wrap; word-break: break-all; }
+/* mermaid 图表：未渲染/渲染失败时按源码块展示（可读、可复制），成功后居中撑满内容列宽 */
+.msg-text :deep(.mermaid) {
+  margin: 16px 0; padding: 12px;
+  background: var(--bg-code); border-radius: var(--sig-radius-code);
+  font-family: var(--font-mono); font-size: 12px; line-height: 1.6;
+  white-space: pre-wrap; word-break: break-all; color: var(--text-secondary);
+}
+.msg-text :deep(.mermaid-diagram) { display: flex; justify-content: center; overflow-x: auto; background: none; padding: 8px; }
+.msg-text :deep(.mermaid-diagram svg) { max-width: 100%; height: auto; }
+.msg-text :deep(.mermaid-error) { border-left: 3px solid var(--error); }
+.msg-text :deep(.mermaid-error)::before {
+  content: attr(data-error); display: block; margin-bottom: 6px;
+  color: var(--error); font-family: var(--font-sans); font-size: 12px;
+}
 /* 消息操作行（deepseek MessageIconActions：28px 高、hover 淡入、80ms） */
 .msg-actions { display: flex; align-items: center; gap: 10px; height: 28px; margin-top: 4px; }
 .msg-actions.user { justify-content: flex-end; }

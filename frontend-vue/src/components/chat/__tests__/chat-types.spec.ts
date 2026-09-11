@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { splitThinking } from '../chat-types'
+import { countItemsAfter, splitThinking } from '../chat-types'
+import type { ChatItem } from '../chat-types'
 
 // 回归保护：引擎（python-engine/app/agent/runtime.py）按 ~80 字一段下发
 // "[thinking]片段[/thinking]"，因此流式 buffer 与落库文本都会出现多段思考块。
@@ -43,5 +44,28 @@ describe('splitThinking（loose 状态机）', () => {
     const plain = splitThinking('正文里提到 [thinking] 标签的写法')
     expect(plain.reasoning).toBe('')
     expect(plain.body).toBe('正文里提到 [thinking] 标签的写法')
+  })
+})
+
+describe('countItemsAfter（删除代价提示）', () => {
+  const items: ChatItem[] = [
+    { kind: 'text', role: 'user', content: 'q1', id: 'u1' },
+    { kind: 'text', role: 'assistant', content: 'a1', id: 'a1' },
+    { kind: 'text', role: 'user', content: 'q2', id: 'u2' },
+    { kind: 'text', role: 'assistant', content: 'a2', id: 'a2' },
+  ]
+
+  it('返回该消息之后的条数（不含自身）', () => {
+    expect(countItemsAfter(items, 'u1')).toBe(3)
+    expect(countItemsAfter(items, 'u2')).toBe(1)
+  })
+
+  it('最后一条之后为 0（代价为 0 时不打扰用户）', () => {
+    expect(countItemsAfter(items, 'a2')).toBe(0)
+  })
+
+  it('找不到该消息时返回 0（按无代价处理）', () => {
+    expect(countItemsAfter(items, 'missing')).toBe(0)
+    expect(countItemsAfter([], 'x')).toBe(0)
   })
 })
