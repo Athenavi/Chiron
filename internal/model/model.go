@@ -48,6 +48,9 @@ type Message struct {
 	Role      string    `json:"role"` // user / assistant / system / tool
 	Content   string    `json:"content"`
 	ToolCalls string    `json:"tool_calls,omitempty"` // OpenAI 格式 tool_calls JSONB（S 修复：落库）
+	// TurnID 标识消息所属回合。前端按回合分组渲染与锚定：同一回合的
+	// 思考/正文/工具卡片共享同一个稳定身份，历史补丁与分页插入不得改写它。
+	TurnID    string    `json:"turn_id,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 }
 

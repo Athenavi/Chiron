@@ -144,7 +144,7 @@ const searchFiles = computed(() => {
         @click="expanded = !expanded"
       >
         <CaretRightOutlined
-          class="chevron"
+          class="chat-chevron"
           :class="{ open: expanded }"
         />
         <span class="result-label">{{ item.isError ? '结果（失败）' : '结果' }}</span>
@@ -174,8 +174,6 @@ const searchFiles = computed(() => {
 .result-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 4px 0; border: none; background: none; color: var(--text-tertiary); cursor: pointer; font-size: 12px; }
 .result-head:hover { color: var(--primary); }
 .tool-result.error .result-label { color: var(--error); }
-.chevron { font-size: 10px; transition: transform 0.2s; }
-.chevron.open { transform: rotate(90deg); }
 .result-code { margin: 0; padding: 12px; background: var(--bg-code); border-radius: var(--sig-radius-code); font-family: var(--font-mono); font-size: 12px; line-height: 1.6; color: var(--text-code); white-space: pre-wrap; word-break: break-all; }
 .result-text { padding: 10px 12px; background: var(--bg-secondary); border-radius: var(--sig-radius-button); font-size: 13px; color: var(--text-secondary); white-space: pre-wrap; word-break: break-all; }
 .result-image { max-width: min(320px, 80vw); max-height: 240px; border-radius: var(--sig-radius-card); border: 1px solid var(--border-card); display: block; margin-top: 4px; }

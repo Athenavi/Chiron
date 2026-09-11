@@ -39,7 +39,7 @@ const padLeft = computed(() => (props.depth || 0) * 22)
 
 <template>
   <div
-    class="tool-row-wrap"
+    class="tool-row-wrap chat-row-shell"
     :data-state="item.status"
     :data-tool="item.name"
   >
@@ -56,28 +56,29 @@ const padLeft = computed(() => (props.depth || 0) * 22)
       :style="{ marginLeft: `${padLeft}px` }"
     >
       <button
-        class="tool-main"
+        class="tool-main chat-row-head"
         type="button"
+        :aria-expanded="expanded"
         @click="expanded = !expanded"
       >
         <CaretRightOutlined
-          class="chevron"
+          class="chat-chevron"
           :class="{ open: expanded }"
         />
         <span class="tool-name">{{ item.name }}</span>
         <span
-          class="sep"
+          class="chat-sep"
           aria-hidden
         />
         <span
-          class="state-dot"
-          :class="item.status"
+          class="chat-state-dot"
+          :data-state="item.status"
           aria-hidden
         />
         <span class="tool-summary">{{ summary }}</span>
       </button>
 
-      <Transition name="expand">
+      <Transition name="chat-expand">
         <div
           v-if="expanded"
           class="tool-args"
@@ -89,29 +90,15 @@ const padLeft = computed(() => (props.depth || 0) * 22)
   </div>
 </template>
 
+<!-- 行节奏 / chevron / 状态点 / 展开动画 / reduced-motion 来自全局 .chat-* 原语（style.css）；
+     此处保留工具行独有的缩进导线、running sweep 流光与参数块 -->
 <style scoped>
-.tool-row-wrap { position: relative; max-width: min(720px, 92%); margin: 2px auto 0; padding: 0 24px; }
+.tool-row-wrap { position: relative; }
 .tree-guide { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--border); }
 
-/* 工具行：24px 单行（deepseek ToolRow 视觉） */
 .tool-row { overflow: hidden; border-radius: var(--sig-radius-code); }
 .tool-row:hover { background: var(--bg-hover); }
-.tool-main { display: flex; align-items: center; gap: 6px; width: 100%; height: 28px; padding: 0 8px; border: none; background: none; color: var(--text-secondary); cursor: pointer; font-size: 13px; text-align: left; }
-.chevron { font-size: 10px; color: var(--text-muted); transition: transform 0.2s; flex-shrink: 0; }
-.chevron.open { transform: rotate(90deg); }
 .tool-name { font-family: var(--font-mono); font-size: 13px; color: var(--text-primary); font-weight: 400; white-space: nowrap; }
-.sep { flex: none; width: 2px; height: 2px; border-radius: 1px; background: var(--text-muted); margin: 0 6px; }
-
-/* 状态点：实心 + 0.1 光晕双层（StateDot） */
-.state-dot { position: relative; flex: none; width: 10px; height: 10px; }
-.state-dot::before { content: ''; position: absolute; inset: 0; border-radius: 50%; background: currentColor; opacity: 0.12; }
-.state-dot::after { content: ''; position: absolute; inset: 20%; border-radius: 50%; background: currentColor; }
-.state-dot.running { color: var(--primary); }
-.state-dot.running::after { animation: dotPulse 1.4s ease-in-out infinite; }
-.state-dot.done { color: var(--success); }
-.state-dot.error { color: var(--error); }
-@keyframes dotPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-
 .tool-summary { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--text-tertiary); font-size: 12px; }
 
 /* running sweep 流光（deepseek ToolRow sweep） */
@@ -124,19 +111,9 @@ const padLeft = computed(() => (props.depth || 0) * 22)
 @keyframes toolRowSweep { 0% { left: -300px; } 90%, 100% { left: 100%; } }
 @media (prefers-reduced-motion: reduce) {
   .tool-row-wrap[data-state='running'] .tool-row::after { display: none; }
-  .state-dot.running::after { animation: none; }
 }
 
 .tool-args { padding: 8px 12px; margin: 2px 8px 6px; background: var(--bg-secondary); border: 1px solid var(--border-card); border-radius: var(--sig-radius-button); }
 .tool-args pre { margin: 0; font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); white-space: pre-wrap; word-break: break-all; }
-@media (max-width: 768px) { .tool-row-wrap { padding: 0 16px; } }
-/* 轻量展开动画（≤200ms） */
-.expand-enter-active, .expand-leave-active { transition: opacity 0.15s ease, transform 0.15s ease; overflow: hidden; }
-.expand-enter-from, .expand-leave-to { opacity: 0; transform: translateY(-4px); }
-@media (prefers-reduced-motion: reduce) { .expand-enter-active, .expand-leave-active { transition: none; } }
-@media (max-width: 768px) { .tool-main { min-height: 36px; } } /* 触控目标放大 */
-@media (max-width: 576px) {
-  .tool-row-wrap { padding: 0 12px; }
-  .tool-args { margin: 2px 4px 6px; }
-}
+@media (max-width: 576px) { .tool-args { margin: 2px 4px 6px; } }
 </style>

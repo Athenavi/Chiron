@@ -1,11 +1,14 @@
 <script setup lang="ts">
+import { CodeOutlined, EditOutlined, BarChartOutlined, BulbOutlined } from '@ant-design/icons-vue'
+
 const emit = defineEmits<{ (e: 'suggest', text: string): void }>()
 
+// 图标沿用产品其余部分的 ant-design 图标集，避免 emoji 在深浅主题下渲染不一致
 const suggestions = [
-  { icon: '📝', title: '代码生成', desc: '写一段 Python 代码实现排序算法', prompt: '写一段 Python 代码实现排序算法' },
-  { icon: '✏️', title: '创意写作', desc: '帮我写一篇关于 AI 的短文', prompt: '帮我写一篇关于 AI 的短文' },
-  { icon: '📊', title: '数据分析', desc: '分析这份数据的趋势', prompt: '分析这份数据的趋势' },
-  { icon: '🎯', title: '方案策划', desc: '帮我做一个项目计划', prompt: '帮我做一个项目计划' },
+  { icon: CodeOutlined, title: '代码生成', desc: '写一段 Python 代码实现排序算法', prompt: '写一段 Python 代码实现排序算法' },
+  { icon: EditOutlined, title: '创意写作', desc: '帮我写一篇关于 AI 的短文', prompt: '帮我写一篇关于 AI 的短文' },
+  { icon: BarChartOutlined, title: '数据分析', desc: '分析这份数据的趋势', prompt: '分析这份数据的趋势' },
+  { icon: BulbOutlined, title: '方案策划', desc: '帮我做一个项目计划', prompt: '帮我做一个项目计划' },
 ]
 </script>
 
@@ -34,9 +37,10 @@ const suggestions = [
           @keydown.enter.prevent="emit('suggest', s.prompt)"
           @keydown.space.prevent="emit('suggest', s.prompt)"
         >
-          <div class="card-icon">
-            {{ s.icon }}
-          </div>
+          <component
+            :is="s.icon"
+            class="card-icon"
+          />
           <div class="card-title">
             {{ s.title }}
           </div>
@@ -58,7 +62,8 @@ const suggestions = [
 .suggestion-grid { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
 .suggestion-card { width: 250px; padding: 14px; border-radius: var(--sig-radius-card); border: 1px solid var(--border-card); background: var(--bg-card); cursor: pointer; transition: all 0.2s; text-align: left; box-shadow: var(--sig-shadow-card); }
 .suggestion-card:hover { border-color: var(--primary); transform: translateY(-2px); box-shadow: var(--sig-shadow-hover); }
-.card-icon { font-size: 20px; margin-bottom: 8px; }
+.card-icon { display: block; font-size: 18px; line-height: 1; color: var(--text-secondary); margin-bottom: 8px; transition: color 0.2s; }
+.suggestion-card:hover .card-icon { color: var(--primary); }
 .card-title { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
 .card-desc { font-size: 12px; color: var(--text-tertiary); line-height: 1.4; }
 @media (max-width: 768px) { .suggestion-card { width: 100%; } .hero-content { width: 100%; } }

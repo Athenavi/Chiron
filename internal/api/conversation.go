@@ -44,6 +44,8 @@ type Message struct {
 	Role      string    `json:"role"`
 	Content   string    `json:"content"`
 	ToolCalls string    `json:"tool_calls,omitempty"` // assistant 消息的 OpenAI 格式 tool_calls（S 修复）
+	// TurnID 该消息所属回合（前端按回合分组渲染/锚定，缺失时前端按时间兜底）
+	TurnID    string    `json:"turn_id,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
@@ -167,6 +169,7 @@ func (h *ConversationHandler) Get(w http.ResponseWriter, r *http.Request) {
 			Role:      m.Role,
 			Content:   m.Content,
 			ToolCalls: m.ToolCalls, // S 修复：assistant 消息的 tool_calls 随详情返回
+			TurnID:    m.TurnID,
 			CreatedAt: m.CreatedAt,
 		})
 	}

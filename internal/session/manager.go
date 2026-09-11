@@ -673,7 +673,7 @@ func (m *Manager) GetMessagesPage(ctx context.Context, sessionID string, limit i
 		return page, nil
 	}
 	// 多取 1 条用于判断是否还有更早的数据
-	query := `SELECT id, session_id, role, content, COALESCE(tool_calls::text, ''), created_at
+	query := `SELECT id, session_id, role, content, COALESCE(tool_calls::text, ''), COALESCE(turn_id::text, ''), created_at
 		   FROM messages
 		   WHERE session_id = $1`
 	args := []interface{}{sessionID}
@@ -702,7 +702,7 @@ func (m *Manager) GetMessagesPage(ctx context.Context, sessionID string, limit i
 	var msgs []model.Message
 	for rows.Next() {
 		var msg model.Message
-		if err := rows.Scan(&msg.ID, &msg.SessionID, &msg.Role, &msg.Content, &msg.ToolCalls, &msg.CreatedAt); err != nil {
+		if err := rows.Scan(&msg.ID, &msg.SessionID, &msg.Role, &msg.Content, &msg.ToolCalls, &msg.TurnID, &msg.CreatedAt); err != nil {
 			slog.Warn("scan message row", "error", err)
 			continue
 		}
@@ -735,7 +735,7 @@ func (m *Manager) GetMessages(ctx context.Context, sessionID string, limit ...in
 		return nil, nil
 	}
 
-	query := `SELECT id, session_id, role, content, COALESCE(tool_calls::text, ''), created_at
+	query := `SELECT id, session_id, role, content, COALESCE(tool_calls::text, ''), COALESCE(turn_id::text, ''), created_at
 		   FROM messages
 		   WHERE session_id = $1
 		   ORDER BY created_at ASC`
@@ -743,8 +743,8 @@ func (m *Manager) GetMessages(ctx context.Context, sessionID string, limit ...in
 
 	if len(limit) > 0 && limit[0] > 0 {
 		// 子查询：先取最新的 N 条，再按正序排列，保持"最早优先"的返回契约
-		query = `SELECT id, session_id, role, content, COALESCE(tool_calls::text, ''), created_at FROM (
-			   SELECT id, session_id, role, content, tool_calls, created_at
+		query = `SELECT id, session_id, role, content, COALESCE(tool_calls::text, ''), COALESCE(turn_id::text, ''), created_at FROM (
+			   SELECT id, session_id, role, content, tool_calls, turn_id, created_at
 			   FROM messages
 			   WHERE session_id = $1
 			   ORDER BY created_at DESC
@@ -762,7 +762,7 @@ func (m *Manager) GetMessages(ctx context.Context, sessionID string, limit ...in
 	var msgs []model.Message
 	for rows.Next() {
 		var msg model.Message
-		if err := rows.Scan(&msg.ID, &msg.SessionID, &msg.Role, &msg.Content, &msg.ToolCalls, &msg.CreatedAt); err != nil {
+		if err := rows.Scan(&msg.ID, &msg.SessionID, &msg.Role, &msg.Content, &msg.ToolCalls, &msg.TurnID, &msg.CreatedAt); err != nil {
 			slog.Warn("scan message row", "error", err)
 			continue
 		}

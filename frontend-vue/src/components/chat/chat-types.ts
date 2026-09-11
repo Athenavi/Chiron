@@ -13,11 +13,9 @@ export interface ChatSession {
 
 export type ToolStatus = 'running' | 'done' | 'error'
 
-export interface DateDividerItem {
+export interface DateDividerItem extends ChatItemBase {
   kind: 'date_divider'
   content: string // 日期文本（如 8月16日）
-  id?: string
-  time?: string
 }
 
 export interface ChatItemBase {
@@ -26,6 +24,11 @@ export interface ChatItemBase {
   time?: string
   /** 稳定 id（虚拟列表 key + 流式定位；历史=消息 id，实时=运行时生成） */
   id?: string
+  /**
+   * 所属回合（后端 turn_id）。同一回合的思考/正文/工具卡片共享一个身份域：
+   * 渲染 key 与滚动锚点都用它，历史补丁与分页插入都不会让身份跨回合漂移。
+   */
+  turnId?: string
 }
 
 export interface TextItem extends ChatItemBase {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
-import { Button, Input, Modal, Checkbox, Alert, message } from 'ant-design-vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch, h } from 'vue'
+import { Button, Input, Modal, Checkbox, Alert, message, Dropdown } from 'ant-design-vue'
 import { MenuOutlined, CopyOutlined, LinkOutlined, CloseOutlined } from '@ant-design/icons-vue'
 import {
   api, createSSEConnection, submitApproval,
@@ -17,7 +17,7 @@ import MessageItem from '../components/chat/MessageItem.vue'
 import ChatEmptyHero from '../components/chat/ChatEmptyHero.vue'
 import ChatInput from '../components/chat/ChatInput.vue'
 import CallChainTimeline from '../components/CallChainTimeline.vue'
-import { HistoryOutlined, ExportOutlined, BulbOutlined, BulbFilled } from '@ant-design/icons-vue'
+import { HistoryOutlined, ExportOutlined, BulbOutlined, BulbFilled, MoreOutlined } from '@ant-design/icons-vue'
 import { splitThinking, stripUserInputTag, formatClock, formatSize } from '../components/chat/chat-types'
 import type { ChatItem, ChatSession, ChatAttachment } from '../components/chat/chat-types'
 
@@ -25,6 +25,19 @@ const authStore = useAuthStore()
 const themeStore = useThemeStore()
 const route = useRoute()
 const router = useRouter()
+
+// 工具条低频操作（导出/主题）收进溢出菜单：条上只留「会话/轨迹」两个高频入口。
+// 菜单项在渲染时求值，故与 themeStore 的初始化顺序无关。
+const toolbarMenuItems = computed(() => [
+  { key: 'export', label: '导出为 Markdown', icon: () => h(ExportOutlined), disabled: !items.value.length },
+  { type: 'divider' as const },
+  { key: 'theme', label: themeStore.isDark ? '切换到亮色模式' : '切换到暗色模式', icon: () => h(themeStore.isDark ? BulbFilled : BulbOutlined) },
+])
+
+function onToolbarMenu(info: { key: string | number }) {
+  if (info.key === 'export') exportMarkdown()
+  else if (info.key === 'theme') themeStore.toggleTheme()
+}
 
 // ── 会话状态 ──
 const sessions = ref<ChatSession[]>([])
@@ -788,18 +801,20 @@ const switchSeq = ref(0)
 
 function mergeHistory(messages: any[], toolCalls: any[]): ChatItem[] {
   interface TimelineEntry { t: number; items: ChatItem[] }
+  const turnOf = (m: any): string | undefined => (m?.turn_id ? String(m.turn_id) : undefined)
   const timeline: TimelineEntry[] = (messages || [])
     .filter((m: any) => (m.role === 'user' || m.role === 'assistant') && m.content)
     .map((m: any) => {
       const clock = formatClock(m.created_at)
+      const turnId = turnOf(m)
       const items: ChatItem[] = []
       if (m.role === 'user') {
-        items.push({ kind: 'text', role: 'user', content: stripUserInputTag(m.content), time: clock, id: m.id })
+        items.push({ kind: 'text', role: 'user', content: stripUserInputTag(m.content), time: clock, id: m.id, turnId })
       } else {
         const { reasoning, body } = splitThinking(m.content, { loose: true })
-        if (reasoning) items.push({ kind: 'reasoning', content: reasoning, time: clock, id: `${m.id}:r` })
+        if (reasoning) items.push({ kind: 'reasoning', content: reasoning, time: clock, id: `${m.id}:r`, turnId })
         if (body) items.push({
-          kind: 'text', role: 'assistant', content: body, time: clock, id: m.id,
+          kind: 'text', role: 'assistant', content: body, time: clock, id: m.id, turnId,
           metadata: normalizeMeta((m as any)?.metadata),
         } as any)
       }
@@ -815,11 +830,17 @@ function mergeHistory(messages: any[], toolCalls: any[]): ChatItem[] {
       if (!tc) continue
       if (typeof tc === 'string') {
         if (!callsById.has(tc)) {
-          callsById.set(tc, { id: tc, tool_name: 'tool', input: '', output: '', is_error: false, created_at: m.created_at })
+          callsById.set(tc, { id: tc, tool_name: 'tool', input: '', output: '', is_error: false, created_at: m.created_at, turn_id: m.turn_id })
         }
         continue
       }
-      if (!tc.id || callsById.has(tc.id)) continue
+      if (!tc.id) continue
+      const known = callsById.get(tc.id)
+      if (known) {
+        // 已有记录：只补回合身份，不覆盖落库的工具输出
+        if (!known.turn_id) known.turn_id = m.turn_id
+        continue
+      }
       callsById.set(tc.id, {
         id: tc.id,
         tool_name: tc.function?.name ?? tc.name,
@@ -827,19 +848,21 @@ function mergeHistory(messages: any[], toolCalls: any[]): ChatItem[] {
         output: '',
         is_error: false,
         created_at: m.created_at,
+        turn_id: m.turn_id,
       })
     }
   })
 
   Array.from(callsById.values()).forEach((tc: any) => {
+    const turnId = turnOf(tc)
     const callItems: ChatItem[] = [{
       kind: 'tool_call', id: tc.id, name: tc.tool_name,
-      arguments: tc.input || '', status: 'done',
+      arguments: tc.input || '', status: 'done', turnId,
     }]
     if (tc.output) {
       callItems.push({
         kind: 'tool_result', toolCallId: tc.id, id: `${tc.id}:res`,
-        content: tc.output, isError: !!tc.is_error,
+        content: tc.output, isError: !!tc.is_error, turnId,
       })
     }
     timeline.push({ t: new Date(tc.created_at).getTime(), items: callItems })
@@ -863,8 +886,6 @@ function mergeHistory(messages: any[], toolCalls: any[]): ChatItem[] {
 async function loadEarlier() {
   if (loadingEarlier.value || !hasMore.value || !activeSessionId.value || !earliestCursor.value) return
   loadingEarlier.value = true
-  const el = document.querySelector<HTMLElement>('.message-list')
-  const prevHeight = el ? el.scrollHeight : 0
   try {
     const res = await api.get(
       `/v1/conversations/${activeSessionId.value}?limit=${HISTORY_PAGE_SIZE}&before=${encodeURIComponent(earliestCursor.value)}`,
@@ -872,6 +893,7 @@ async function loadEarlier() {
     const data = res.data?.data || res.data
     if (data?.messages?.length) {
       const earlier = mergeHistory(data.messages, data.tool_calls || [])
+      // 头部插入后由 MessageList 按锚点还原视口（单写者），此处不碰 DOM
       items.value = [...earlier, ...items.value]
       earliestCursor.value = data.cursor || ''
       hasMore.value = !!data.has_more
@@ -882,8 +904,6 @@ async function loadEarlier() {
     hasMore.value = false
   } finally {
     loadingEarlier.value = false
-    await nextTick()
-    if (el) el.scrollTop = el.scrollHeight - prevHeight
   }
 }
 
@@ -1370,31 +1390,22 @@ function continueGeneration() {
               </template>
               <span class="toolbar-label">轨迹</span>
             </Button>
-            <Button
-              type="text"
-              size="small"
-              class="toolbar-btn"
-              title="导出为 Markdown"
-              :disabled="!items.length"
-              @click="exportMarkdown"
+            <Dropdown
+              :menu="{ items: toolbarMenuItems, onClick: onToolbarMenu }"
+              :trigger="['click']"
+              placement="bottomRight"
             >
-              <template #icon>
-                <ExportOutlined />
-              </template>
-              <span class="toolbar-label">导出</span>
-            </Button>
-            <Button
-              type="text"
-              size="small"
-              class="toolbar-btn"
-              :title="themeStore.isDark ? '切换到亮色模式' : '切换到暗色模式'"
-              @click="themeStore.toggleTheme()"
-            >
-              <template #icon>
-                <BulbFilled v-if="themeStore.isDark" />
-                <BulbOutlined v-else />
-              </template>
-            </Button>
+              <Button
+                type="text"
+                size="small"
+                class="toolbar-btn"
+                title="更多操作"
+              >
+                <template #icon>
+                  <MoreOutlined />
+                </template>
+              </Button>
+            </Dropdown>
           </div>
         </div>
 
