@@ -3,7 +3,7 @@ import { ref, onMounted, onUnmounted, markRaw } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   Button, Tabs, TabPane, Modal, Input, InputNumber, Switch, Tag,
-  Alert, Dropdown, Menu, MenuItem, message,
+  Alert, Dropdown, Menu, MenuItem, Select, message,
 } from 'ant-design-vue'
 import {
   PlusOutlined, PlayCircleOutlined, EditOutlined, DeleteOutlined,
@@ -16,7 +16,8 @@ import {
   runAgent, listAgentSessions, getAgentSession,
   listMarket, installMarket, setAgentVisibility,
 } from '../api'
-import type { Agent, AgentSession, MarketItem } from '../api'
+import type { Agent, AgentSession, MarketItem, WorkbenchResource } from '../api'
+import { listKnowledgeBases, listSkillResources } from '../api'
 import PageSkeleton from '../components/common/PageSkeleton.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 import SkillMarketCard from '../components/SkillMarketCard.vue'
@@ -124,6 +125,35 @@ const form = ref<EditorState>({
   temperature: 0.6, max_turns: 5, timeout_seconds: 120, enabled: true,
 })
 
+// ── 工作台绑定：Agent 自带的知识库与技能（派发时由引擎消费）──
+// 单独用 ref 而不塞进 EditorState：它们只在编辑器里维护，不该影响既有字段与校验。
+const formKbId = ref<string | undefined>(undefined)
+const formSkills = ref<string[]>([])
+const kbOptions = ref<WorkbenchResource[]>([])
+const skillOptions = ref<WorkbenchResource[]>([])
+const bindingLoading = ref(false)
+
+async function loadBindingOptions() {
+  if (bindingLoading.value || (kbOptions.value.length && skillOptions.value.length)) return
+  bindingLoading.value = true
+  try {
+    // 两个接口互不依赖：任一失败只让那一类为空，不拖垮编辑器
+    const [bases, skills] = await Promise.all([
+      listKnowledgeBases().catch(() => [] as WorkbenchResource[]),
+      listSkillResources().catch(() => [] as WorkbenchResource[]),
+    ])
+    kbOptions.value = bases
+    skillOptions.value = skills
+  } finally {
+    bindingLoading.value = false
+  }
+}
+
+function resetBinding() {
+  formKbId.value = undefined
+  formSkills.value = []
+}
+
 function openCreate() {
   editingId.value = ''
   form.value = {
@@ -131,6 +161,8 @@ function openCreate() {
     tools_text: '[]', model: 'deepseek-chat', max_tokens: 4096,
     temperature: 0.6, max_turns: 5, timeout_seconds: 120, enabled: true,
   }
+  resetBinding()
+  void loadBindingOptions()
   editorOpen.value = true
 }
 
@@ -150,6 +182,10 @@ function openEdit(a: Agent) {
     timeout_seconds: a.timeout_seconds || 120,
     enabled: a.enabled,
   }
+  // 回填工作台绑定（后端未升级时字段为 undefined，视为未绑定）
+  formKbId.value = a.kb_id || undefined
+  formSkills.value = Array.isArray(a.skills) ? [...a.skills] : []
+  void loadBindingOptions()
   editorOpen.value = true
 }
 
@@ -177,6 +213,9 @@ async function saveEditor() {
     max_turns: f.max_turns,
     timeout_seconds: f.timeout_seconds,
     enabled: f.enabled,
+    // 工作台绑定：Agent 自带的知识库与技能
+    kb_id: formKbId.value || '',
+    skills: formSkills.value,
   }
   editorSaving.value = true
   try {
@@ -755,6 +794,33 @@ function toolCount(a: Agent): number {
           />
           <ToolPicker v-model="form.tools_text" />
         </div>
+        <div class="form-row">
+          <label class="form-label">默认知识库</label>
+          <Select
+            v-model:value="formKbId"
+            :options="kbOptions.map(b => ({ value: b.id, label: b.name }))"
+            :loading="bindingLoading"
+            placeholder="派发时用它做检索（可留空）"
+            allow-clear
+            show-search
+            option-filter-prop="label"
+            class="binding-select"
+          />
+        </div>
+        <div class="form-row">
+          <label class="form-label">技能</label>
+          <Select
+            v-model:value="formSkills"
+            mode="multiple"
+            :options="skillOptions.map(s => ({ value: s.name, label: s.name }))"
+            :loading="bindingLoading"
+            placeholder="只启用选中的技能（留空 = 全部已安装）"
+            allow-clear
+            show-search
+            option-filter-prop="label"
+            class="binding-select"
+          />
+        </div>
       </div>
     </Modal>
 
@@ -971,6 +1037,7 @@ function toolCount(a: Agent): number {
 .form-field { display: flex; flex-direction: column; gap: 6px; }
 .form-label { font-size: 12px; color: var(--text-secondary); font-weight: 500; }
 .w-full { width: 100%; }
+.binding-select { width: 100%; }
 .tools-input :deep(textarea) { font-family: var(--font-mono); font-size: 12px; }
 
 /* ── 运行结果 ── */

@@ -50,8 +50,12 @@ type Agent struct {
 	MaxTurns       int             `json:"max_turns"`
 	TimeoutSeconds int             `json:"timeout_seconds"`
 	Enabled        bool            `json:"enabled"`
-	CreatedAt      time.Time       `json:"created_at"`
-	UpdatedAt      time.Time       `json:"updated_at"`
+	// 工作台绑定（可空 = 不绑定，保持既有行为）：
+	// KbID 是默认知识库，派发时用于 RAG 检索；Skills 是技能名数组，派发时只启用这些技能。
+	KbID      string          `json:"kb_id,omitempty"`
+	Skills    json.RawMessage `json:"skills,omitempty"`
+	CreatedAt time.Time       `json:"created_at"`
+	UpdatedAt time.Time       `json:"updated_at"`
 }
 
 // AgentSession 是一次 Agent 运行的持久化记录。
@@ -158,7 +162,7 @@ func (h *AgentHandler) seedPresetAgents() {
 func (h *AgentHandler) List(w http.ResponseWriter, r *http.Request) {
 	claims := auth.GetClaims(r.Context())
 	rows, err := db.GlobalDBManager.Query(r.Context(),
-		`SELECT id::text, name, COALESCE(description,''), COALESCE(system_prompt,''), COALESCE(tools,'[]'::json), COALESCE(llm_config,'{}'::json), max_turns, timeout_seconds, enabled, created_at, updated_at
+		`SELECT id::text, name, COALESCE(description,''), COALESCE(system_prompt,''), COALESCE(tools,'[]'::json), COALESCE(llm_config,'{}'::json), max_turns, timeout_seconds, enabled, COALESCE(kb_id,''), COALESCE(skills,'[]'::json), created_at, updated_at
 		 FROM agents WHERE tenant_id = $1 AND user_id = $2 ORDER BY created_at DESC`, claims.TenantID, claims.UserID)
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "list agents failed")
@@ -170,7 +174,7 @@ func (h *AgentHandler) List(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var a Agent
 		if err := rows.Scan(&a.ID, &a.Name, &a.Description, &a.SystemPrompt, &a.Tools, &a.LLMConfig,
-			&a.MaxTurns, &a.TimeoutSeconds, &a.Enabled, &a.CreatedAt, &a.UpdatedAt); err != nil {
+			&a.MaxTurns, &a.TimeoutSeconds, &a.Enabled, &a.KbID, &a.Skills, &a.CreatedAt, &a.UpdatedAt); err != nil {
 			slog.Warn("scan agent", "error", err)
 			continue
 		}
@@ -214,10 +218,11 @@ func (h *AgentHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, err = db.GlobalDBManager.Exec(r.Context(),
-		`INSERT INTO agents (id, tenant_id, user_id, name, description, system_prompt, tools, llm_config, max_turns, timeout_seconds, enabled)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		`INSERT INTO agents (id, tenant_id, user_id, name, description, system_prompt, tools, llm_config, max_turns, timeout_seconds, enabled, kb_id, skills)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
 		id, claims.TenantID, claims.UserID, body.Name, body.Description, body.SystemPrompt,
-		string(toolsJSON), string(llmJSON), body.MaxTurns, body.TimeoutSeconds, body.Enabled)
+		string(toolsJSON), string(llmJSON), body.MaxTurns, body.TimeoutSeconds, body.Enabled,
+		body.KbID, jsonOrEmptyArray(body.Skills))
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "create agent failed")
 		return
@@ -263,6 +268,8 @@ func (h *AgentHandler) Update(w http.ResponseWriter, r *http.Request) {
 		MaxTurns       *int            `json:"max_turns"`
 		TimeoutSeconds *int            `json:"timeout_seconds"`
 		Enabled        *bool           `json:"enabled"`
+		KbID           *string         `json:"kb_id"`
+		Skills         json.RawMessage `json:"skills"`
 	}
 	if err := DecodeJSON(w, r, &body); err != nil {
 		BadRequest(w, ErrInvalidReq)
@@ -299,6 +306,12 @@ func (h *AgentHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Enabled != nil {
 		push("enabled = $"+itoa(len(args)+1), *body.Enabled)
+	}
+	if body.KbID != nil {
+		push("kb_id = $"+itoa(len(args)+1), *body.KbID)
+	}
+	if len(body.Skills) > 0 && string(body.Skills) != "null" {
+		push("skills = $"+itoa(len(args)+1), string(body.Skills))
 	}
 	// WHERE tenant_id = $N+1 AND id = $N+2 —— 双重校验防跨租户
 	args = append(args, claims.TenantID, agentID)
@@ -449,6 +462,9 @@ func (h *AgentHandler) executeAgent(agent *Agent, task, sessionID, userID, tenan
 		"tenant_id":     tenantID, // S 多租户隔离:用 JWT claims 的 TenantID,不能用 userID
 		"user_id":       userID,
 		"session_id":    sessionID,
+		// 工作台绑定：Agent 自带的知识库与技能（引擎侧用于 RAG 检索与技能筛选）
+		"kb_id":  agent.KbID,
+		"skills": agentSkillNames(agent.Skills),
 	}
 
 	var result any
@@ -552,10 +568,10 @@ func (h *AgentHandler) GetSession(w http.ResponseWriter, r *http.Request) {
 func (h *AgentHandler) queryAgent(ctx context.Context, tenantID, userID, agentID string) (*Agent, error) {
 	var a Agent
 	err := db.GlobalDBManager.QueryRow(ctx,
-		`SELECT id::text, name, COALESCE(description,''), COALESCE(system_prompt,''), COALESCE(tools,'[]'::jsonb), COALESCE(llm_config,'{}'::jsonb), max_turns, timeout_seconds, enabled, created_at, updated_at
+		`SELECT id::text, name, COALESCE(description,''), COALESCE(system_prompt,''), COALESCE(tools,'[]'::jsonb), COALESCE(llm_config,'{}'::jsonb), max_turns, timeout_seconds, enabled, COALESCE(kb_id,''), COALESCE(skills,'[]'::jsonb), created_at, updated_at
 		 FROM agents WHERE tenant_id = $1 AND id = $2 AND (user_id = $3 OR (visibility = 'tenant' AND tenant_id = $1))`, tenantID, agentID, userID).
 		Scan(&a.ID, &a.Name, &a.Description, &a.SystemPrompt, &a.Tools, &a.LLMConfig,
-			&a.MaxTurns, &a.TimeoutSeconds, &a.Enabled, &a.CreatedAt, &a.UpdatedAt)
+			&a.MaxTurns, &a.TimeoutSeconds, &a.Enabled, &a.KbID, &a.Skills, &a.CreatedAt, &a.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -579,6 +595,28 @@ func (h *AgentHandler) resolveOwnerTenantID(ctx context.Context) (string, error)
 func trimSpace(s string) string { return strings.TrimSpace(s) }
 
 func itoa(n int) string { return strconv.Itoa(n) }
+
+// jsonOrEmptyArray 把可能为空的 JSON 写进 JSONB 列：空值写 '[]'，
+// 因为 JSONB 不接受空字符串（""::jsonb 会直接报错）。
+func jsonOrEmptyArray(raw json.RawMessage) string {
+	if len(raw) == 0 || string(raw) == "null" {
+		return "[]"
+	}
+	return string(raw)
+}
+
+// agentSkillNames 解析 Agent 绑定的技能名（JSONB 字符串数组）；
+// 未绑定或格式不对时返回 nil，等价于"不筛选技能"（引擎侧沿用全部已安装技能）。
+func agentSkillNames(skills json.RawMessage) []string {
+	if len(skills) == 0 {
+		return nil
+	}
+	var names []string
+	if err := json.Unmarshal(skills, &names); err != nil {
+		return nil
+	}
+	return names
+}
 
 func joinComma(items []string) string { return strings.Join(items, ", ") }
 

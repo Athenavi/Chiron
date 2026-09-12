@@ -16,6 +16,9 @@ import MessageList from '../components/chat/MessageList.vue'
 import MessageItem from '../components/chat/MessageItem.vue'
 import ChatEmptyHero from '../components/chat/ChatEmptyHero.vue'
 import ChatInput from '../components/chat/ChatInput.vue'
+import SaveToKnowledgeDialog from '../components/chat/SaveToKnowledgeDialog.vue'
+import { CloudUploadOutlined } from '@ant-design/icons-vue'
+import { sessionToMarkdown } from '../utils/sessionMarkdown'
 import ChatStatusBar from '../components/chat/ChatStatusBar.vue'
 import ChatDisplaySettings from '../components/chat/ChatDisplaySettings.vue'
 import AskCard from '../components/chat/AskCard.vue'
@@ -37,15 +40,21 @@ const router = useRouter()
 // 菜单项在渲染时求值，故与 themeStore 的初始化顺序无关。
 const toolbarMenuItems = computed(() => [
   { key: 'export', label: '导出为 Markdown', icon: () => h(ExportOutlined), disabled: !items.value.length },
+  { key: 'save_kb', label: '存入知识库', icon: () => h(CloudUploadOutlined), disabled: !sessionMarkdown.value },
   { type: 'divider' as const },
   { key: 'display', label: '显示设置', icon: () => h(FontSizeOutlined) },
   { key: 'theme', label: themeStore.isDark ? '切换到亮色模式' : '切换到暗色模式', icon: () => h(themeStore.isDark ? BulbFilled : BulbOutlined) },
 ])
 
 const displaySettingsOpen = ref(false)
+/** 存入知识库：把会话正文沉淀成知识库文档（弹窗里选目标知识库） */
+const saveToKbOpen = ref(false)
+/** 会话正文（Markdown；只取 text 项，思考与工具调用不写入知识库） */
+const sessionMarkdown = computed(() => sessionToMarkdown(items.value, activeSession.value?.title || ''))
 
 function onToolbarMenu(info: { key: string | number }) {
   if (info.key === 'export') exportMarkdown()
+  else if (info.key === 'save_kb') saveToKbOpen.value = true
   else if (info.key === 'display') displaySettingsOpen.value = true
   else if (info.key === 'theme') themeStore.toggleTheme()
 }
@@ -1830,6 +1839,11 @@ function continueGeneration() {
       />
 
       <ChatDisplaySettings v-model:open="displaySettingsOpen" />
+      <SaveToKnowledgeDialog
+        v-model:open="saveToKbOpen"
+        :content="sessionMarkdown"
+        :default-title="activeSession?.title || '对话记录'"
+      />
     </div>
 
     <!-- 侧面板 -->

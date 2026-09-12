@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.tools.agent import agent_list
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["agents"])
 
@@ -31,7 +34,11 @@ class AgentDispatchRequest(BaseModel):
     max_tokens: int = 4096
     temperature: float = 0.7
     tenant_id: str = ""
+    user_id: str = ""
     session_id: str = ""
+    # 工作台绑定（Go 的 agents 表新增列）：Agent 自带的知识库与技能
+    kb_id: str = ""
+    skills: list[str] = []
 
 
 @router.post("/v1/agents/dispatch")
@@ -64,10 +71,16 @@ async def dispatch_agent(body: AgentDispatchRequest) -> dict[str, Any]:
                 "output": "",
             }
 
+        # 工作台绑定：Agent 自带的知识库与技能。
+        # SubAgent 只接受一个 system_prompt（没有 skills/rag 注入口），所以先转成文本附上；
+        # 这样"给这个 Agent 配好知识库/技能"在派发链路里才真正生效。
+        binding = await _workbench_binding(body, gateway)
+        system_prompt = f"{body.system_prompt}\n\n{binding}" if binding else body.system_prompt
+
         agent = SubAgent(
             name=body.name or body.agent_type or "agent",
             description=body.description or "",
-            system_prompt=body.system_prompt,
+            system_prompt=system_prompt,
             tools=body.tools or None,
             gateway=gateway,
             model=body.model or "deepseek-chat",
@@ -93,6 +106,58 @@ async def dispatch_agent(body: AgentDispatchRequest) -> dict[str, Any]:
     from app.tools.agent import agent_dispatch
 
     return await agent_dispatch(task=body.task, agent_type=body.agent_type)
+
+
+async def _workbench_binding(body: AgentDispatchRequest, gateway: Any) -> str:
+    """把 Agent 自带的知识库与技能转成 system_prompt 的补充段落。
+
+    SubAgent 只接受一个 system_prompt —— 没有 skills/rag 注入口。所以这里在派发前
+    把它们变成文本：技能列成清单（让模型知道有哪些手段），知识库做一次检索并把
+    命中片段附上。任何一步失败都只丢那一段，不影响 Agent 正常执行。
+    """
+    sections: list[str] = []
+
+    if body.skills:
+        try:
+            from app.skill.store import SkillStore
+
+            store = SkillStore(tenant_id=body.tenant_id, user_id=body.user_id)
+            wanted = {s.strip() for s in body.skills if isinstance(s, str) and s.strip()}
+            lines = [
+                f"- {skill.name}: {skill.description}" if skill.description else f"- {skill.name}"
+                for skill in store.list()
+                if skill.name in wanted
+            ]
+            if lines:
+                sections.append("## 可用技能\n\n" + "\n".join(lines))
+        except Exception as exc:  # pragma: no cover - 降级路径
+            logger.warning("agent binding: skill lookup failed: %s", exc)
+
+    if body.kb_id and gateway is not None:
+        try:
+            from app.rag.builder import RAGBuilder
+
+            builder = RAGBuilder(llm_gateway=gateway)
+            results = await builder.query(
+                kb_id=body.kb_id,
+                query=body.task,
+                top_k=3,
+                threshold=0.5,
+            )
+            snippets: list[str] = []
+            for doc in results or []:
+                snippet = str(doc.get("content", doc.get("text", ""))).strip()
+                if not snippet:
+                    continue
+                if len(snippet) > 500:
+                    snippet = snippet[:500] + "…"
+                snippets.append(f"- (score {doc.get('score', 0):.2f}) {snippet}")
+            if snippets:
+                sections.append("## 知识库参考\n\n" + "\n".join(snippets))
+        except Exception as exc:  # pragma: no cover - 降级路径
+            logger.warning("agent binding: rag query failed: %s", exc)
+
+    return "\n\n".join(sections)
 
 
 class AgentApprovalRequest(BaseModel):

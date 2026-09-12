@@ -68,6 +68,10 @@ export interface Agent {
   max_turns: number
   timeout_seconds: number
   enabled: boolean
+  /** 工作台绑定：默认知识库（派发时用于 RAG 检索） */
+  kb_id?: string
+  /** 工作台绑定：技能名数组（派发时只启用这些技能） */
+  skills?: string[]
   created_at: string
   updated_at: string
 }
