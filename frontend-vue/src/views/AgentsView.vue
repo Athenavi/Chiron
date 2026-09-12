@@ -20,6 +20,7 @@ import type { Agent, AgentSession, MarketItem } from '../api'
 import PageSkeleton from '../components/common/PageSkeleton.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 import SkillMarketCard from '../components/SkillMarketCard.vue'
+import ToolPicker from '../components/agent/ToolPicker.vue'
 import { setChatPrefill } from '../components/chat/chatPrefill'
 
 // ── 数据 ──
@@ -752,6 +753,7 @@ function toolCount(a: Agent): number {
             placeholder="[{&quot;name&quot;:&quot;shell_exec&quot;,&quot;description&quot;:&quot;执行命令&quot;,&quot;parameters&quot;:{&quot;type&quot;:&quot;object&quot;,&quot;properties&quot;:{}}}]"
             class="tools-input"
           />
+          <ToolPicker v-model="form.tools_text" />
         </div>
       </div>
     </Modal>

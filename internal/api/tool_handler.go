@@ -25,23 +25,31 @@ func NewToolHandler(python *engine.PythonClient, authenticator *auth.Authenticat
 
 // ListTools returns tools from Python service only.
 func (h *ToolHandler) ListTools(w http.ResponseWriter, r *http.Request) {
+	// parameters 必须一并带出：Agent 的工具配置需要完整 JSON schema，只给
+	// name/description 会让前端「从可用工具中选择」生成缺 schema 的错误配置。
 	type toolInfo struct {
-		Name        string `json:"name"`
-		Description string `json:"description"`
+		Name        string          `json:"name"`
+		Description string          `json:"description"`
+		Parameters  json.RawMessage `json:"parameters,omitempty"`
 	}
 	result := make([]toolInfo, 0)
 	if h.python != nil && h.python.IsConnected() {
 		var py struct {
 			Tools []struct {
 				Function struct {
-					Name        string `json:"name"`
-					Description string `json:"description"`
+					Name        string          `json:"name"`
+					Description string          `json:"description"`
+					Parameters  json.RawMessage `json:"parameters"`
 				} `json:"function"`
 			} `json:"tools"`
 		}
 		if err := h.python.GetJSON(r.Context(), "/v1/tools", &py); err == nil {
 			for _, t := range py.Tools {
-				result = append(result, toolInfo{Name: t.Function.Name, Description: t.Function.Description})
+				result = append(result, toolInfo{
+					Name:        t.Function.Name,
+					Description: t.Function.Description,
+					Parameters:  t.Function.Parameters,
+				})
 			}
 		} else {
 			slog.Warn("tool list: python fallback failed", "error", err)

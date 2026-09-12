@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { describeApiError } from '../utils/apiError'
+import { toToolList, type ToolInfo } from '../utils/toolList'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 
@@ -479,6 +480,12 @@ export async function listWorkflows(): Promise<WorkbenchResource[]> {
 export async function useTemplate(id: string): Promise<any> {
   const resp = await api.post(`/v1/templates/${id}/use`)
   return resp.data
+}
+
+/** 引擎当前可用的工具（含插件 / MCP 注入的代理工具），带完整 parameters schema */
+export async function listTools(): Promise<ToolInfo[]> {
+  const resp = await api.get('/v1/tools')
+  return toToolList(resp.data)
 }
 
 export async function setAgentVisibility(id: string, visibility: 'private' | 'tenant' | 'public'): Promise<any> {

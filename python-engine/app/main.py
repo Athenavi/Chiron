@@ -988,33 +988,54 @@ async def agent_submit(
         workbench_context=body.get("context") or {},
     )
 
+    # ── 工作台上下文：Agent 覆盖 system_prompt / max_turns / model ──
+    # 用户在对话里显式选了 Agent，就以它的设定为准（prompt_engine 会把
+    # task.system_prompt 当 base，再把工具/技能/RAG 段落追加在后面）。
+    workbench_context = body.get("context") or {}
+    agent_conf = workbench_context.get("agent") if isinstance(workbench_context.get("agent"), dict) else None
+    if agent_conf:
+        if agent_conf.get("system_prompt"):
+            task.system_prompt = str(agent_conf["system_prompt"])
+        max_turns_override = agent_conf.get("max_turns")
+        if isinstance(max_turns_override, (int, float)) and max_turns_override > 0:
+            task.max_turns = max(1, min(int(max_turns_override), settings.max_turns))
+
     # ── 深度推理模式：设置 system_prompt 要求输出思考过程 ──
     llm_config = body.get("llm_config", {}) or {}
+    if agent_conf and agent_conf.get("model"):
+        llm_config["model"] = str(agent_conf["model"])
     if llm_config.get("deep_reasoning"):
-        task.system_prompt = (
-            "You are Chiron. First output your reasoning process inside "
+        reasoning_note = (
+            "First output your reasoning process inside "
             "[thinking]...[/thinking] tags, then output your final concise answer.\n"
             "Example: [thinking]I need to analyze...[/thinking]The answer is..."
+        )
+        # Agent 已定义角色时追加而非覆盖，避免把用户 Agent 的提示词冲掉
+        task.system_prompt = (
+            f"{task.system_prompt}\n\n{reasoning_note}"
+            if task.system_prompt
+            else f"You are Chiron. {reasoning_note}"
         )
         # 深度模式需要更大的输出 token 预算以容纳思考过程
         if "max_tokens" not in llm_config:
             llm_config["max_tokens"] = 8192
         task.llm_config = llm_config
     else:
-        task.system_prompt = (
-            "You are Chiron. Reply briefly in Chinese. "
-            "When the user says 'this code' / '这段代码' / '上面的代码', they mean "
-            "the code you generated in previous turns of this conversation — use it "
-            "directly, don't ask them to re-paste it. "
-            "You can save files with the write_file tool. "
-            "When the user says '媒体库' / 'media library', they mean the "
-            "media directory inside your sandbox workspace (create it with "
-            "mkdir if needed); you only have access to your own sandbox "
-            "workspace — never use absolute paths or try to access "
-            "directories outside it (they are blocked). "
-            "Code or text files can be saved there too — just save the file, "
-            "don't refuse because it isn't an image/video/audio."
-        )
+        if not task.system_prompt:
+            task.system_prompt = (
+                "You are Chiron. Reply briefly in Chinese. "
+                "When the user says 'this code' / '这段代码' / '上面的代码', they mean "
+                "the code you generated in previous turns of this conversation — use it "
+                "directly, don't ask them to re-paste it. "
+                "You can save files with the write_file tool. "
+                "When the user says '媒体库' / 'media library', they mean the "
+                "media directory inside your sandbox workspace (create it with "
+                "mkdir if needed); you only have access to your own sandbox "
+                "workspace — never use absolute paths or try to access "
+                "directories outside it (they are blocked). "
+                "Code or text files can be saved there too — just save the file, "
+                "don't refuse because it isn't an image/video/audio."
+            )
         task.llm_config = llm_config
 
     # ── 运行模式（常规/极简/PTC/创造）：前端下拉 → body.mode 或 llm_config.mode ──

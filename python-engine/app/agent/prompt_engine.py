@@ -107,7 +107,9 @@ class PromptEngine:
         tools_section = self._format_tools(tools)
         project_context_section = self._load_claude_md(root)
         memory_section = await self._get_memory_context(task.user_id, task.content)
-        skills_section = await self._get_skills_context(task.content)
+        # 用户在对话里选中的技能（空 = 未筛选，沿用全部已安装技能）
+        selected_skills = task.workbench_context.get("skill_names") or []
+        skills_section = await self._get_skills_context(task.content, selected_skills)
         rag_section = await self._get_rag_context(task)
         git_section = self._get_git_context(root)
 
@@ -291,8 +293,12 @@ class PromptEngine:
             lines.append(f"- [{mem_type}] {content} (relevance: {relevance:.2f})")
         return f"── 记忆：相关历史 ──\n" + "\n".join(lines)
 
-    async def _get_skills_context(self, query: str) -> str:
-        """Return a summary of installed skills that may be relevant to *query*."""
+    async def _get_skills_context(self, query: str, selected: list[str] | None = None) -> str:
+        """Return a summary of installed skills that may be relevant to *query*.
+
+        *selected* 是用户在对话里选定的技能名：传了就以它为准（空列表视为未筛选），
+        这样"带着技能进对话"才真的只带上那几个技能。
+        """
         if self._skill_store is None:
             return ""
 
@@ -301,6 +307,12 @@ class PromptEngine:
         except Exception as exc:
             logger.warning("Skill listing failed: %s", exc)
             return ""
+
+        # 前端发的是数组；这里防御单值/脏数据，避免把字符串按字符拆开
+        raw_selected = selected if isinstance(selected, (list, tuple)) else []
+        wanted = {s.strip() for s in raw_selected if isinstance(s, str) and s.strip()}
+        if wanted:
+            skills = [s for s in skills if s.name in wanted]
 
         if not skills:
             return ""
