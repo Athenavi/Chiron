@@ -27,10 +27,13 @@ func NewToolHandler(python *engine.PythonClient, authenticator *auth.Authenticat
 func (h *ToolHandler) ListTools(w http.ResponseWriter, r *http.Request) {
 	// parameters 必须一并带出：Agent 的工具配置需要完整 JSON schema，只给
 	// name/description 会让前端「从可用工具中选择」生成缺 schema 的错误配置。
+	// source 是 python 注册表标注的工具来源（builtin / mcp）：前端据此把
+	// MCP 注入的工具从"看不见"变成"看得见"，故必须透传，不能只取 function 内层。
 	type toolInfo struct {
 		Name        string          `json:"name"`
 		Description string          `json:"description"`
 		Parameters  json.RawMessage `json:"parameters,omitempty"`
+		Source      string          `json:"source,omitempty"`
 	}
 	result := make([]toolInfo, 0)
 	if h.python != nil && h.python.IsConnected() {
@@ -41,6 +44,7 @@ func (h *ToolHandler) ListTools(w http.ResponseWriter, r *http.Request) {
 					Description string          `json:"description"`
 					Parameters  json.RawMessage `json:"parameters"`
 				} `json:"function"`
+				Source string `json:"source"`
 			} `json:"tools"`
 		}
 		if err := h.python.GetJSON(r.Context(), "/v1/tools", &py); err == nil {
@@ -49,6 +53,7 @@ func (h *ToolHandler) ListTools(w http.ResponseWriter, r *http.Request) {
 					Name:        t.Function.Name,
 					Description: t.Function.Description,
 					Parameters:  t.Function.Parameters,
+					Source:      t.Source,
 				})
 			}
 		} else {

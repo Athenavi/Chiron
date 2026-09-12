@@ -124,42 +124,42 @@ function startChat() {
 
 <style scoped>
 .quickstart {
-  max-width: var(--chat-content-width, 960px);
+  max-width: var(--chat-content-width);
   margin: 0 auto;
-  padding: 0 24px 48px;
+  padding: 0 var(--space-6) var(--space-12);
 }
 
 .quickstart-title {
-  font-size: 22px;
+  font-size: var(--fs-2xl);
   font-weight: 600;
-  color: var(--text-primary, #e8eaf0);
-  margin-bottom: 6px;
+  color: var(--text-primary);
+  margin-bottom: var(--space-2);
 }
 
 .quickstart-sub {
-  font-size: 14px;
-  color: var(--text-secondary, #9aa3b2);
-  margin-bottom: 20px;
+  font-size: var(--fs-base);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-5);
 }
 
 .quickstart-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 14px;
-  margin-bottom: 18px;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
 }
 
 .quickstart-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-2);
 }
 
 .quickstart-label {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   letter-spacing: 0.04em;
-  color: var(--text-secondary, #9aa3b2);
+  color: var(--text-secondary);
 }
 
 .quickstart-select {
@@ -169,18 +169,18 @@ function startChat() {
 .quickstart-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
   flex-wrap: wrap;
 }
 
 .quickstart-hint {
-  font-size: 13px;
-  color: var(--text-secondary, #9aa3b2);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
 }
 
 @media (max-width: 640px) {
   .quickstart {
-    padding: 0 16px 36px;
+    padding: 0 var(--space-4) var(--space-10);
   }
 }
 </style>

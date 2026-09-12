@@ -14,6 +14,8 @@ export interface ToolInfo {
   description: string
   /** 完整 JSON schema（来自 /v1/tools：Go 会把 python 的 function.parameters 带出来） */
   parameters?: unknown
+  /** 来源：'mcp' = MCP/插件注入；缺失或其它值一律视为内置工具 */
+  source?: string
 }
 
 /** 工具的书写形态不止一种：纯名字符串，或 {name}，或 OpenAI 的 {function:{name}} */
@@ -32,7 +34,15 @@ function normalizeTool(raw: unknown): ToolInfo | null {
     : typeof fn?.description === 'string' ? fn.description : ''
   // parameters 内层优先（OpenAI 形态），缺失时退回外层字段
   const parameters = fn?.parameters ?? record?.parameters
-  return parameters === undefined ? { name, description } : { name, description, parameters }
+  // source 被 Go 网关扁平化到外层；同时兼容仍藏在 function 里的形态
+  const rawSource = typeof record?.source === 'string'
+    ? record.source
+    : typeof fn?.source === 'string' ? fn.source : ''
+  const source = rawSource.trim()
+  const tool: ToolInfo = { name, description }
+  if (parameters !== undefined) tool.parameters = parameters
+  if (source) tool.source = source
+  return tool
 }
 
 /** 宽松解析工具列表：接受数组本身，或 {tools: []} / {data: []} / {data: {tools: []}} */

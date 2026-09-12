@@ -26,7 +26,7 @@ from app.observability.metrics import (
 )
 from app.plugins.owner_lease import MCPBridge, MCPOwnerLease
 from app.plugins.store import ActiveTracker, PluginStore, ServerConfig
-from app.tools.registry import registry
+from app.tools.registry import SOURCE_MCP, registry
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +151,7 @@ class MCPClientPool:
                 parameters=t.get("schema") or {},
                 handler=self._make_proxy_handler(uid, name),
                 owner=uid,
+                source=SOURCE_MCP,
             )
             self._user_tools[uid].add(name)
         self._user_sigs[uid] = sig
@@ -303,6 +304,7 @@ class MCPClientPool:
                     parameters=tool.input_schema,
                     handler=_make_tool_handler(shared.client, tool.name),
                     owner=uid,
+                    source=SOURCE_MCP,
                 )
                 self._user_tools[uid].add(tool.name)
         self._user_sigs[uid] = sig
@@ -377,7 +379,7 @@ def _make_tool_handler(client: MCPClient, tool_name: str):
             return await asyncio.wait_for(
                 client.call_tool(tool_name, kwargs), timeout=30.0
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return {"error": f"MCP tool {tool_name} timed out after 30s"}
         except Exception as e:
             return {"error": f"MCP tool {tool_name} failed: {e}"}

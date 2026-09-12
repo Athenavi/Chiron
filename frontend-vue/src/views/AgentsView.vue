@@ -22,7 +22,9 @@ import PageSkeleton from '../components/common/PageSkeleton.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 import SkillMarketCard from '../components/SkillMarketCard.vue'
 import ToolPicker from '../components/agent/ToolPicker.vue'
+import SaveToKnowledgeDialog from '../components/chat/SaveToKnowledgeDialog.vue'
 import { setChatPrefill } from '../components/chat/chatPrefill'
+import { agentResultToMarkdown, parseAgentResult } from '../utils/agentResultMarkdown'
 
 // ── 数据 ──
 // 后端列表项可能带 visibility（'private'|'tenant'）；缺失视为 private
@@ -363,8 +365,9 @@ async function openDetail(s: AgentSession) {
 }
 
 // ── 结果展示 ──
+// 解析逻辑移到 utils：同一份逻辑要供「存入知识库」复用，且能被单测覆盖
 function parseResult(s: AgentSession): any {
-  try { return s.result ? JSON.parse(s.result) : {} } catch { return { output: s.result } }
+  return parseAgentResult(s.result)
 }
 
 /** 把这次运行的结果带进对话继续讨论（内容经 sessionStorage 投递，避免超长 URL） */
@@ -384,6 +387,24 @@ function continueInChat() {
   })
   detailOpen.value = false
   router.push('/chat')
+}
+
+// ── 运行结果存入知识库 ──
+// 复用对话那边的组件：Agent 结果同样沉淀成 Markdown 文档，走同一条分片上传链路
+const saveToKbOpen = ref(false)
+const saveToKbContent = ref('')
+const saveToKbTitle = ref('')
+
+function openSaveToKb(session: AgentSession | null) {
+  if (!session) return
+  const markdown = agentResultToMarkdown(session)
+  if (!markdown) {
+    message.warning('这次运行没有可沉淀的内容')
+    return
+  }
+  saveToKbContent.value = markdown
+  saveToKbTitle.value = `运行结果 · ${session.agent_name || 'Agent'}`
+  saveToKbOpen.value = true
 }
 
 const statusMeta: Record<string, { label: string; color: string; icon: any }> = {
@@ -896,6 +917,14 @@ function toolCount(a: Agent): number {
               工具调用 {{ parseResult(runSession).tool_calls.length }} 次
             </Tag>
           </div>
+          <div class="result-actions">
+            <Button
+              ghost
+              @click="openSaveToKb(runSession)"
+            >
+              存入知识库
+            </Button>
+          </div>
         </template>
       </div>
     </Modal>
@@ -956,6 +985,12 @@ function toolCount(a: Agent): number {
         </div>
         <div class="result-actions">
           <Button
+            ghost
+            @click="openSaveToKb(detailSession)"
+          >
+            存入知识库
+          </Button>
+          <Button
             type="primary"
             ghost
             @click="continueInChat"
@@ -965,12 +1000,19 @@ function toolCount(a: Agent): number {
         </div>
       </div>
     </Modal>
+
+    <!-- ── 存入知识库（复用对话侧的组件与分片上传链路）── -->
+    <SaveToKnowledgeDialog
+      v-model:open="saveToKbOpen"
+      :content="saveToKbContent"
+      :default-title="saveToKbTitle"
+    />
   </div>
 </template>
 
 <style scoped>
 .agents-page { max-width: 1080px; margin: 0 auto; padding: 28px 24px 60px; }
-.result-actions { margin-top: 16px; display: flex; justify-content: flex-end; }
+.result-actions { margin-top: 16px; display: flex; justify-content: flex-end; gap: 8px; }
 .page-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
 .page-title { font-size: 24px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
 .page-sub { margin: 4px 0 0; color: var(--text-tertiary); font-size: 13px; }

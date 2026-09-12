@@ -481,6 +481,19 @@ export async function listWorkflows(): Promise<WorkbenchResource[]> {
   return toWorkbenchResources(resp.data?.data)
 }
 
+/**
+ * 保存工作流图定义。graph_json 由前端构造（节点用 `node_type` + `config`，
+ * 连线用 `source_id`/`target_id`），后端原样序列化落库；同 id 覆盖。
+ */
+export async function createGraph(body: {
+  name: string
+  graph_json: unknown
+  user_id?: string
+}): Promise<{ id: string; name: string }> {
+  const resp = await api.post('/v1/graphs', body)
+  return resp.data?.data
+}
+
 export async function useTemplate(id: string): Promise<any> {
   const resp = await api.post(`/v1/templates/${id}/use`)
   return resp.data

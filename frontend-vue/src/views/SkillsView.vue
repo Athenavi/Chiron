@@ -9,11 +9,12 @@ import {
   ThunderboltOutlined, DownloadOutlined, DeleteOutlined, PlayCircleOutlined,
   SearchOutlined, CodeOutlined, MessageOutlined, ShopOutlined,
 } from '@ant-design/icons-vue'
-import { api, listMarket, installMarket } from '../api'
+import { api, listAgents, listMarket, installMarket } from '../api'
 import type { MarketItem } from '../api'
 import PageSkeleton from '../components/common/PageSkeleton.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 import SkillMarketCard from '../components/SkillMarketCard.vue'
+import { collectSkillUsage, usageOf, type SkillUsage } from '../utils/skillUsage'
 
 interface SkillParam {
   name: string
@@ -66,9 +67,43 @@ async function loadSkills() {
   }
 }
 
+// ── 反向引用：这些技能被哪些 Agent / 工作流在用 ──
+// 两个来源互不依赖（Agent 的 skills 列 / 工作流图里的 skill 节点），
+// 任一拉取失败只让那一半为空，不拖垮技能列表本身。
+const skillUsage = ref<Map<string, SkillUsage>>(new Map())
+
+async function loadSkillUsage() {
+  const [agents, graphs] = await Promise.all([
+    listAgents().catch(() => []),
+    api.get('/v1/graphs')
+      .then(r => (r.data?.data ?? []) as { name: string; graph_json?: unknown }[])
+      .catch(() => [] as { name: string; graph_json?: unknown }[]),
+  ])
+  skillUsage.value = collectSkillUsage({ agents, graphs })
+}
+
+/** 卡片上的用量摘要；没有任何引用时返回空串（不显示空标记） */
+function usageLabel(name: string): string {
+  const { agents, workflows } = usageOf(skillUsage.value, name)
+  const parts: string[] = []
+  if (agents.length) parts.push(`${agents.length} 个 Agent`)
+  if (workflows.length) parts.push(`${workflows.length} 个工作流`)
+  return parts.join(' · ')
+}
+
+/** 悬浮提示：具体是谁在用 */
+function usageTitle(name: string): string {
+  const { agents, workflows } = usageOf(skillUsage.value, name)
+  const lines: string[] = []
+  if (agents.length) lines.push(`Agent：${agents.join('、')}`)
+  if (workflows.length) lines.push(`工作流：${workflows.join('、')}`)
+  return lines.join('\n')
+}
+
 onMounted(() => {
   loadSkills()
   loadMarket()
+  loadSkillUsage()
 })
 
 // ── 市场（技能市场：admin 发布，前端仅浏览 + 安装）──
@@ -382,6 +417,13 @@ async function handleGenerate() {
                 :key="t"
               >
                 {{ t }}
+              </Tag>
+              <Tag
+                v-if="usageLabel(s.name)"
+                color="blue"
+                :title="usageTitle(s.name)"
+              >
+                被 {{ usageLabel(s.name) }} 使用
               </Tag>
             </div>
             <div class="card-actions">

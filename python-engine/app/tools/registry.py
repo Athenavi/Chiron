@@ -9,12 +9,21 @@
 空集合 = 全局工具）。``to_openai_tools`` 与 ``execute`` 按当前上下文用户过滤/校验，
 避免用户 A 的插件工具被用户 B 列出或调用。注册表为进程内可重建状态：
 实例重启后由插件配置重新注册（幂等覆盖）。
+
+来源标注：``source`` 说明工具从哪来（``builtin`` 内置 / ``mcp`` MCP 或插件注入），
+由注入点显式声明而不是从 ``owner`` 推断 —— ``app/mcp/registry.py`` 注册的是全局
+MCP 工具（无 owner），只按 owner 判断会漏标。前端据此把"看不见的 MCP"展示出来。
 """
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable
+from typing import Any
+
+# 工具来源；新增来源时同步前端的 ToolInfo.source 与展示文案
+SOURCE_BUILTIN = "builtin"
+SOURCE_MCP = "mcp"
 
 
 @dataclass
@@ -24,6 +33,7 @@ class ToolDef:
     parameters: dict
     handler: Callable[..., Awaitable[Any]]
     owners: set[str] = field(default_factory=set)  # 空 = 全局工具
+    source: str = SOURCE_BUILTIN
 
 
 class ToolRegistry:
@@ -37,10 +47,14 @@ class ToolRegistry:
         parameters: dict,
         handler: Callable[..., Awaitable[Any]],
         owner: str = "",
+        source: str = SOURCE_BUILTIN,
     ) -> None:
         """注册工具。owner 非空时该工具仅对 owner（user_id）可见/可调用；
         同名重复注册幂等覆盖；已存在且带 owner 时合并归属用户集合
-        （共享连接去重场景：多用户引用同一 MCP 服务器）。"""
+        （共享连接去重场景：多用户引用同一 MCP 服务器）。
+
+        source 由调用方声明（内置工具用默认值，MCP/插件注入点传 SOURCE_MCP）。
+        """
         existing = self._tools.get(name)
         if existing is not None:
             owners = set(existing.owners)
@@ -50,6 +64,7 @@ class ToolRegistry:
             existing.description = description
             existing.parameters = parameters
             existing.handler = handler
+            existing.source = source
             return
         owners: set[str] = set()
         if owner:
@@ -60,6 +75,7 @@ class ToolRegistry:
             parameters=parameters,
             handler=handler,
             owners=owners,
+            source=source,
         )
 
     def set_owners(self, name: str, owners: set[str]) -> None:
@@ -100,7 +116,11 @@ class ToolRegistry:
             return ""
 
     def to_openai_tools(self, user_id: str = "") -> list[dict]:
-        """导出工具列表；按当前用户过滤掉其他用户的工具。"""
+        """导出工具列表；按当前用户过滤掉其他用户的工具。
+
+        source 放在 function 外层：它不属于 OpenAI 的 function schema，
+        混进去会被上游 provider 拒绝。
+        """
         user_id = self._resolve_user(user_id)
         converted: list[dict] = []
         for tool in self._tools.values():
@@ -109,6 +129,7 @@ class ToolRegistry:
             converted.append(
                 {
                     "type": "function",
+                    "source": tool.source,
                     "function": {
                         "name": tool.name,
                         "description": tool.description,

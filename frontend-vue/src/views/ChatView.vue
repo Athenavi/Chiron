@@ -6,6 +6,7 @@ import {
   api, createSSEConnection, submitApproval, submitAnswer,
   updateConversation, createShare, getActiveShare, revokeShare,
   getChatSessionMessages, resolveMediaUrl, getSessionMode, setSessionMode, listModels,
+  createGraph,
 } from '../api'
 import type { ShareInfo, LlmModel } from '../api'
 import { useAuthStore } from '../stores/auth'
@@ -19,11 +20,12 @@ import ChatInput from '../components/chat/ChatInput.vue'
 import SaveToKnowledgeDialog from '../components/chat/SaveToKnowledgeDialog.vue'
 import { CloudUploadOutlined } from '@ant-design/icons-vue'
 import { sessionToMarkdown } from '../utils/sessionMarkdown'
+import { sessionToGraph } from '../utils/sessionGraph'
 import ChatStatusBar from '../components/chat/ChatStatusBar.vue'
 import ChatDisplaySettings from '../components/chat/ChatDisplaySettings.vue'
 import AskCard from '../components/chat/AskCard.vue'
 import CallChainTimeline from '../components/CallChainTimeline.vue'
-import { HistoryOutlined, ExportOutlined, BulbOutlined, BulbFilled, MoreOutlined, FontSizeOutlined, SearchOutlined } from '@ant-design/icons-vue'
+import { HistoryOutlined, ExportOutlined, BulbOutlined, BulbFilled, MoreOutlined, FontSizeOutlined, SearchOutlined, PartitionOutlined } from '@ant-design/icons-vue'
 import { splitThinking, stripUserInputTag, formatClock, formatSize, countItemsAfter } from '../components/chat/chat-types'
 import { findMatches } from '../components/chat/transcriptSearch'
 import { describeApiError } from '../utils/apiError'
@@ -41,6 +43,7 @@ const router = useRouter()
 const toolbarMenuItems = computed(() => [
   { key: 'export', label: '导出为 Markdown', icon: () => h(ExportOutlined), disabled: !items.value.length },
   { key: 'save_kb', label: '存入知识库', icon: () => h(CloudUploadOutlined), disabled: !sessionMarkdown.value },
+  { key: 'save_workflow', label: '另存为工作流', icon: () => h(PartitionOutlined), disabled: !sessionMarkdown.value || savingWorkflow.value },
   { type: 'divider' as const },
   { key: 'display', label: '显示设置', icon: () => h(FontSizeOutlined) },
   { key: 'theme', label: themeStore.isDark ? '切换到亮色模式' : '切换到暗色模式', icon: () => h(themeStore.isDark ? BulbFilled : BulbOutlined) },
@@ -51,10 +54,30 @@ const displaySettingsOpen = ref(false)
 const saveToKbOpen = ref(false)
 /** 会话正文（Markdown；只取 text 项，思考与工具调用不写入知识库） */
 const sessionMarkdown = computed(() => sessionToMarkdown(items.value, activeSession.value?.title || ''))
+/** 另存为工作流：把整段对话沉淀成一个可重复执行的工作流图（单 llm 节点） */
+const savingWorkflow = ref(false)
+
+async function saveAsWorkflow() {
+  const graph = sessionToGraph(items.value, activeSession.value?.title || '')
+  if (!graph) {
+    message.warning('当前会话没有可沉淀的正文')
+    return
+  }
+  savingWorkflow.value = true
+  try {
+    const saved = await createGraph({ name: graph.name, graph_json: graph.graph_json })
+    message.success(`已保存为工作流「${saved?.name || graph.name}」，可在工作流页打开调整`)
+  } catch (e) {
+    message.error('保存工作流失败: ' + describeApiError(e))
+  } finally {
+    savingWorkflow.value = false
+  }
+}
 
 function onToolbarMenu(info: { key: string | number }) {
   if (info.key === 'export') exportMarkdown()
   else if (info.key === 'save_kb') saveToKbOpen.value = true
+  else if (info.key === 'save_workflow') void saveAsWorkflow()
   else if (info.key === 'display') displaySettingsOpen.value = true
   else if (info.key === 'theme') themeStore.toggleTheme()
 }

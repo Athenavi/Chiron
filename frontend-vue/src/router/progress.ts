@@ -93,9 +93,14 @@ export function setupRoutePreload(router: Router) {
     observer.observe(document.body, { childList: true, subtree: true })
   }
   
-  // 延迟初始化悬停预加载
-  requestIdleCallback?.(setupHoverPreload, { timeout: 1000 }) ||
-  setTimeout(setupHoverPreload, 1000)
+  // 延迟初始化悬停预加载。
+  // 不用 `requestIdleCallback?.(...) || setTimeout(...)`：handle 可能返回 0，
+  // 那会让 || 判为假而再注册一次 setTimeout，同一次预加载跑两遍。
+  if (typeof requestIdleCallback === 'function') {
+    requestIdleCallback(setupHoverPreload, { timeout: 1000 })
+  } else {
+    setTimeout(setupHoverPreload, 1000)
+  }
 }
 
 /** 在 router 上挂载进度钩子 */

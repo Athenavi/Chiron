@@ -107,7 +107,7 @@ function onChange(value: unknown) {
 
 <style scoped>
 .tool-picker {
-  margin-top: 8px;
+  margin-top: var(--space-2);
 }
 
 .tool-picker-select {
@@ -115,8 +115,8 @@ function onChange(value: unknown) {
 }
 
 .tool-picker-hint {
-  margin: 6px 0 0;
-  font-size: 12px;
-  color: var(--text-secondary, #9aa3b2);
+  margin: var(--space-2) 0 0;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
 }
 </style>

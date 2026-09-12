@@ -7,7 +7,8 @@ import {
   ShareAltOutlined, DeleteOutlined, TagOutlined, ReloadOutlined, ThunderboltOutlined,
 } from '@ant-design/icons-vue'
 import { useRouter } from 'vue-router'
-import { api, quickExecute } from '../../api'
+import { api, listTools, quickExecute } from '../../api'
+import type { ToolInfo } from '../../utils/toolList'
 import { formatRelativeTime } from './chat-types'
 import type { ChatItem, ChatSession } from './chat-types'
 
@@ -126,6 +127,49 @@ async function launchUnified() {
   } finally {
     launchingUnified.value = false
   }
+}
+
+// ── 可用工具（/v1/tools：含 MCP/插件注入的代理工具，source='mcp'）──
+// 懒加载：展开时才请求，避免每次打开面板都打一次接口
+const availableTools = ref<ToolInfo[]>([])
+const toolsLoading = ref(false)
+const toolsError = ref(false)
+const toolsExpanded = ref(false)
+let toolsLoaded = false
+
+const mcpToolCount = computed(() => availableTools.value.filter(t => t.source === 'mcp').length)
+
+/** 标题右侧摘要：先说清 MCP 有几个，这正是本节存在的理由 */
+const toolsSummary = computed(() => {
+  if (toolsError.value) return '加载失败'
+  if (toolsLoading.value) return '…'
+  const total = availableTools.value.length
+  if (!total) return '无'
+  return mcpToolCount.value ? `${total} 个 · MCP ${mcpToolCount.value}` : `${total} 个`
+})
+
+function isMcpTool(t: ToolInfo): boolean {
+  return t.source === 'mcp'
+}
+
+async function loadTools() {
+  if (toolsLoading.value || toolsLoaded) return
+  toolsLoading.value = true
+  toolsError.value = false
+  try {
+    availableTools.value = await listTools()
+    toolsLoaded = true
+  } catch {
+    // 失败不自动重试：收起再展开即可重来（toolsLoaded 仍为 false）
+    toolsError.value = true
+  } finally {
+    toolsLoading.value = false
+  }
+}
+
+function toggleTools() {
+  toolsExpanded.value = !toolsExpanded.value
+  if (toolsExpanded.value) void loadTools()
 }
 
 // ── 最近活动（/v1/activities，30s 轮询；点击跳转）──
@@ -369,6 +413,61 @@ function pickSession(id: string) {
       >
         清空上下文
       </button>
+    </div>
+
+    <!-- 中部：可用工具（/v1/tools）——把 MCP/插件注入的工具从"看不见"变成"看得见"。
+         默认收起：内置工具数十个，展开会挤掉下面的轨迹与活动区 -->
+    <div class="panel-tools">
+      <button
+        type="button"
+        class="tools-head"
+        :title="toolsExpanded ? '收起工具列表' : '展开工具列表'"
+        @click="toggleTools"
+      >
+        <span class="tools-title">可用工具</span>
+        <span class="tools-count">{{ toolsSummary }}</span>
+        <DownOutlined
+          class="tools-arrow"
+          :class="{ expanded: toolsExpanded }"
+        />
+      </button>
+      <div
+        v-if="toolsExpanded"
+        class="tools-body"
+      >
+        <div
+          v-if="toolsLoading"
+          class="tools-empty"
+        >
+          加载中…
+        </div>
+        <div
+          v-else-if="toolsError"
+          class="tools-empty"
+        >
+          工具列表加载失败
+        </div>
+        <div
+          v-else-if="!availableTools.length"
+          class="tools-empty"
+        >
+          没有可用工具
+        </div>
+        <template v-else>
+          <div
+            v-for="t in availableTools"
+            :key="t.name"
+            class="tool-row"
+            :title="t.description || t.name"
+          >
+            <span class="tool-name">{{ t.name }}</span>
+            <span
+              v-if="isMcpTool(t)"
+              class="tool-badge"
+            >MCP</span>
+          </div>
+        </template>
+      </div>
     </div>
 
     <!-- 主视图：当前会话轨迹（搜索 + 时间线 + 提问锚点） -->
@@ -786,6 +885,30 @@ function pickSession(id: string) {
 }
 .quick-clear:hover:not(:disabled) { color: var(--danger, #ef4444); }
 .quick-clear:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── 可用工具：让 MCP/插件注入的工具在对话页可见（默认收起）── */
+.panel-tools { flex: none; border-bottom: 1px solid var(--border); }
+.tools-head {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  padding: 8px 12px; border: none; background: none;
+  color: var(--text-tertiary); font-size: 11px; text-align: left; cursor: pointer;
+  transition: color 0.15s ease;
+}
+.tools-head:hover { color: var(--primary); }
+.tools-title { flex: none; }
+.tools-count { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tools-arrow { flex: none; font-size: 10px; transition: transform 0.15s ease; }
+.tools-arrow.expanded { transform: rotate(180deg); }
+.tools-body { max-height: 200px; overflow-y: auto; padding: 0 6px 6px; scrollbar-width: thin; scrollbar-color: var(--text-disabled) transparent; }
+.tools-empty { padding: 10px 8px; text-align: center; color: var(--text-muted); font-size: 12px; }
+.tool-row { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: var(--sig-radius-button); }
+.tool-row:hover { background: var(--bg-hover); }
+.tool-name { flex: 1; min-width: 0; font-size: 12px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tool-badge {
+  flex: none; padding: 0 6px; border-radius: var(--sig-radius-card);
+  background: var(--primary-bg); color: var(--primary);
+  font-size: 10px; line-height: 16px; font-weight: 600;
+}
 
 /* 搜索框（轨迹 / 会话通用） */
 .panel-search { flex: none; display: flex; align-items: center; gap: 4px; margin: 8px 12px 0; padding: 0 8px; height: 28px; background: var(--bg-secondary); border-radius: var(--sig-radius-button); }

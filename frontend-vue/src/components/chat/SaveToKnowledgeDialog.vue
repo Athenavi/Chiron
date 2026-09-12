@@ -115,15 +115,15 @@ async function save() {
 
 <style scoped>
 .save-kb-field {
-  margin-bottom: 12px;
+  margin-bottom: var(--space-3);
 }
 
 .save-kb-label {
   display: block;
-  margin-bottom: 4px;
-  font-size: 12px;
+  margin-bottom: var(--space-1);
+  font-size: var(--fs-sm);
   font-weight: 600;
-  color: var(--text-secondary, #9aa3b2);
+  color: var(--text-secondary);
 }
 
 .save-kb-control {
@@ -132,8 +132,8 @@ async function save() {
 
 .save-kb-hint {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   line-height: 1.6;
-  color: var(--text-secondary, #9aa3b2);
+  color: var(--text-secondary);
 }
 </style>

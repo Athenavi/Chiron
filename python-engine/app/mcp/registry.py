@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from app.mcp.client import MCPClient, MCPTool, load_mcp_config
+from app.tools.registry import SOURCE_MCP
 from app.tools.registry import registry as local_registry
 
 logger = logging.getLogger(__name__)
@@ -57,4 +58,5 @@ def _register_mcp_tool(client: MCPClient, tool: MCPTool):
         description=tool.description,
         parameters=schema,
         handler=handler,
+        source=SOURCE_MCP,
     )
