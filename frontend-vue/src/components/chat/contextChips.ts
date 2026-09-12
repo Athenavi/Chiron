@@ -88,3 +88,16 @@ export function buildWorkbenchContext(chips: readonly ContextChip[]): Record<str
 
   return Object.keys(ctx).length ? ctx : undefined
 }
+
+/**
+ * chips → 路由 query，是 `parseContextQuery` 的逆运算：同类多个值序列化成重复参数。
+ * 首页与各工作台"带着能力跳到对话"用它与对话侧读 URL 共用同一套约定。
+ */
+export function buildContextQuery(chips: readonly ContextChip[]): Record<string, string[]> {
+  const query: Record<string, string[]> = {}
+  for (const { param, type } of PARAMS) {
+    const values = valuesOf(chips, type)
+    if (values.length) query[param] = values
+  }
+  return query
+}

@@ -8,6 +8,7 @@ import {
 } from '@ant-design/icons-vue'
 import HomeScene3D from '../components/home/HomeScene3D.vue'
 import WorkstationNav from '../components/WorkstationNav.vue'
+import WorkbenchQuickStart from '../components/home/WorkbenchQuickStart.vue'
 
 const router = useRouter()
 
@@ -221,6 +222,9 @@ function scrollToTop() {
         </div>
       </div>
     </section>
+
+    <!-- 协作入口：把工作台能力带进对话（六张卡片之外的关系在这里被表达） -->
+    <WorkbenchQuickStart />
 
     <!-- 产品展示：真实工作台窗口预览（玻璃拟态） -->
     <section class="showcase">

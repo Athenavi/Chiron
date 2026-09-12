@@ -438,6 +438,44 @@ export async function listTemplates(type?: 'workflow' | 'agent' | 'skill'): Prom
   return resp.data?.templates || []
 }
 
+/** 工作台资源的统一形态（首页"带着工作台能力开对话"用） */
+export interface WorkbenchResource {
+  id: string
+  name: string
+}
+
+/** 三个接口的返回外壳不一致（data.knowledge_bases / data.skills / data），且字段命名未必统一：
+ *  这里宽松映射，拿不到 id 的条目直接丢弃，避免首页因个别脏数据整块渲染失败。 */
+function toWorkbenchResources(raw: unknown): WorkbenchResource[] {
+  if (!Array.isArray(raw)) return []
+  const out: WorkbenchResource[] = []
+  for (const item of raw) {
+    const record = item as Record<string, any> | null
+    const id = typeof record?.id === 'string' && record.id
+      ? record.id
+      : typeof record?.kb_id === 'string' ? record.kb_id : ''
+    if (!id) continue
+    const name = typeof record?.name === 'string' && record.name ? record.name : id
+    out.push({ id, name })
+  }
+  return out
+}
+
+export async function listKnowledgeBases(): Promise<WorkbenchResource[]> {
+  const resp = await api.get('/v1/kb')
+  return toWorkbenchResources(resp.data?.data?.knowledge_bases)
+}
+
+export async function listSkillResources(): Promise<WorkbenchResource[]> {
+  const resp = await api.get('/v1/skills')
+  return toWorkbenchResources(resp.data?.data?.skills)
+}
+
+export async function listWorkflows(): Promise<WorkbenchResource[]> {
+  const resp = await api.get('/v1/graphs')
+  return toWorkbenchResources(resp.data?.data)
+}
+
 export async function useTemplate(id: string): Promise<any> {
   const resp = await api.post(`/v1/templates/${id}/use`)
   return resp.data

@@ -25,6 +25,7 @@ import { splitThinking, stripUserInputTag, formatClock, formatSize, countItemsAf
 import { findMatches } from '../components/chat/transcriptSearch'
 import { describeApiError } from '../utils/apiError'
 import { buildWorkbenchContext, parseContextQuery, type ContextChip } from '../components/chat/contextChips'
+import { buildPrefillText, setChatPrefill, takeChatPrefill } from '../components/chat/chatPrefill'
 import type { ChatItem, ChatSession, ChatAttachment, TurnStatsItem } from '../components/chat/chat-types'
 
 const authStore = useAuthStore()
@@ -344,6 +345,24 @@ async function applyRouteQuery() {
   }
   errorBanner.value = typeof q.error === 'string' && q.error ? q.error : ''
   await initContextChips(q)
+  void applyChatPrefill()
+}
+
+/**
+ * 「在对话中继续」的落地端：Agent 会话 / 工作流结果经 sessionStorage 投递到这里，
+ * 插入输入框（不自动发送）—— 用户可以先修改再发。
+ */
+async function applyChatPrefill() {
+  const prefill = takeChatPrefill()
+  if (!prefill) return
+  const text = buildPrefillText(prefill)
+  await nextTick()
+  if (chatInputRef.value?.insertText) {
+    chatInputRef.value.insertText(text)
+  } else {
+    // 输入框还没挂载（首帧）：把投递放回去，别让用户的那一次点击被静默吞掉
+    setChatPrefill(prefill)
+  }
 }
 
 async function initContextChips(q: Record<string, any>) {
@@ -397,16 +416,21 @@ async function initContextChips(q: Record<string, any>) {
   }
 }
 
-/** 移除单个上下文芯片：本地 context 与路由 query 双源同步清空（侧栏上下文面板触发） */
-function removeContextChip(type: ContextChip['type']) {
-  contextChips.value = contextChips.value.filter(c => c.type !== type)
-  if (type === 'agent') agentCfg.value = null
+/** 移除单个上下文芯片：本地 context 与路由 query 双源同步（侧栏上下文面板触发） */
+function removeContextChip(type: ContextChip['type'], value: string) {
+  contextChips.value = contextChips.value.filter(c => !(c.type === type && c.value === value))
+  const remaining = contextChips.value.filter(c => c.type === type).map(c => c.value)
+  if (type === 'agent' && remaining.length === 0) agentCfg.value = null
   const q: Record<string, any> = { ...route.query }
-  if (q[type] !== undefined) {
+  // 同类还有剩余值时改写该项（多值即数组），否则整项删除
+  if (remaining.length === 0) {
+    if (q[type] === undefined) return
     delete q[type]
-    void router.replace({ path: '/chat', query: q })
-    appliedQueryKey = JSON.stringify(q)
+  } else {
+    q[type] = remaining.length === 1 ? remaining[0] : remaining
   }
+  void router.replace({ path: '/chat', query: q })
+  appliedQueryKey = JSON.stringify(q)
 }
 
 /** 清空全部上下文：本地 context 与路由 query（kb/agent/skill/workflow）一并清除 */

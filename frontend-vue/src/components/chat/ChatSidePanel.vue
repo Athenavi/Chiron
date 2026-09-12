@@ -45,8 +45,8 @@ const emit = defineEmits<{
   (e: 'share', id: string): void
   /** P3-D: 设置会话标签 */
   (e: 'tag', id: string, tag: string): void
-  /** 移除单个上下文芯片（父级同步清空路由 query） */
-  (e: 'remove-context', type: ContextChip['type']): void
+  /** 移除单个上下文芯片（父级同步改写路由 query；同类可能还有其它值） */
+  (e: 'remove-context', type: ContextChip['type'], value: string): void
   /** 清空全部上下文（父级同步清空路由 query） */
   (e: 'clear-context'): void
 }>()
@@ -328,7 +328,7 @@ function pickSession(id: string) {
           <CloseOutlined
             class="ctx-chip-remove"
             :title="`移除${c.label}`"
-            @click="emit('remove-context', c.type)"
+            @click="emit('remove-context', c.type, c.value)"
           />
         </span>
       </div>

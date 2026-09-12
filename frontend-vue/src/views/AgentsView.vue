@@ -20,6 +20,7 @@ import type { Agent, AgentSession, MarketItem } from '../api'
 import PageSkeleton from '../components/common/PageSkeleton.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 import SkillMarketCard from '../components/SkillMarketCard.vue'
+import { setChatPrefill } from '../components/chat/chatPrefill'
 
 // ── 数据 ──
 // 后端列表项可能带 visibility（'private'|'tenant'）；缺失视为 private
@@ -324,6 +325,25 @@ async function openDetail(s: AgentSession) {
 // ── 结果展示 ──
 function parseResult(s: AgentSession): any {
   try { return s.result ? JSON.parse(s.result) : {} } catch { return { output: s.result } }
+}
+
+/** 把这次运行的结果带进对话继续讨论（内容经 sessionStorage 投递，避免超长 URL） */
+function continueInChat() {
+  const session = detailSession.value
+  if (!session) return
+  const parsed = parseResult(session)
+  const text = parsed.output || parsed.error || session.result || ''
+  if (!text) {
+    message.warning('这次运行没有可带入对话的内容')
+    return
+  }
+  setChatPrefill({
+    title: `运行结果 · ${session.agent_name || 'Agent'}`,
+    text: String(text),
+    source: 'agent',
+  })
+  detailOpen.value = false
+  router.push('/chat')
 }
 
 const statusMeta: Record<string, { label: string; color: string; icon: any }> = {
@@ -866,6 +886,15 @@ function toolCount(a: Agent): number {
             工具调用 {{ parseResult(detailSession).tool_calls.length }} 次
           </Tag>
         </div>
+        <div class="result-actions">
+          <Button
+            type="primary"
+            ghost
+            @click="continueInChat"
+          >
+            在对话中继续
+          </Button>
+        </div>
       </div>
     </Modal>
   </div>
@@ -873,6 +902,7 @@ function toolCount(a: Agent): number {
 
 <style scoped>
 .agents-page { max-width: 1080px; margin: 0 auto; padding: 28px 24px 60px; }
+.result-actions { margin-top: 16px; display: flex; justify-content: flex-end; }
 .page-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
 .page-title { font-size: 24px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
 .page-sub { margin: 4px 0 0; color: var(--text-tertiary); font-size: 13px; }

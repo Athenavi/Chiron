@@ -21,6 +21,7 @@ import { useAuthStore } from '../stores/auth'
 import PageSkeleton from '../components/common/PageSkeleton.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 import type { Node, Edge, Connection } from '@vue-flow/core'
+import { setChatPrefill } from '../components/chat/chatPrefill'
 
 const authStore = useAuthStore()
 const router = useRouter()
@@ -34,6 +35,29 @@ function formatDate(dateStr: string | null | undefined): string {
   if (!dateStr) return ''
   const d = new Date(dateStr)
   return isNaN(d.getTime()) ? '' : d.toLocaleString()
+}
+
+/** 把这条执行记录的全部节点输出带进对话继续讨论（内容经 sessionStorage 投递） */
+function continueInChat(inst: InstanceRecord) {
+  const parts: string[] = []
+  const results = (inst.results || {}) as Record<string, { output?: unknown }>
+  for (const [nodeId, node] of Object.entries(results)) {
+    const out = node?.output
+    const text = typeof out === 'string' ? out : out == null ? '' : JSON.stringify(out)
+    if (text) parts.push(`【${nodeId}】\n${text}`)
+  }
+  if (inst.error) parts.push(`【错误】\n${inst.error}`)
+  if (parts.length === 0) {
+    message.warning('这条执行记录没有可带入对话的内容')
+    return
+  }
+  setChatPrefill({
+    title: `工作流执行结果 · ${inst.workflow_name || '未命名工作流'}`,
+    text: parts.join('\n\n'),
+    source: 'workflow',
+  })
+  showHistory.value = false
+  router.push('/chat')
 }
 
 // ── Types ──
@@ -1356,6 +1380,14 @@ function statusClass(nodeProps: any): string {
               <span class="history-node">{{ nid }}</span>
               <pre class="history-output">{{ typeof r.output === 'string' ? r.output.slice(0, 200) : JSON.stringify(r.output).slice(0, 200) }}</pre>
             </div>
+          </div>
+          <div class="history-actions">
+            <Button
+              size="small"
+              @click="continueInChat(inst)"
+            >
+              在对话中继续
+            </Button>
           </div>
         </div>
       </div>
