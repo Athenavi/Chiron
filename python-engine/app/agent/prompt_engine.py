@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Optional
 
 from app.agent.runtime import AgentTask
+from app.agent.workbench_context import context_ids, merge_by_quota
 from app.memory.manager import MemoryManager
 from app.skill.store import SkillStore
 
@@ -327,35 +328,44 @@ class PromptEngine:
         return "\n".join(lines)
 
     async def _get_rag_context(self, task: AgentTask) -> str:
-        """Retrieve relevant documents from the RAG knowledge base."""
+        """Retrieve relevant documents from the RAG knowledge base(s)."""
         if self._rag_builder is None:
             return ""
 
-        # 优先用用户在对话里选定的知识库（前端 → Go 网关 → task.workbench_context）；
-        # tenant_id 只是历史约定下的兜底，它并不等于某个知识库。
-        kb_id = str(task.workbench_context.get("kb_id") or "") or task.tenant_id or "default"
-        try:
-            results = await self._rag_builder.query(
-                kb_id=kb_id,
-                query=task.content,
-                top_k=3,
-                threshold=0.5,
-            )
-        except Exception as exc:
-            logger.warning("RAG query failed: %s", exc)
-            return ""
+        # 用户在对话里可以多选知识库（前端 → Go 网关 → task.workbench_context）：
+        # kb_ids 是多值形态，kb_id 保留为单值兼容。tenant_id 只是历史约定下的兜底，
+        # 它并不等于某个知识库。
+        kb_ids = context_ids(task.workbench_context, "kb") or [task.tenant_id or "default"]
 
-        if not results:
-            return ""
+        # 逐库检索再按轮询配额合并：多选的意图是"这几个库都要用"，混排后截断会让
+        # 高分库占满名额（而且不同库的 embedding/索引不同，分数本就不可比）。
+        groups: list[list[str]] = []
+        for kb_id in kb_ids:
+            try:
+                results = await self._rag_builder.query(
+                    kb_id=kb_id,
+                    query=task.content,
+                    top_k=3,
+                    threshold=0.5,
+                )
+            except Exception as exc:
+                # 单个库失败不拖垮其余库：多选场景下不该因为一个坏 id 全盘降级
+                logger.warning("RAG query failed (kb_id=%s): %s", kb_id, exc)
+                continue
+            snippets: list[str] = []
+            for doc in results or []:
+                snippet = doc.get("content", doc.get("text", ""))
+                if not snippet:
+                    continue
+                if len(snippet) > 500:
+                    snippet = snippet[:500] + "…"
+                score = doc.get("score", 0)
+                snippets.append(f"- (score {score:.2f}) {snippet}")
+            if snippets:
+                groups.append(snippets)
 
-        lines: list[str] = []
-        for doc in results:
-            snippet = doc.get("content", doc.get("text", ""))
-            if len(snippet) > 500:
-                snippet = snippet[:500] + "…"
-            score = doc.get("score", 0)
-            lines.append(f"- (score {score:.2f}) {snippet}")
-        return "\n".join(lines)
+        # 上限 9：单库 top_k=3，多选时总量不该按库数线性增长（保护首字节延迟）
+        return "\n".join(merge_by_quota(groups, 9))
 
     # ------------------------------------------------------------------
     # Formatting helpers

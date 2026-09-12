@@ -103,6 +103,18 @@ const panelStyle = computed(() => {
 
 const activeSession = computed(() => props.sessions.find(s => s.id === props.activeSessionId) || null)
 
+/**
+ * 同类上下文芯片的序号（1 起）。同类只有一个时返回 0 = 不显示序号。
+ *
+ * 顺序是有语义的：多个 Agent 取第一个为主、其余作为可委派的专家；多个工作流按
+ * 顺序依次执行。所以同类多选时必须把次序显式画出来，否则用户无从知道哪个是主。
+ */
+function chipOrder(chip: ContextChip): number {
+  const sameType = props.contextChips.filter(c => c.type === chip.type)
+  if (sameType.length < 2) return 0
+  return sameType.findIndex(c => c.value === chip.value) + 1
+}
+
 // ── 快捷操作：发起统一任务（复用快速命令：创建 uni 会话 → 跳转 /chat?task=）──
 const unifiedTaskInput = ref('')
 const launchingUnified = ref(false)
@@ -368,7 +380,9 @@ function pickSession(id: string) {
           class="ctx-chip"
           :title="`${c.label}（点击移除）`"
         >
-          <span class="ctx-chip-label">{{ c.label }}</span>
+          <span class="ctx-chip-label">
+            <template v-if="chipOrder(c)">{{ chipOrder(c) }}. </template>{{ c.label }}
+          </span>
           <CloseOutlined
             class="ctx-chip-remove"
             :title="`移除${c.label}`"

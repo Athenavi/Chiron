@@ -341,8 +341,6 @@ function normalizeMeta(raw: any): Record<string, any> | undefined {
 //   同名参数可重复（?kb=a&kb=b）=> 同类可多选
 //   ?mode=<auto|agent|workflow> 创建时模式（WorkflowView 为 workflow）
 const contextChips = ref<ContextChip[]>([])
-// Agent 配置（从 /v1/agents 尽力取；取不到则只传 agent_id，由后端兼容）
-const agentCfg = ref<{ id: string; name?: string; system_prompt?: string; model?: string; max_turns?: number } | null>(null)
 const errorBanner = ref('')          // query.error 提示
 const unifiedSessionId = ref('')     // 统一任务会话 id（query.task）
 const unifiedSubmitMode = ref('auto') // 会话创建时的 mode（shared_context.mode 优先）
@@ -405,8 +403,7 @@ async function initContextChips(q: Record<string, any>) {
   const skill = chips.find(c => c.type === 'skill')?.value || ''
   const workflow = chips.find(c => c.type === 'workflow')?.value || ''
   contextChips.value = chips
-  agentCfg.value = null
-  // ── 尽力补全展示用的 Agent 配置（失败则保留 id 占位） ──
+  // ── 尽力补全展示用的名称（失败则保留 id 占位；Agent 配置本身由网关按 id 补全）──
   if (kb) {
     try {
       const res = await api.get(`/v1/kb/${encodeURIComponent(kb)}`)
@@ -422,18 +419,11 @@ async function initContextChips(q: Record<string, any>) {
       const res = await api.get('/v1/agents')
       const list = res.data?.data || []
       const a = list.find((x: any) => x.id === agent)
-      if (a) {
-        agentCfg.value = {
-          id: a.id,
-          name: a.name,
-          system_prompt: a.system_prompt,
-          model: a.llm_config?.model,
-          max_turns: a.max_turns,
-        }
+      if (a?.name) {
         const c = contextChips.value.find(x => x.type === 'agent')
-        if (c && a.name) c.label = `Agent ${a.name}`
+        if (c) c.label = `Agent ${a.name}`
       }
-    } catch { /* 取不到配置则只传 agent_id，由后端兼容 */ }
+    } catch { /* 列表取不到就保留 id 占位 */ }
   }
   if (workflow) {
     try {
@@ -452,7 +442,6 @@ async function initContextChips(q: Record<string, any>) {
 function removeContextChip(type: ContextChip['type'], value: string) {
   contextChips.value = contextChips.value.filter(c => !(c.type === type && c.value === value))
   const remaining = contextChips.value.filter(c => c.type === type).map(c => c.value)
-  if (type === 'agent' && remaining.length === 0) agentCfg.value = null
   const q: Record<string, any> = { ...route.query }
   // 同类还有剩余值时改写该项（多值即数组），否则整项删除
   if (remaining.length === 0) {
@@ -468,7 +457,6 @@ function removeContextChip(type: ContextChip['type'], value: string) {
 /** 清空全部上下文：本地 context 与路由 query（kb/agent/skill/workflow）一并清除 */
 function clearContext() {
   contextChips.value = []
-  agentCfg.value = null
   const q: Record<string, any> = { ...route.query }
   let changed = false
   for (const key of ['kb', 'agent', 'skill', 'workflow']) {
@@ -502,18 +490,14 @@ function openKb(kbId: string) {
 
 /** 组装发送时附带的 context（普通 SSE 模式与统一任务模式共用） */
 function buildContext(): Record<string, any> | undefined {
-  // 单值字段 + 多值数组的组装规则集中在 contextChips 模块（新旧后端都能工作）
-  const ctx = buildWorkbenchContext(contextChips.value)
-  const agent = contextChips.value.find(c => c.type === 'agent')
-  if (agent && ctx && agentCfg.value) {
-    ctx.agent = {
-      ...(agentCfg.value.name ? { name: agentCfg.value.name } : {}),
-      ...(agentCfg.value.system_prompt ? { system_prompt: agentCfg.value.system_prompt } : {}),
-      ...(agentCfg.value.model ? { model: agentCfg.value.model } : {}),
-      ...(agentCfg.value.max_turns ? { max_turns: agentCfg.value.max_turns } : {}),
-    }
-  }
-  return ctx
+  // 单值字段 + 多值数组的组装规则集中在 contextChips 模块（新旧后端都能工作）。
+  //
+  // Agent 只发 agent_id，配置由网关按 id 补全（internal/api/agents.go 的
+  // resolveAgentContext）。前端此前自己映射一份字段，且只映射了
+  // name / system_prompt / model / max_turns —— Agent 自带的 tools / kb_id / skills
+  // 全部丢失，用户选了 Agent 却发现"它不会用自己的工具"。把单一事实来源放回后端，
+  // 两端就不会各自漂移。
+  return buildWorkbenchContext(contextChips.value)
 }
 
 /** 安全改造：附件签名 URL 解析，/media/ 公开路径转短时效签名 URL；非 /media/ 前缀原样；失败回退原 url */

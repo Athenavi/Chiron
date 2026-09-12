@@ -535,12 +535,25 @@ class AgentRuntime:
             # ── 0.5 设置工具执行上下文（持久终端/子 agent 等需要 session 与网关） ──
             from app.tools.context import set_tool_context
 
+            # 本次对话的"可委派专家"（网关按 agent_ids[1:] 查库补进 context.agent）：
+            # subagent 工具按名字取它，让 child 扮演该专家而不是通用助手 —— 这就是
+            # "多选 Agent"的落地形态：一个人格 + 若干可请教的专家。
+            agent_conf = (task.workbench_context or {}).get("agent")
+            experts: list[dict] = []
+            if isinstance(agent_conf, dict):
+                experts = [
+                    e
+                    for e in (agent_conf.get("experts") or [])
+                    if isinstance(e, dict) and e.get("name")
+                ]
+
             set_tool_context(
                 session_id=task.session_id,
                 user_id=task.user_id,
                 tenant_id=task.tenant_id,
                 gateway=self._gateway,
                 subagent_depth=task.subagent_depth,
+                experts=experts,
             )
 
             # ── 0.6 MemoryService.on_session_start（L1 建立 + L2/L3 预取） ──

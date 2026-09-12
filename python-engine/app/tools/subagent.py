@@ -14,8 +14,7 @@ import logging
 import uuid
 from typing import Any
 
-from app.tools.context import (get_all, get_gateway, get_tenant_id,
-                               get_user_id, restore_context)
+from app.tools.context import get_all, get_gateway, get_tenant_id, get_user_id, restore_context
 from app.tools.registry import registry
 
 logger = logging.getLogger(__name__)
@@ -24,8 +23,25 @@ MAX_TURNS_CAP = 10
 MAX_DEPTH = 3  # S3: 委派深度上限（deepseek 默认 maxDepth=3），防无限递归
 
 
+def _expert_system_prompt(expert: str) -> str:
+    """按名字从本次对话的专家清单里取人格；无匹配返回空串（退回通用 child）。
+
+    只认清单里的名字，不接受自由文本 —— 否则模型可以用任意字符串把子代理塑造成
+    它想要的人格，绕开用户在会话里选定的专家范围。
+    """
+    name = (expert or "").strip()
+    if not name:
+        return ""
+    from app.tools.context import get_tool_context
+
+    for item in get_tool_context("experts", []) or []:
+        if isinstance(item, dict) and str(item.get("name", "")).strip() == name:
+            return str(item.get("system_prompt", "") or "")
+    return ""
+
+
 async def subagent(
-    task: str, mode: str = "normal", max_turns: int = 5
+    task: str, mode: str = "normal", max_turns: int = 5, expert: str = ""
 ) -> dict[str, Any]:
     """Delegate *task* to a child agent running in its own session.
 
@@ -33,6 +49,10 @@ async def subagent(
     tool set) and its text output is returned. The parent's tool context is
     restored afterwards. max_turns bounds the child's loop (depth budget).
     subagent_depth recursion is capped at MAX_DEPTH (S3 security fix).
+
+    expert: 可委派专家名 —— 取值必须来自本次对话的专家清单（用户多选的 Agent，
+    由网关查库放进 context.agent.experts 并经 tool context 传递）。名字不在清单里
+    就忽略该参数，退回通用 child。
     """
     if not task.strip():
         return {"error": "task is required"}
@@ -47,6 +67,7 @@ async def subagent(
     if depth >= MAX_DEPTH:
         return {"error": f"delegation depth exceeded (max {MAX_DEPTH})"}
 
+    persona = _expert_system_prompt(expert)
     parent_ctx = get_all()
     child = AgentTask(
         id=f"sub_{uuid.uuid4().hex[:8]}",
@@ -54,6 +75,7 @@ async def subagent(
         user_id=get_user_id(),
         session_id=f"sub_{uuid.uuid4().hex[:12]}",
         content=task,
+        system_prompt=persona,
         llm_config={"mode": mode} if mode else {},
         max_turns=max(1, min(max_turns, MAX_TURNS_CAP)),
         subagent_depth=depth + 1,
@@ -106,6 +128,15 @@ registry.register(
                 "type": "integer",
                 "default": 5,
                 "description": "Child loop turns cap (max 10)",
+            },
+            "expert": {
+                "type": "string",
+                "default": "",
+                "description": (
+                    "Optional: name of an expert to delegate to, taken from the "
+                    "'可委派的专家' list in your system prompt. Names outside that "
+                    "list are ignored and the child falls back to a generalist."
+                ),
             },
         },
         "required": ["task"],

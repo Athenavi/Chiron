@@ -565,7 +565,16 @@ func (h *AgentHandler) GetSession(w http.ResponseWriter, r *http.Request) {
 
 // ── helpers ───────────────────────────────────────────────────
 
+// queryAgent 按 id 取 Agent（含租户归属与 tenant 共享可见性校验）。
 func (h *AgentHandler) queryAgent(ctx context.Context, tenantID, userID, agentID string) (*Agent, error) {
+	return loadAgent(ctx, tenantID, userID, agentID)
+}
+
+// loadAgent 是 queryAgent 的包级形态：网关的 /v1/agent/submit 需要在
+// "只带 agent_id、没带 agent 配置"时补全（见 gateway_router.go 的 submitHandlerFunc），
+// 而那里只有 db、拿不到 AgentHandler 实例。共用同一查询才能保证
+// 工作台页与直达 API 走同一套可见性规则，而不是两套。
+func loadAgent(ctx context.Context, tenantID, userID, agentID string) (*Agent, error) {
 	var a Agent
 	err := db.GlobalDBManager.QueryRow(ctx,
 		`SELECT id::text, name, COALESCE(description,''), COALESCE(system_prompt,''), COALESCE(tools,'[]'::jsonb), COALESCE(llm_config,'{}'::jsonb), max_turns, timeout_seconds, enabled, COALESCE(kb_id,''), COALESCE(skills,'[]'::jsonb), created_at, updated_at
@@ -616,6 +625,164 @@ func agentSkillNames(skills json.RawMessage) []string {
 		return nil
 	}
 	return names
+}
+
+// ── 工作台互通：Agent 配置 → 引擎 context ──
+
+// agentContextPayload 把 Agent 组装成透传给引擎的 context.agent。
+//
+// 字段名必须与 python 侧读取处一致（app/api/unified_executor.py 的 _execute_via_agent、
+// app/main.py 的 workbench_context 消费）。此前只带 system_prompt / max_turns / model
+// —— 也就是只带人格不带能力：Agent 自带的工具、知识库、技能全部丢失，
+// 用户选了 Agent 却发现它"不会用自己的工具"。
+func agentContextPayload(a *Agent) map[string]any {
+	if a == nil {
+		return nil
+	}
+	payload := map[string]any{}
+	if a.ID != "" {
+		payload["id"] = a.ID
+	}
+	if a.Name != "" {
+		payload["name"] = a.Name
+	}
+	if a.SystemPrompt != "" {
+		payload["system_prompt"] = a.SystemPrompt
+	}
+	if a.MaxTurns > 0 {
+		payload["max_turns"] = a.MaxTurns
+	}
+	if model := agentModel(a.LLMConfig); model != "" {
+		payload["model"] = model
+	}
+	if tools := decodeJSONArray(a.Tools); len(tools) > 0 {
+		payload["tools"] = tools
+	}
+	if a.KbID != "" {
+		payload["kb_id"] = a.KbID
+	}
+	if skills := agentSkillNames(a.Skills); len(skills) > 0 {
+		payload["skills"] = skills
+	}
+	return payload
+}
+
+// decodeJSONArray 解析 JSONB 数组列；空值或格式不对时返回 nil（表示"不传该字段"）
+func decodeJSONArray(raw json.RawMessage) []any {
+	if len(raw) == 0 {
+		return nil
+	}
+	var out []any
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil
+	}
+	return out
+}
+
+// agentModel 从 llm_config（JSONB）里取模型名
+func agentModel(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		return ""
+	}
+	return llmString(cfg, "model", "")
+}
+
+// resolveAgentContext 在"只带 agent_id、没带 agent 配置"时补全 context.agent。
+//
+// 幂等：已有完整 agent 对象时不动。查不到 Agent（不存在/非本人/非共享）时保持原样并
+// 记日志 —— 让请求继续走，只是"这次没带 Agent"，与改动前的行为一致；
+// 不因为一个坏 agent_id 让整条对话失败。
+func resolveAgentContext(ctx context.Context, wbCtx map[string]any, tenantID, userID string) {
+	if wbCtx == nil {
+		return
+	}
+	if existing, ok := wbCtx["agent"].(map[string]any); ok && len(existing) > 0 {
+		return
+	}
+	agentID, _ := wbCtx["agent_id"].(string)
+	if strings.TrimSpace(agentID) == "" {
+		return
+	}
+	agent, err := loadAgent(ctx, tenantID, userID, agentID)
+	if err != nil {
+		slog.Warn("workbench: agent context fallback failed", "agent_id", agentID, "error", err)
+		return
+	}
+	if payload := agentContextPayload(agent); payload != nil {
+		wbCtx["agent"] = payload
+		// Agent 自带的默认知识库与技能：引擎读的是**顶层** kb_id / skill_names
+		// （见 python-engine/app/agent/prompt_engine.py），所以这里提升上去。
+		// 只在用户本次没显式选时兜底 —— Agent 的是"默认值"，用户的选择优先。
+		if kb, _ := wbCtx["kb_id"].(string); strings.TrimSpace(kb) == "" && agent.KbID != "" {
+			wbCtx["kb_id"] = agent.KbID
+		}
+		if _, hasSkills := wbCtx["skill_names"]; !hasSkills {
+			if skills := agentSkillNames(agent.Skills); len(skills) > 0 {
+				wbCtx["skill_names"] = skills
+			}
+		}
+		// 多选的其余 Agent → "可委派的专家"。一个对话只能有一个人格（首选的 Agent），
+		// 但可以有多个可请教的专家 —— 这正是"多选 Agent"的语义。
+		if experts := loadExpertPayloads(ctx, wbCtx, tenantID, userID); len(experts) > 0 {
+			payload["experts"] = experts
+		}
+	}
+}
+
+// loadExpertPayloads 取 agent_ids 里除首个之外的 Agent（主 Agent 之外的"可委派专家"）。
+//
+// 单个查不到就跳过：不该因为列表里一个坏 id 让其余专家一起丢失。专家只带
+// 展示与人格所需字段，不带工具集 —— 委派出去的 child 复用主对话的工具预算。
+func loadExpertPayloads(ctx context.Context, wbCtx map[string]any, tenantID, userID string) []map[string]any {
+	ids := contextIDList(wbCtx, "agent")
+	if len(ids) < 2 {
+		return nil
+	}
+	experts := make([]map[string]any, 0, len(ids)-1)
+	for _, id := range ids[1:] {
+		agent, err := loadAgent(ctx, tenantID, userID, id)
+		if err != nil || agent == nil {
+			slog.Warn("workbench: expert agent not loadable", "agent_id", id, "error", err)
+			continue
+		}
+		expert := map[string]any{"id": agent.ID}
+		if agent.Name != "" {
+			expert["name"] = agent.Name
+		}
+		if agent.Description != "" {
+			expert["description"] = agent.Description
+		}
+		if agent.SystemPrompt != "" {
+			expert["system_prompt"] = agent.SystemPrompt
+		}
+		experts = append(experts, expert)
+	}
+	return experts
+}
+
+// contextIDList 读多值 <name>_ids，缺失时回退单值 <name>_id。
+// 与前端 buildContextQuery、python 侧 context_ids 同一口径（复数优先、单数兼容），
+// 否则同一个 URL 在三条链路上会解析出不同结果。
+func contextIDList(wbCtx map[string]any, name string) []string {
+	if raw, ok := wbCtx[name+"_ids"].([]any); ok {
+		out := make([]string, 0, len(raw))
+		for _, item := range raw {
+			if s, ok := item.(string); ok && strings.TrimSpace(s) != "" {
+				out = append(out, strings.TrimSpace(s))
+			}
+		}
+		if len(out) > 0 {
+			return out
+		}
+	}
+	if s, ok := wbCtx[name+"_id"].(string); ok && strings.TrimSpace(s) != "" {
+		return []string{strings.TrimSpace(s)}
+	}
+	return nil
 }
 
 func joinComma(items []string) string { return strings.Join(items, ", ") }

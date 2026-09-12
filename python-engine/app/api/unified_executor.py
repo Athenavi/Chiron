@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Optional
 
+from app.agent.workbench_context import context_ids, merge_by_quota
 from app.core.context_bus import publish_result
 from app.core.task_router import TaskPriority, TaskRouter
 from app.db import get_pool
@@ -220,8 +221,11 @@ class UnifiedChatHandler:
         ctx_agent = (
             context.get("agent") if isinstance(context.get("agent"), dict) else None
         )
-        ctx_kb_id = str(context.get("kb_id") or "")
-        ctx_workflow_id = str(context.get("workflow_id") or "")
+        # 多值优先、单值回退（老客户端与手写 URL 只发单值）。读取口径见
+        # app/agent/workbench_context.py —— 三条链路共用同一套，避免"在首页多选
+        # 生效、在侧栏多选不生效"这类行为分歧。
+        ctx_kb_ids = context_ids(context, "kb")
+        ctx_workflow_ids = context_ids(context, "workflow")
 
         # ── 创建/获取会话 (内存 L1 缓存 + PostgreSQL 写穿透持久化) ──
         if not session_id:
@@ -286,12 +290,12 @@ class UnifiedChatHandler:
         )
 
         try:
-            # 会话上下文注入: context.kb_id → 执行前 RAG 检索,片段拼接到 user_input 前
+            # 会话上下文注入: context.kb_id / kb_ids → 执行前 RAG 检索,片段拼接到 user_input 前
             kb_hits = 0
             effective_input = user_input
-            if ctx_kb_id:
+            if ctx_kb_ids:
                 kb_block, kb_hits = await self._retrieve_kb_context(
-                    kb_id=ctx_kb_id,
+                    kb_ids=ctx_kb_ids,
                     query=user_input,
                     tenant_id=tenant_id,
                     trace_id=trace_id,
@@ -299,8 +303,8 @@ class UnifiedChatHandler:
                 if kb_block:
                     effective_input = f"{kb_block}\n{user_input}"
                 logger.info(
-                    "KB context injected (kb_id=%s, hits=%d, session=%s)",
-                    ctx_kb_id,
+                    "KB context injected (kb_ids=%s, hits=%d, session=%s)",
+                    ctx_kb_ids,
                     kb_hits,
                     session_id,
                 )
@@ -315,12 +319,12 @@ class UnifiedChatHandler:
                     agent_config=ctx_agent,
                 )
             elif mode == "workflow":
-                # 强制使用工作流工作台 (context.workflow_id 仅透传记录)
+                # 强制使用工作流工作台：按选择顺序执行用户自己的工作流（多选即流水线）
                 result = await self._execute_via_workflow(
                     effective_input,
                     tenant_id,
                     trace_id,
-                    workflow_id=ctx_workflow_id,
+                    workflow_ids=ctx_workflow_ids,
                 )
             else:
                 # 自动模式 (默认)
@@ -361,11 +365,16 @@ class UnifiedChatHandler:
                 "duration_ms": result.get("total_duration_ms"),
                 "subtasks": result.get("subtasks", []),
             }
-            if ctx_kb_id:
+            # 多值用 kb_ids / workflow_ids 呈现；同时保留单值的首个，避免既有前端
+            # （metadata.kb_id 驱动的知识库引用标签）失效。
+            if ctx_kb_ids:
                 meta["kb_hits"] = kb_hits
-                meta["kb_id"] = ctx_kb_id
-            if ctx_workflow_id or result.get("workflow_id"):
-                meta["workflow_id"] = result.get("workflow_id") or ctx_workflow_id
+                meta["kb_id"] = ctx_kb_ids[0]
+                meta["kb_ids"] = ctx_kb_ids
+            workflow_ids = result.get("workflow_ids") or ctx_workflow_ids
+            if workflow_ids:
+                meta["workflow_id"] = workflow_ids[0]
+                meta["workflow_ids"] = workflow_ids
             if mode == "agent":
                 meta["agent_name"] = (ctx_agent or {}).get(
                     "name"
@@ -501,10 +510,15 @@ class UnifiedChatHandler:
         if max_turns <= 0:
             max_turns = 10
 
+        # Agent 自带的工具集：与 main.py 的 submit 路径同一语义 —— 非空就只放这些工具
+        agent_tools = agent_config.get("tools")
+        tools = [t for t in agent_tools if isinstance(t, dict)] if isinstance(agent_tools, list) else None
+
         agent = SubAgent(
             name=agent_name,
             description="通用助手 Agent",
             system_prompt=system_prompt,
+            tools=tools,
             gateway=gateway,
             model=model,
             max_turns=max_turns,
@@ -532,16 +546,19 @@ class UnifiedChatHandler:
         user_input: str,
         tenant_id: str,
         trace_id: str,
-        workflow_id: str = "",
+        workflow_ids: list[str] | None = None,
     ) -> dict:
         """通过工作流工作台执行
 
-        构建单节点 LLM 工作流（input → llm → output）并执行，
-        复用 workflow/engine.run_workflow 的 DAG 执行能力。
-        workflow_id 仅透传记录到结果,不改变工作流构建逻辑。
+        用户在对话里选中了工作流时（workbench_context 的 workflow_id / workflow_ids），
+        按选择顺序依次执行**用户自己的工作流**，前一个的输出经 initial_state 传给
+        后一个 —— 多选即流水线。
+
+        改动前这里把 workflow_id 只当记录用，实际跑的是一个与所选工作流无关的固定
+        单节点 LLM 图：用户"带着工作流进对话"，拿到的却是通用问答。没选工作流时仍走
+        那条固定图（即原有的默认行为）。
         """
         from app.main import get_gateway
-        from app.workflow.engine import run_workflow
 
         try:
             gateway = await get_gateway()
@@ -550,6 +567,134 @@ class UnifiedChatHandler:
                 "status": "error",
                 "output": {"error": "LLM gateway not initialized"},
             }
+
+        selected = [wid.strip() for wid in (workflow_ids or []) if wid and wid.strip()]
+        if selected:
+            graphs = await self._load_workflows(selected)
+            if graphs:
+                return await self._run_workflow_chain(
+                    graphs, user_input, trace_id, gateway
+                )
+            # 全部载不到（已删 / 越权 / DB 不可用）：降级为默认图，不阻断对话
+            logger.warning(
+                "workflow context: none of %s loaded; falling back to default graph",
+                selected,
+            )
+
+        return await self._run_default_llm_graph(
+            user_input,
+            trace_id,
+            gateway,
+            workflow_id=(selected[0] if selected else ""),
+        )
+
+    @staticmethod
+    def _final_output_of(instance: Any) -> str:
+        """取工作流的最终输出。
+
+        引擎把每个节点的增量写进 state 的 ``__out_<node_id>__``，而 dict 保持插入序
+        = 节点完成顺序，所以倒序找第一个非空 ``__out_*`` 即拓扑末节点的输出
+        （对默认的单节点图同样是 output 节点的结果）。
+        """
+        state = getattr(instance, "state", {}) or {}
+        for key in reversed(list(state.keys())):
+            if key.startswith("__out_") and state[key]:
+                return str(state[key])
+        return ""
+
+    async def _load_workflows(self, workflow_ids: list[str]) -> list[tuple[str, dict]]:
+        """按 id 载入用户选中的工作流（保持选择顺序；载不到的跳过并记日志）。"""
+        loaded: list[tuple[str, dict]] = []
+        try:
+            pool = get_pool()
+        except Exception as exc:  # noqa: BLE001 — DB 不可用降级为默认图
+            logger.warning("workflow context: db unavailable: %s", exc)
+            return loaded
+
+        for workflow_id in workflow_ids:
+            try:
+                row = await pool.fetchrow(
+                    "SELECT id, graph_json FROM workflow_graphs WHERE id = $1",
+                    workflow_id,
+                )
+            except Exception as exc:  # noqa: BLE001 — 单个工作流失败不拖垮其余
+                logger.warning(
+                    "workflow context: load failed (id=%s): %s", workflow_id, exc
+                )
+                continue
+            if row is None:
+                logger.warning("workflow context: not found (id=%s)", workflow_id)
+                continue
+            graph = row["graph_json"]
+            if isinstance(graph, str):
+                try:
+                    graph = json.loads(graph)
+                except json.JSONDecodeError:
+                    logger.warning(
+                        "workflow context: bad graph_json (id=%s)", workflow_id
+                    )
+                    continue
+            if isinstance(graph, dict) and graph.get("nodes"):
+                loaded.append((str(row["id"]), graph))
+            else:
+                logger.warning("workflow context: empty graph (id=%s)", workflow_id)
+        return loaded
+
+    async def _run_workflow_chain(
+        self,
+        graphs: list[tuple[str, dict]],
+        user_input: str,
+        trace_id: str,
+        gateway: Any,
+    ) -> dict:
+        """顺序执行多个工作流：前一个的输出作为后一个的输入。
+
+        传递用 ``input`` 键 —— 引擎的 input 节点读 ``state["input"]``
+        （见 workflow/engine.py 的 _input_node），所以后者能接上前者的产出。
+        """
+        from app.workflow.engine import run_workflow
+
+        graph_ids = [graph_id for graph_id, _ in graphs]
+        combined = user_input
+        instance_ids: list[str] = []
+        started = time.time()
+
+        for index, (graph_id, graph_json) in enumerate(graphs):
+            instance = await run_workflow(
+                graph_json=graph_json,
+                gateway=gateway,
+                initial_state={"input": combined},
+                instance_id=f"wf_{trace_id}_{index}",
+            )
+            instance_ids.append(instance.instance_id)
+            if instance.status == "error":
+                # 中断即止：后续工作流的输入依赖前者产出，硬跑只会级联出错
+                return {
+                    "status": "error",
+                    "output": {
+                        "error": f"workflow {graph_id} failed: {instance.error}",
+                        "workflow_instance_ids": instance_ids,
+                    },
+                    "workflow_ids": graph_ids,
+                }
+            combined = self._final_output_of(instance) or combined
+
+        return {
+            "status": "completed",
+            "output": {"result": combined, "workflow_instance_ids": instance_ids},
+            "workflow_ids": graph_ids,
+            "total_duration_ms": int((time.time() - started) * 1000),
+        }
+
+    async def _run_default_llm_graph(
+        self,
+        user_input: str,
+        trace_id: str,
+        gateway: Any,
+        workflow_id: str = "",
+    ) -> dict:
+        """未选工作流时的默认路径：固定单节点 LLM 图（改动前的行为）。"""
+        from app.workflow.engine import run_workflow
 
         # 构建简单工作流图: input → llm → output
         graph_json = {
@@ -583,15 +728,10 @@ class UnifiedChatHandler:
         if instance.status == "error":
             raise RuntimeError(f"Workflow execution failed: {instance.error}")
 
-        # 提取最终输出（output 节点的结果）
-        final_output = instance.state.get("__out_output_1__", "") or instance.state.get(
-            "__out_llm_1__", ""
-        )
-
         return {
             "status": "completed",
             "output": {
-                "result": final_output,
+                "result": self._final_output_of(instance),
                 "workflow_instance_id": instance.instance_id,
             },
             "workflow_id": workflow_id,
@@ -604,17 +744,24 @@ class UnifiedChatHandler:
 
     async def _retrieve_kb_context(
         self,
-        kb_id: str,
+        kb_ids: list[str],
         query: str,
         tenant_id: str,
         trace_id: str,
         top_k: int = 5,
+        limit: int = 12,
     ) -> tuple[str, int]:
-        """基于 context.kb_id 做 RAG 检索 (复用 knowledge:kb_search 的 kb_search 工具)
+        """基于 context.kb_id / kb_ids 做 RAG 检索 (复用 knowledge:kb_search 的 kb_search 工具)
+
+        多选知识库时逐库检索，再按**轮询配额**合并（workbench_context.merge_by_quota）：
+        保证每个库都有代表，而不是让高分库占满名额 —— 不同知识库的 embedding 与索引
+        不同，分数本就不可比。limit 是合并后的硬上限，保护多选时的首字节延迟。
 
         返回 (引用块, 命中数);任何失败 (DB 不可用 / kb 不存在 / 无命中) 都降级为
         空块 + 0,不阻断主任务执行 (与"不传 context 行为一致"的向后兼容原则一致)。
         """
+        if not kb_ids:
+            return "", 0
         try:
             from app.tools.context import set_tool_context
             from app.tools.kb import kb_search
@@ -626,31 +773,36 @@ class UnifiedChatHandler:
                 tenant_id=tenant_id,
             )
 
-            result = await kb_search(kb_id=kb_id, query=query, top_k=top_k)
-            if not isinstance(result, dict) or "error" in result:
-                error = result.get("error") if isinstance(result, dict) else result
-                logger.warning(
-                    "KB context retrieval skipped (kb_id=%s): %s", kb_id, error
-                )
+            groups: list[list[str]] = []
+            total_hits = 0
+            for kb_id in kb_ids:
+                result = await kb_search(kb_id=kb_id, query=query, top_k=top_k)
+                if not isinstance(result, dict) or "error" in result:
+                    # 单个库失败不拖垮其余库：多选场景下不该因为一个坏 id 全盘降级
+                    error = result.get("error") if isinstance(result, dict) else result
+                    logger.warning(
+                        "KB context retrieval skipped (kb_id=%s): %s", kb_id, error
+                    )
+                    continue
+                hits = result.get("results", []) or []
+                total_hits += len(hits)
+                snippets = [
+                    (hit.get("content") or hit.get("name") or "").strip()[:300]
+                    for hit in hits[:top_k]
+                ]
+                snippets = [s for s in snippets if s]
+                if snippets:
+                    groups.append(snippets)
+
+            merged = merge_by_quota(groups, limit)
+            if not merged:
                 return "", 0
 
-            hits = result.get("results", []) or []
-            if not hits:
-                return "", 0
-
-            snippets: list[str] = []
-            for hit in hits[:top_k]:
-                content = (hit.get("content") or hit.get("name") or "").strip()
-                if content:
-                    snippets.append(content[:300])
-            if not snippets:
-                return "", 0
-
-            block = "【知识库引用】\n" + "\n".join(f"- {s}" for s in snippets)
-            return block, len(hits)
+            block = "【知识库引用】\n" + "\n".join(f"- {s}" for s in merged)
+            return block, total_hits
 
         except Exception as e:  # noqa: BLE001 — 检索失败不阻断主任务
-            logger.warning("KB context retrieval failed (kb_id=%s): %s", kb_id, e)
+            logger.warning("KB context retrieval failed (kb_ids=%s): %s", kb_ids, e)
             return "", 0
 
     def _extract_output(self, result: dict) -> str:

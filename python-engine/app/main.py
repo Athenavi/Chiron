@@ -999,6 +999,28 @@ async def agent_submit(
         max_turns_override = agent_conf.get("max_turns")
         if isinstance(max_turns_override, (int, float)) and max_turns_override > 0:
             task.max_turns = max(1, min(int(max_turns_override), settings.max_turns))
+        # Agent 自带的工具集。runtime 见 task.tools 非空就只放这些工具
+        # （runtime.py 的 _convert_tools 替换核心工具集），所以这一步让
+        # "带 Agent 进对话"不再只带人格、不带能力。
+        agent_tools = agent_conf.get("tools")
+        if isinstance(agent_tools, list):
+            task.tools = [t for t in agent_tools if isinstance(t, dict)]
+        # 多选的其余 Agent → 可委派专家：写进 system prompt，让模型知道能请教谁
+        # （具体怎么用见 app/tools/subagent.py 的 expert 参数）。这里只做描述，
+        # 真正的授权在 subagent 工具里按清单名字校验。
+        experts = agent_conf.get("experts")
+        if isinstance(experts, list):
+            roster = [
+                f"- {item.get('name')}：{item.get('description') or '（无描述）'}"
+                for item in experts
+                if isinstance(item, dict) and item.get("name")
+            ]
+            if roster:
+                task.system_prompt = (
+                    f"{task.system_prompt}\n\n## 可委派的专家\n"
+                    "需要时用 subagent 工具并指定 expert 参数向下列专家请教：\n"
+                    + "\n".join(roster)
+                )
 
     # ── 深度推理模式：设置 system_prompt 要求输出思考过程 ──
     llm_config = body.get("llm_config", {}) or {}

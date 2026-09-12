@@ -672,6 +672,12 @@ func registerAgentRoutes(
 			}()
 		}
 
+		// ── 工作台互通兜底：只带 agent_id 时由网关补全 Agent 配置 ──
+		// 前端「带 Agent 进对话」在拉不到 /v1/agents 配置时只发 agent_id，而引擎侧
+		// 只读 context.agent（dict）→ 会静默退化成"没带 Agent"。桌面端与直连 API
+		// 同样只传 id，所以补全放在网关，而不是要求每个客户端都发全量配置。
+		resolveAgentContext(r.Context(), body.Context, claims.TenantID, userID)
+
 		Accepted(w, map[string]string{"status": "accepted", "session_id": body.SessionID})
 		go func() {
 			if releaseRun != nil {
