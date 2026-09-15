@@ -125,53 +125,6 @@ func realIPHeader(trustedCIDRs []string) func(http.Handler) http.Handler {
 	}
 }
 
-// NewSetupRouter 安装模式路由：系统尚未配置 APP_SECRET / 数据库时，
-// 仅提供安装向导端点（/v1/install/*，需安装令牌）与健康检查；
-// 其余一切业务路由返回 503（未安装，请完成安装后重启）。
-// 前端静态页面由 nginx 等反向代理提供，Go 网关不负责托管。
-func NewSetupRouter(cfg *config.Config) http.Handler {
-	mux := http.NewServeMux()
-
-	// 安装模式也注入运行时 CORS 白名单（批 B-2′：与业务路由共享同一来源）
-	SetCORSAllowOrigin(cfg.CORSOrigins)
-
-	publicMW := func(next http.Handler) http.Handler {
-		return middlewareChain(next,
-			RecoverMiddleware,
-			TracingMiddleware,
-			LoggingMiddleware,
-			SecurityHeadersMiddleware,
-			CORSMiddleware(),
-			MonitoringMiddleware,
-			requestIDHeader,
-			realIPHeader(cfg.TrustedProxyCIDRs),
-		)
-	}
-
-	installHandler := NewInstallHandler(cfg)
-
-	// 安装端点：全部必须携带安装令牌（X-Install-Token header 或 ?token= 查询参数）。
-	// step3 会创建 owner 账户、setup 会写入数据库/Redis 连接串，均属高权限写操作，
-	// 不能因为"数据库已配置"就省略令牌。前端 api/install.ts 的 getInstallHeaders()
-	// 对所有 install 调用（含 step3/setup）统一附带 X-Install-Token，故收紧不破坏向导。
-	mux.Handle("GET /v1/install/step1", publicMW(installMW(http.HandlerFunc(installHandler.Step1))))
-	mux.Handle("POST /v1/install/step2", publicMW(installMW(http.HandlerFunc(installHandler.Step2))))
-	mux.Handle("POST /v1/install/step3", publicMW(installMW(http.HandlerFunc(installHandler.Step3))))
-	mux.Handle("POST /v1/install/setup", publicMW(installMW(http.HandlerFunc(installHandler.Setup))))
-	mux.Handle("GET /v1/install/status", publicMW(installMW(http.HandlerFunc(installHandler.Status))))
-
-	// 健康检查（编排器探活；就绪检查如实反映依赖状态）
-	mux.Handle("GET /health", publicMW(http.HandlerFunc(handleHealth)))
-	mux.Handle("GET /ready", publicMW(http.HandlerFunc(handleReadiness)))
-
-	// 其余所有未注册路由：业务不可用（未安装）
-	mux.Handle("/", publicMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ServiceUnavailable(w, "system not installed: configure database and create admin via /install")
-	})))
-
-	return mux
-}
-
 // NewGatewayRouter creates a pure gateway router that proxies all business logic to Python.
 // lifecycleCtx 用于控制内部后台协程（tenantResMgr / modeStore cleanup）的优雅关闭。
 func NewGatewayRouter(
@@ -308,9 +261,6 @@ func NewGatewayRouter(
 	// Submit handler (proxies to Python)
 	submitHandler := NewSubmitHandler(pythonClient, sessionMgr, eventHub, billingMgr)
 
-	// Install
-	installHandler := NewInstallHandler(cfg)
-
 	// Plugins (MCP server config management)
 	pluginHandler := NewPluginHandler(cfg, authenticator)
 
@@ -402,7 +352,7 @@ func NewGatewayRouter(
 	smsHandler.RegisterPublicRoutes(mux, rlMW)
 	smsHandler.RegisterUserRoutes(mux, authMW)
 	smsHandler.RegisterAdminRoutes(mux, authMW)
-	registerSystemRoutes(mux, authMW, rlMW, sanitizeMW, installHandler, editorHandler, toolHandler, systemHandler, traceHandler)
+	registerSystemRoutes(mux, authMW, rlMW, sanitizeMW, editorHandler, toolHandler, systemHandler, traceHandler)
 	// 六大工作台互联：跨台最近活动聚合（租户+用户隔离）
 	mux.Handle("GET /v1/activities", authMW(rlMW(http.HandlerFunc(handleActivities))))
 	registerConversationRoutes(mux, conversationHandler, shareHandler, authMW, rlMW)
@@ -784,26 +734,16 @@ func registerAuthRoutes(mux *http.ServeMux, authHandler *AuthHandler, authMW, rl
 	mux.Handle("PUT /v1/auth/profile", authMW(rlMW(http.HandlerFunc(authHandler.UpdateProfile))))
 }
 
-// ── System (install / editor / tools / health / trace) ──
+// ── System (editor / tools / health / trace) ──
 
 func registerSystemRoutes(
 	mux *http.ServeMux,
 	authMW, rlMW, sanitizeMW routeMiddleware,
-	installHandler *InstallHandler,
 	editorHandler *EditorHandler,
 	toolHandler *ToolHandler,
 	systemHandler *SystemHandler,
 	traceHandler *TraceHandler,
 ) {
-	// Install（已安装模式下仍需安装令牌：step2/setup 会写入数据库与 Redis 连接串，
-	// step3 会创建 owner 账户；内部虽有 install.lock 状态防护，令牌校验是纵深防御）
-	mux.Handle("GET /v1/install/status", rlMW(installMW(http.HandlerFunc(installHandler.Status))))
-	mux.Handle("POST /v1/install/setup", rlMW(installMW(http.HandlerFunc(installHandler.Setup))))
-	// Install wizard steps (setup mode: database/master key not configured)
-	mux.Handle("GET /v1/install/step1", rlMW(installMW(http.HandlerFunc(installHandler.Step1))))
-	mux.Handle("POST /v1/install/step2", rlMW(installMW(http.HandlerFunc(installHandler.Step2))))
-	mux.Handle("POST /v1/install/step3", rlMW(installMW(http.HandlerFunc(installHandler.Step3))))
-
 	// Editor (admin 权限 + rate limited)
 	// S 安全修复：编辑器直接读写共享服务器工作区（含沙箱/分片/插件数据），
 	// 仅限管理员（列表/读=PermAdminRead，写=PermAdminWrite），普通 user 无权访问。

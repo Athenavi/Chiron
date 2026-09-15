@@ -19,7 +19,6 @@ var SensitiveFields = []string{
 var sanitizeSensitivePaths = []string{
 	"/v1/admin/", "/admin/",           // 管理后台（含租户/用户敏感配置）
 	"/v1/ent/", "/ent/",               // 企业 SSO/策略配置
-	"/v1/install/",                    // 安装向导（含 DSN/密钥配置）
 	"/v1/auth/register",               // 注册（密码传输）
 	"/v1/auth/login",                  // 登录（密码传输）
 	"/v1/auth/sso/",                   // SSO OIDC 配置

@@ -397,13 +397,6 @@ async function handleLogin() {
                 >
                   {{ $t('没有账号？注册') }}
                 </Button>
-                <Button
-                  type="link"
-                  block
-                  @click="router.push('/install')"
-                >
-                  {{ $t('首次部署？初始化系统') }}
-                </Button>
               </Space>
             </FormItem>
           </Form>

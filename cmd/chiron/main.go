@@ -23,8 +23,13 @@ import (
 )
 
 func main() {
-	// 宽松加载：APP_SECRET 缺失/弱值时不再退出（安装模式需要先配置主密钥）。
-	cfg := config.LoadAllowUnconfigured()
+	// 严格加载：APP_SECRET 是部署级主密钥（派生 JWT_SECRET / INTERNAL_TOKEN、加密后台
+	// 敏感配置），缺失或强度不足时直接拒绝启动；用 `python scripts/init.py` 生成并写入 .env。
+	cfg, err := config.Load()
+	if err != nil {
+		slog.Error("FATAL: invalid configuration - refusing to start (run `python scripts/init.py`)", "error", err)
+		return
+	}
 
 	// Logger
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
@@ -41,22 +46,9 @@ func main() {
 	// 60s 初始超时：DB 连接 + 迁移可能耗时较长，15s 不足
 	defer cancel()
 
-	// ── 初始化 install.lock 路径（必须在任何安装操作之前调用）──
-	api.SetInstallLockPath(cfg)
-
-	// 安装模式（setup mode）：APP_SECRET 未配置（无法派生 JWT / 加密密钥，必须先配置主密钥）
-	// 或 PostgreSQL 不可达（需在安装向导中配置 DSN 后重启生效）时进入；
-	// 该模式下仅提供安装向导端点，业务路由返回 503。
-	setupMode := !cfg.ValidateAppSecret()
-
-	// ── install.lock 重启生效：安装完成后，用向导加密保存的 DSN/Redis 配置覆盖引导连接值 ──
-	if !setupMode {
-		api.ApplyInstallLockConfig(cfg)
-	}
-
 	// ── PostgreSQL ──
 	pgConnected := false
-	if !setupMode && len(cfg.PostgresReadDSNs) > 0 {
+	if len(cfg.PostgresReadDSNs) > 0 {
 		// Read replicas configured — use DatabaseRouter for read/write splitting
 		poolCfg := db.PoolConfig{
 			MaxConns:          cfg.PostgresMaxConn,
@@ -79,26 +71,26 @@ func main() {
 		}
 	}
 
-	if !setupMode && !pgConnected {
+	if !pgConnected {
 		// No read replicas or router failed — fall back to single pool
 		if err := db.ConnectPostgres(ctx, cfg.PostgresDSN, cfg.PostgresMaxConn, cfg.PostgresMinConn); err != nil {
-			// 无数据库降级：进入安装模式，由安装向导配置 DSN（保存后重启生效）
-			slog.Warn("failed to connect to PostgreSQL — entering setup mode; configure database via install wizard", "error", err)
-		} else {
-			pgConnected = true
-			defer db.ClosePostgres()
-			// 幂等 seed 默认租户（不依赖迁移状态；缺失时注册会违反外键 23503）
-			if err := db.EnsureDefaultTenant(ctx, db.Pool); err != nil {
-				slog.Warn("ensure default tenant failed", "error", err)
-			}
-			// schema 版本校验（只读）：迁移由发布流程/DBA 执行，应用不再自行迁移
-			verifySchemaVersion(ctx, cfg)
+			// 依赖门禁：PostgreSQL 是必需依赖，不可达时拒绝启动（连接串由 scripts/init.py 生成）
+			slog.Error("FATAL: PostgreSQL is required but unavailable — refusing to start (check POSTGRES_DSN)", "error", err)
+			return
 		}
+		pgConnected = true
+		defer db.ClosePostgres()
+		// 幂等 seed 默认租户（不依赖迁移状态；缺失时注册会违反外键 23503）
+		if err := db.EnsureDefaultTenant(ctx, db.Pool); err != nil {
+			slog.Warn("ensure default tenant failed", "error", err)
+		}
+		// schema 版本校验（只读）：迁移由发布流程/DBA 执行，应用不再自行迁移
+		verifySchemaVersion(ctx, cfg)
 	}
 
 	if !pgConnected {
-		setupMode = true
-		slog.Warn("SETUP MODE: PostgreSQL unavailable — only install wizard will be served")
+		slog.Error("FATAL: no PostgreSQL connection was established — refusing to start (check POSTGRES_DSN)")
+		return
 	}
 
 	// 幂等播种市场目录示例（技能/Agent/MCP；目录非空则跳过）
@@ -106,13 +98,11 @@ func main() {
 
 	// 引导：连上数据库后，读取后台已持久化的基础设施/业务配置覆盖 cfg。
 	// 使后续 Redis/存储/路由初始化使用 DB 值——支持仅靠 APP_SECRET 切换 Redis 集群等，重启生效。
-	if pgConnected {
-		applyDBSettingsAfterConnect(ctx, cfg)
-	}
+	applyDBSettingsAfterConnect(ctx, cfg)
 
 	// ── Redis ──
 	// 产品决策(2026-08-22)：Redis 必需、无降级」已修订：Redis 不可用时降级运行
-	// （内存限流、无会话热缓存/广播/审计流）；数据库缺失时安装模式完全不需要 Redis。
+	// （内存限流、无会话热缓存/广播/审计流）。
 	var atomicRedis *db.AtomicRedis
 	redisCfg := db.RedisConfig{
 		Mode:          cfg.RedisMode,
@@ -126,10 +116,9 @@ func main() {
 	}
 	redisClient, redisErr := db.NewRedisClient(redisCfg)
 	if redisErr != nil {
-		// 依赖门禁：安装模式不需要 Redis（见上方注释）；其余情况下 Redis 是必需依赖，
-		// 未显式 DEGRADED_MODE=true 时直接拒绝启动——进程内降级会让多副本看到不同的
-		// 限流/会话/事件（限流被按副本放大、run 锁退化为本地锁）。
-		if !setupMode && !cfg.DegradedMode {
+		// 依赖门禁：Redis 是必需依赖，未显式 DEGRADED_MODE=true 时直接拒绝启动——
+		// 进程内降级会让多副本看到不同的限流/会话/事件（限流被按副本放大、run 锁退化为本地锁）。
+		if !cfg.DegradedMode {
 			slog.Error("FATAL: Redis is required but unavailable — refusing to start "+
 				"(fix REDIS_ADDR/REDIS_PASSWORD, or set DEGRADED_MODE=true for single-instance development)",
 				"error", redisErr)
@@ -160,41 +149,33 @@ func main() {
 	monitor.Init()
 
 	// ── Auth: Initialize JWT authenticator ──
-	// 安装模式中 APP_SECRET 未配置，JWT 密钥不可派生，跳过认证初始化；
-	// 安装完成（Step 3 要求 APP_SECRET 有效）重启后按正常模式初始化。
-	if setupMode {
-		slog.Warn("auth skipped: setup mode (APP_SECRET 未配置，安装完成后重启生效)")
-	} else {
-		// 确保 JWT_SECRET 环境变量已设置（从 cfg.JWTSecret 派生）
-		if cfg.JWTSecret != "" {
-			os.Setenv("JWT_SECRET", cfg.JWTSecret)
-		}
-		auth.InitJWTAuth()
-		if !config.ValidateJWTSecret(cfg.JWTSecret) {
-			slog.Error("FATAL: JWT_SECRET is weak or not set. Generate a strong secret (32+ chars) and set JWT_SECRET env var")
-			return
-		}
-		slog.Info("auth initialized", "jwt_secret_set", cfg.JWTSecret != "")
+	// APP_SECRET 已在启动时校验（config.Load），JWT_SECRET 由其派生或显式注入。
+	// 确保 JWT_SECRET 环境变量已设置（从 cfg.JWTSecret 派生）
+	if cfg.JWTSecret != "" {
+		os.Setenv("JWT_SECRET", cfg.JWTSecret)
 	}
+	auth.InitJWTAuth()
+	if !config.ValidateJWTSecret(cfg.JWTSecret) {
+		slog.Error("FATAL: JWT_SECRET is weak or not set. Generate a strong secret (32+ chars) and set JWT_SECRET env var")
+		return
+	}
+	slog.Info("auth initialized", "jwt_secret_set", cfg.JWTSecret != "")
 
 	// ── Rate Limiter: initialized per-router in GatewayRouter ──
 	slog.Info("rate limiter configured", "default_rpm", cfg.RateLimitRPM)
 
 	// ── Event Hub ──
 	var eventHub *broadcast.Hub
-	if !setupMode {
-		if db.Redis != nil {
-			eventHub = broadcast.NewHub(db.Redis)
-		} else {
-			eventHub = broadcast.NewHub(nil)
-		}
-		defer eventHub.Close()
+	if db.Redis != nil {
+		eventHub = broadcast.NewHub(db.Redis)
+	} else {
+		eventHub = broadcast.NewHub(nil)
 	}
+	defer eventHub.Close()
 
 	// ── Python AI Engine Client ──
-	// 安装模式跳过：INTERNAL_TOKEN 派生自 APP_SECRET，未配置时无法建立可信通道。
 	var pythonClient *engine.PythonClient
-	if !setupMode && cfg.PythonEngineAddress != "" {
+	if cfg.PythonEngineAddress != "" {
 		// Support comma-separated addresses for multi-instance deployment
 		var addrs []string
 		for _, a := range strings.Split(cfg.PythonEngineAddress, ",") {
@@ -220,7 +201,7 @@ func main() {
 			}
 			slog.Info("python engine configured", "addresses", addrs)
 		}
-	} else if !setupMode {
+	} else {
 		slog.Warn("no python engine address configured — agent/graph/skill will be unavailable")
 	}
 
@@ -228,55 +209,45 @@ func main() {
 	// 传入 db.Redis 以启用跨网关副本桥接（批 D）;Redis 不可用时自动退回单机模式。
 	rpaHub := api.NewRPAHub(db.Redis)
 
-	// ── Storage / Session Manager / HTTP（安装模式：跳过存储与会话，仅提供安装向导） ──
+	// ── Storage / Session Manager / HTTP ──
 	var sessionMgr *session.Manager
 	var router http.Handler
-	if setupMode {
-		// 安装令牌（Jenkins 模式）：APP_SECRET 未配置时进程内随机生成并打印到日志，
-		// 部署者凭令牌访问 /install?token=xxx；安装完成后端点关闭。
-		token := api.InitInstallToken(cfg)
-		slog.Warn("SETUP MODE: 系统未配置数据库/主密钥，仅提供安装向导（其余路由返回 503）",
-			"install_url", "/install?token="+token)
-		sessionMgr = session.NewManager(nil, nil)
-		router = api.NewSetupRouter(cfg)
-	} else {
-		// ── Storage ──
-		fileStore, err := storage.NewStore(cfg.StorageBackend, cfg.StorageRoot, cfg.S3Endpoint, cfg.S3Bucket, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3UseSSL)
-		if err != nil {
-			slog.Error("file store init", "error", err)
-			return
-		}
-		atomicStore := storage.NewAtomicStore(fileStore)
-		if cfg.StorageBackend == "local" {
-			// 分片上传与媒体下载都经由存储后端寻址：多副本 + 本地盘会让"写分片/读分片"
-			// 落到不同实例，上传损坏、媒体 404。多副本部署必须用共享卷或 STORAGE_BACKEND=s3。
-			slog.Warn("storage backend is local — multi-replica deployments must mount a shared volume at this path, or set STORAGE_BACKEND=s3",
-				"root", cfg.StorageRoot)
-		}
-		slog.Info("storage initialized", "backend", cfg.StorageBackend)
-
-		// ── Session Manager ──
-		sessionMgr = session.NewManager(db.Pool, db.Redis)
-		slog.Info("session manager initialized")
-
-		// ── Background Maintenance ──
-		api.StartBlacklistCleaner(lifecycleCtx)
-		// A7/C1: turns 保留策略清理（避免长期运行表膨胀；TURN_RETENTION_DAYS 可配）
-		api.StartRetentionCleaner(lifecycleCtx)
-		// P0-1: 启动JWT黑名单跨实例同步
-		api.StartBlacklistPubSub(lifecycleCtx)
-		// 跨实例 agent 取消广播订阅
-		api.StartAgentCancelSubscriber(lifecycleCtx)
-
-		// P1-1: 启动数据库连接池自动调优（每5分钟检查一次）
-		if db.GlobalDBManager != nil {
-			db.GlobalDBManager.SetTuneInterval(5 * time.Minute)
-			db.GlobalDBManager.StartAutoTuner(lifecycleCtx)
-			slog.Info("database connection pool auto-tuner started")
-		}
-
-		router = api.NewGatewayRouter(lifecycleCtx, cfg, pythonClient, eventHub, sessionMgr, atomicStore, atomicRedis, rpaHub)
+	// ── Storage ──
+	fileStore, err := storage.NewStore(cfg.StorageBackend, cfg.StorageRoot, cfg.S3Endpoint, cfg.S3Bucket, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3UseSSL)
+	if err != nil {
+		slog.Error("file store init", "error", err)
+		return
 	}
+	atomicStore := storage.NewAtomicStore(fileStore)
+	if cfg.StorageBackend == "local" {
+		// 分片上传与媒体下载都经由存储后端寻址：多副本 + 本地盘会让"写分片/读分片"
+		// 落到不同实例，上传损坏、媒体 404。多副本部署必须用共享卷或 STORAGE_BACKEND=s3。
+		slog.Warn("storage backend is local — multi-replica deployments must mount a shared volume at this path, or set STORAGE_BACKEND=s3",
+			"root", cfg.StorageRoot)
+	}
+	slog.Info("storage initialized", "backend", cfg.StorageBackend)
+
+	// ── Session Manager ──
+	sessionMgr = session.NewManager(db.Pool, db.Redis)
+	slog.Info("session manager initialized")
+
+	// ── Background Maintenance ──
+	api.StartBlacklistCleaner(lifecycleCtx)
+	// A7/C1: turns 保留策略清理（避免长期运行表膨胀；TURN_RETENTION_DAYS 可配）
+	api.StartRetentionCleaner(lifecycleCtx)
+	// P0-1: 启动JWT黑名单跨实例同步
+	api.StartBlacklistPubSub(lifecycleCtx)
+	// 跨实例 agent 取消广播订阅
+	api.StartAgentCancelSubscriber(lifecycleCtx)
+
+	// P1-1: 启动数据库连接池自动调优（每5分钟检查一次）
+	if db.GlobalDBManager != nil {
+		db.GlobalDBManager.SetTuneInterval(5 * time.Minute)
+		db.GlobalDBManager.StartAutoTuner(lifecycleCtx)
+		slog.Info("database connection pool auto-tuner started")
+	}
+
+	router = api.NewGatewayRouter(lifecycleCtx, cfg, pythonClient, eventHub, sessionMgr, atomicStore, atomicRedis, rpaHub)
 
 	// ── HTTP Server ──
 	srv := &http.Server{

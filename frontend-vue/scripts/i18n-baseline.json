@@ -65,7 +65,6 @@
   "src/views/BillingView.vue": 16,
   "src/views/ChatView.vue": 54,
   "src/views/HomeView.vue": 3,
-  "src/views/InstallView.vue": 18,
   "src/views/KnowledgeDetailView.vue": 14,
   "src/views/KnowledgeView.vue": 12,
   "src/views/LoginView.vue": 27,

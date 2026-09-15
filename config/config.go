@@ -128,7 +128,7 @@ type Config struct {
 	PluginsConfigPath string // path to plugins.json (MCP server config)
 	PluginDataDir     string // per-user plugin config root: {PluginDataDir}/{user_id}/plugins.json
 
-	// DataDir is the runtime data directory for install.lock, backups, etc.
+	// DataDir is the runtime data directory (backups, skills, media, etc.)
 	DataDir string
 }
 
@@ -272,16 +272,6 @@ func deriveSubsecret(secret, domain string) string {
 	h := hmac.New(sha256.New, []byte(secret))
 	h.Write([]byte(domain))
 	return base64.RawURLEncoding.EncodeToString(h.Sum(nil))
-}
-
-// DeriveLockKey 派生用于加密 install.lock 的 AES 密钥
-func DeriveLockKey(appSecret string) []byte {
-	if appSecret == "" {
-		return nil
-	}
-	h := hmac.New(sha256.New, []byte(appSecret))
-	h.Write([]byte("chiron-install-lock-key"))
-	return h.Sum(nil)
 }
 
 // ValidateJWTSecret returns true if the secret is valid for production use.

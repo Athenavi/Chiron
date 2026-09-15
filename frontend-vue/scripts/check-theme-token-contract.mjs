@@ -43,7 +43,6 @@ const BASELINE = {
   'src/views/BillingView.vue': 3,
   'src/views/ChatView.vue': 8,
   'src/views/HomeView.vue': 4,
-  'src/views/InstallView.vue': 1,
   'src/views/KnowledgeDetailView.vue': 2,
   'src/views/LoginView.vue': 1,
   'src/views/MediaView.vue': 13,

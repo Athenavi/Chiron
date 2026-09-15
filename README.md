@@ -27,16 +27,21 @@
 ### 本地开发（非容器）
 
 ```bash
-cp .env.example .env             # 至少填写 APP_SECRET（≥32 字符）
+python scripts/init.py           # 交互式初始化：生成 APP_SECRET、写 .env、自检 PostgreSQL/Redis
 python run.py setup              # 安装 Python / 前端依赖
 python -m alembic upgrade head   # 数据库迁移（需 PostgreSQL 可达）
 python run.py start              # 网关 :8080 + 引擎 :8000 + 前端 :5173
+# 打开前端注册第一个账号 —— 它自动成为系统管理员（owner）
 ```
+
+> 非交互场景：`python scripts/init.py --check`（只自检）、
+> `python scripts/init.py --set POSTGRES_DSN=... --migrate`（写 .env 并执行迁移）。
 
 ### 容器（多副本编排）
 
 ```bash
 cp .env.example .env             # 填写 compose 必填项（见下）
+python scripts/init.py --check   # 可选：自检必填项与 PostgreSQL/Redis 连通性
 # 1) 先对目标 PostgreSQL 执行迁移（数据库由云厂商/DBA 维护，不在 compose 内）
 python -m pip install -r requirements-migrate.txt
 DATABASE_DSN='postgresql://user:pwd@your-pg:5432/dbname' \

@@ -27,7 +27,6 @@ const BASELINE = {
   'src/components/chat/MessageList.vue': 3,
   'src/views/ChatView.vue': 2,
   'src/views/HomeView.vue': 3,
-  'src/views/InstallView.vue': 1,
   'src/views/LoginView.vue': 2,
   'src/views/MediaView.vue': 1,
   'src/views/RegisterView.vue': 1,

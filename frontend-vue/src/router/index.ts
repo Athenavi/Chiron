@@ -20,13 +20,6 @@ const routes = [
     component: () => import('../views/RegisterView.vue'),
   },
   {
-    path: '/install',
-    name: 'Install',
-    component: () => import('../views/InstallView.vue'),
-    // 安装向导：无需登录态，跳过 guard 的 profile 拉取（安装模式下该接口返回 503）
-    meta: { public: true },
-  },
-  {
     path: '/chat',
     name: 'Chat',
     component: () => import('../views/ChatView.vue'),

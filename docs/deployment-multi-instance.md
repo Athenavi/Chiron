@@ -163,5 +163,5 @@ python -m pytest python-engine/tests -q
 ### 结构性后续
 
 - **run 现场 checkpoint 续跑**：批 4 已解决「路由到持有 run 的实例 + 陈旧审批被拒」；剩余价值是「实例故障后从 checkpoint 续跑而非重跑」，需跨 Go/Python 状态模型设计；
-- **CLI / 安装向导的迁移入口**：`chiron-cli db` 与安装向导仍调用应用内迁移（现已有 Python/alembic 前置检测，缺失即明确报错）；若也要移除，需调整其交互流程；
+- **`chiron-cli db` 的迁移入口**：`chiron-cli db` 仍调用应用内迁移（现已有 Python/alembic 前置检测，缺失即明确报错）；若也要移除，需调整其交互流程；
 - **`credit_transactions` / `payments`**：已纳入 Alembic（迁移 `f7c2d05a1b8e`），但 Go 侧 `EnsureTables` 仍保留兜底建表——两处 DDL 必须同步修改。

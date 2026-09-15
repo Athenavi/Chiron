@@ -136,6 +136,13 @@ async function handleRegister() {
           style="margin-bottom: 16px"
         />
 
+        <Alert
+          type="info"
+          :message="$t('若系统尚无任何账号，本次注册将成为系统管理员（owner）')"
+          show-icon
+          style="margin-bottom: 16px"
+        />
+
         <Form
           ref="formRef"
           :model="form"

@@ -273,6 +273,25 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 首个注册用户成为系统管理员（owner）：以 users 表是否为空判定；
+	// 咨询锁保证并发注册时只有一个请求能成为 owner，其余按普通用户落库。
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('chiron_first_user'))`); err != nil {
+		slog.Error("acquire first-user lock", "error", err)
+		InternalError(w, "registration failed")
+		return
+	}
+	var userTotal int
+	if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM users`).Scan(&userTotal); err != nil {
+		slog.Error("count users for first-user check", "error", err)
+		InternalError(w, "registration failed")
+		return
+	}
+	role := "user"
+	if userTotal == 0 {
+		role = "owner"
+		slog.Info("first registered user becomes owner", "email", req.Email)
+	}
+
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), auth.BcryptCost)
 	if err != nil {
 		InternalError(w, "registration failed")
@@ -283,9 +302,9 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var userID string
 	err = tx.QueryRow(ctx,
 		`INSERT INTO users (id, tenant_id, email, name, password_hash, role, created_at, updated_at)
-		 VALUES (gen_random_uuid(), $1, $2, $3, $4, 'user', NOW(), NOW())
+		 VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, NOW(), NOW())
 		 RETURNING id`,
-		DefaultTenantID, req.Email, req.Name, string(hash),
+		DefaultTenantID, req.Email, req.Name, string(hash), role,
 	).Scan(&userID)
 	if err != nil {
 		logAndRespond(w, err, http.StatusInternalServerError, "registration failed")
@@ -299,7 +318,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := h.auth.GenerateToken(userID, req.Email, "user", DefaultTenantID, auth.RolePermissions["user"])
+	token, err := h.auth.GenerateToken(userID, req.Email, role, DefaultTenantID, auth.RolePermissions[role])
 	if err != nil {
 		InternalError(w, "authentication failed")
 		return
@@ -308,7 +327,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	SetTokenCookie(w, token, int(h.cfg.JWTExpiration.Seconds()), h.cfg.CookieSecure)
 	Created(w, map[string]interface{}{
 		"token": token,
-		"user":  UserResponse{ID: userID, Email: req.Email, Name: req.Name, Role: "user"},
+		"user":  UserResponse{ID: userID, Email: req.Email, Name: req.Name, Role: role},
 	})
 }
 

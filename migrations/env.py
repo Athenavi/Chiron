@@ -2,18 +2,12 @@
 Alembic env configuration.
 Resolves the database URL from:
   1. DATABASE_DSN environment variable
-  2. install.lock (AES-256-GCM decrypted with APP_SECRET)
-  3. alembic.ini fallback
+  2. alembic.ini fallback
 """
-import base64
-import hashlib
-import hmac
-import json
 import os
 from logging.config import fileConfig
 from pathlib import Path
 
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from dotenv import load_dotenv
 
 from sqlalchemy import engine_from_config
@@ -36,7 +30,7 @@ project_root = Path(__file__).parent.parent
 # 按优先级尝试加载 .env 文件
 env_candidates = [
     project_root / '.env',              # 根目录 .env
-    project_root / 'config' / '.env',   # config 目录 .env（安装向导写入位置）
+    project_root / 'config' / '.env',   # config 目录 .env
 ]
 env_loaded = False
 for env_file in env_candidates:
@@ -51,60 +45,14 @@ if not env_loaded:
     for p in env_candidates:
         print(f"  - {p}")
 
-# ── install.lock decryption (AES-256-GCM, compatible with Go side) ──────────
-
-def _lock_encrypt_key(app_secret: str) -> bytes:
-    """Derive the AES-256-GCM key, matching Go's lockEncryptKey."""
-    h = hmac.new(app_secret.encode('utf-8'), b'chiron-install-lock-key', hashlib.sha256)
-    return h.digest()  # 32 bytes
-
-def _decrypt_from_install_lock(app_secret: str) -> str | None:
-    """Read install.lock, decrypt the dsn field, return the plaintext DSN."""
-    lock_path = project_root / 'data' / 'install.lock'
-    if not lock_path.exists():
-        return None
-    try:
-        data = json.loads(lock_path.read_text(encoding='utf-8'))
-    except Exception:
-        return None
-    enc_dsn = data.get('dsn') if isinstance(data, dict) else None
-    if not enc_dsn:
-        return None
-    # Go's base64.RawStdEncoding: standard alphabet, no padding
-    try:
-        raw = base64.b64decode(enc_dsn + '==')  # add padding for Python's decoder
-    except Exception:
-        try:
-            raw = base64.b64decode(enc_dsn)  # try without padding
-        except Exception:
-            return None
-    key = _lock_encrypt_key(app_secret)
-    # AES-256-GCM: nonce is first 12 bytes
-    nonce = raw[:12]
-    ct = raw[12:]
-    try:
-        aesgcm = AESGCM(key)
-        plain = aesgcm.decrypt(nonce, ct, None)
-        return plain.decode('utf-8')
-    except Exception:
-        return None
-
 def get_database_url() -> str | None:
-    """Resolve database URL from DATABASE_DSN env → install.lock → alembic.ini fallback."""
+    """Resolve database URL from DATABASE_DSN env → alembic.ini fallback."""
     # 1) DATABASE_DSN environment variable (highest priority)
     db_dsn = os.getenv("DATABASE_DSN")
     if db_dsn:
         return db_dsn
 
-    # 2) install.lock decryption (requires APP_SECRET)
-    app_secret = os.getenv("APP_SECRET")
-    if app_secret:
-        dsn = _decrypt_from_install_lock(app_secret)
-        if dsn:
-            print("[Alembic] Decrypted DSN from install.lock")
-            return dsn
-
-    # 3) alembic.ini fallback
+    # 2) alembic.ini fallback
     fallback = config.get_main_option("sqlalchemy.url")
     if fallback:
         print(f"[Alembic] Using fallback URL from alembic.ini")
