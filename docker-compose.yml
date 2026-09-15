@@ -1,0 +1,266 @@
+﻿# Chiron — 企业多实例部署编排
+#
+# 本 compose 面向"多副本可横向扩展"组织配置:
+#   gateway / python-engine 均可 `docker compose up -d --scale gateway=2 --scale python-engine=2`;
+#   副本之间无本地状态依赖(会话/任务/事件均走 Redis/PG),共享卷仅承载:
+#     - agent 沙箱 SANDBOX_ROOT(引擎)
+#     - 插件数据 PLUGIN_DATA_DIR(网关与引擎同卷)
+#     - 本地存储兜底 STORAGE_ROOT=/app/workspace(媒体默认走 MinIO/S3)
+# 详细多实例要求见 docs/deployment-multi-instance.md。
+services:
+
+  # 说明:PostgreSQL 不在本 compose 中部署——生产使用托管实例或由 DBA 维护,
+  # 连接串经 POSTGRES_DSN 注入。schema 迁移由发布流程/DBA 执行;应用启动只做
+  # 只读的版本校验(见 internal/db/migrate.go 与 README「数据库迁移」)。
+  # 连接预算:POSTGRES_MAX_CONN × 网关副本数 + DB_POOL_MAX_SIZE × 引擎副本数
+  # 必须小于目标实例的 max_connections(建议留 30% 余量)。
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: [ "redis-server", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required — generate a strong password}" ]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # 不发布宿主机端口:多副本(--scale gateway=2)时固定端口会互相抢占,
+    # 且宿主机端口发布不是服务发现方案。对外入口由 frontend 容器的 nginx
+    # 同源反代(/v1、/events、/ws、/submit、/cancel、/media)提供;
+    # 临时直连调试: docker compose run --rm --service-ports gateway
+    expose:
+      - "8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      # 多副本一致性要求:所有 gateway/python-engine 副本注入完全相同的
+      # APP_SECRET / JWT_SECRET / INTERNAL_TOKEN / REDIS_KEY_PREFIX(见 docs/deployment-multi-instance.md)。
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?INTERNAL_TOKEN is required — set to same value as python-engine's INTERNAL_TOKEN}
+      APP_SECRET: ${APP_SECRET:?APP_SECRET is required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      # 外部 PostgreSQL(托管实例或 DBA 维护);schema 迁移须先由发布流程执行,
+      # 否则启动会被版本校验阻断(见 ALLOW_SCHEMA_DRIFT)
+      POSTGRES_DSN: ${POSTGRES_DSN:?POSTGRES_DSN is required — point at your managed PostgreSQL}
+      # Redis(键空间前缀必须与引擎一致)
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      REDIS_DB: ${REDIS_DB:-0}
+      REDIS_KEY_PREFIX: ${REDIS_KEY_PREFIX:-}
+      # 引擎地址:逗号分隔支持多引擎实例(如 http://python-engine:8000,http://python-engine-2:8000)
+      PYTHON_ENGINE_ADDRESS: ${PYTHON_ENGINE_ADDRESS:-http://python-engine:8000}
+      # 媒体/对象存储:默认走本 compose 的 MinIO(S3)。local 兜底见 STORAGE_ROOT。
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-s3}
+      STORAGE_ROOT: ${STORAGE_ROOT:-/app/workspace}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      S3_BUCKET: ${S3_BUCKET:-chiron}
+      S3_ACCESS_KEY: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}
+      S3_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
+      S3_USE_SSL: "false"
+      # 插件数据目录:与 python-engine 共享同一卷(plugins 卷)
+      PLUGIN_DATA_DIR: ${PLUGIN_DATA_DIR:-/srv/chiron/plugins}
+      # 限流无需按副本数调参:global/tenant/user 三级令牌桶均为"每分钟总量配额",
+      # 由 Redis 原子计数承载,与网关副本数无关(见 docs/deployment-multi-instance.md 第 5 节)。
+      # 前置负载均衡器时填写真实来源网段(如 "10.0.0.0/8,172.16.0.0/12")
+      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-}
+      # 连接预算:本值 × 网关副本数 会占用 PG 连接;多副本时按副本数下调
+      # (如 4 副本 → 10),总量不得超过 postgres 的 max_connections。
+      POSTGRES_MAX_CONN: ${POSTGRES_MAX_CONN:-20}
+      # Prometheus 抓取 /metrics 的共享 Bearer token(与 prometheus 服务同值)。
+      # 为空时 /metrics 只接受 JWT admin 权限,Prometheus 抓取会 401(见 prometheus.yml)。
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
+      # 依赖门禁:默认 false = Redis 不可用时拒绝启动(多副本一致性优先);
+      # 仅单机开发设 true 才允许进程内降级(限流/会话/事件退化为单实例语义)。
+      DEGRADED_MODE: ${DEGRADED_MODE:-false}
+    volumes:
+      - workspace:/app/workspace
+      - plugindata:/srv/chiron/plugins
+    stop_grace_period: 30s
+    restart: unless-stopped
+    healthcheck:
+      # 就绪探针用 /ready(检查 PG + Redis):依赖不可用时标记 unhealthy,
+      # 避免编排器把流量继续打给处于降级状态的副本;/health 仅供存活检查。
+      test: [ "CMD", "wget", "-qO-", "http://localhost:8080/ready" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  python-engine:
+    build:
+      context: python-engine
+      dockerfile: Dockerfile
+    # 不暴露端口到外网：仅容器间网络通信，由 gateway 反向代理
+    # 如需调试可临时映射: "127.0.0.1:8000:8000"
+    expose:
+      - "8000"
+    environment:
+      # 多副本一致性要求:所有副本注入完全相同的
+      # APP_SECRET / JWT_SECRET / INTERNAL_TOKEN / REDIS_KEY_PREFIX(见 docs/deployment-multi-instance.md)。
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?INTERNAL_TOKEN is required — set to same value as gateway's INTERNAL_TOKEN}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      POSTGRES_DSN: ${POSTGRES_DSN:?POSTGRES_DSN is required}
+      APP_SECRET: ${APP_SECRET:?APP_SECRET is required}
+      # 必须监听 0.0.0.0 供 gateway 容器访问(默认 127.0.0.1 会令网关连不上引擎)
+      HTTP_HOST: "0.0.0.0"
+      HTTP_PORT: "8000"
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379/${REDIS_DB:-0}
+      REDIS_KEY_PREFIX: ${REDIS_KEY_PREFIX:-}
+      # 依赖门禁:默认 false = Redis 未配置/不可用时拒绝启动;
+      # 仅单机开发设 true 才允许进程内降级(见 python-engine/app/main.py)。
+      DEGRADED_MODE: ${DEGRADED_MODE:-false}
+      # 连接预算:本值 × 引擎副本数 会占用 PG 连接(与网关侧共享 max_connections)。
+      DB_POOL_MAX_SIZE: ${DB_POOL_MAX_SIZE:-20}
+      # 引擎回调网关的地址(webhook/事件/config 下发)
+      GATEWAY_INTERNAL_URL: http://gateway:8080
+      RPA_GATEWAY_URL: http://gateway:8080
+      # 共享卷:agent 沙箱 + 插件数据(与网关 plugins 卷一致)
+      SANDBOX_ROOT: /srv/chiron/sandbox
+      PLUGIN_DATA_DIR: ${PLUGIN_DATA_DIR:-/srv/chiron/plugins}
+      # 向量库(Milvus 已在本 compose 提供;pgvector 时改 VECTOR_DB_TYPE=pgvector)
+      MILVUS_ADDRESS: ${MILVUS_ADDRESS:-milvus:19530}
+      VECTOR_DB_TYPE: ${VECTOR_DB_TYPE:-milvus}
+      # 多实例注意:每个启用 MCP 的引擎副本都会对活跃用户持有 MCP 连接,
+      # 连接规模 ≈ 副本数 × 活跃用户数 × MCP server 数,扩容会瞬间放大第三方连接。
+      # compose 面向多副本编排,因此默认关闭;需要 MCP 的副本(或单机部署)请显式
+      # 设置 MCP_POOL_ENABLED=true,详见 docs/deployment-multi-instance.md。
+      MCP_POOL_ENABLED: ${MCP_POOL_ENABLED:-false}
+      # K8s 注入实例标识;compose 下留空由引擎自生成
+      INSTANCE_ID: ${INSTANCE_ID:-}
+      # 引擎对外可达地址(批 E1):设置后引擎向 Redis 自注册,网关据此把某个 session 的
+      # 请求(审批/取消)路由到持有该 run 的实例,避免扩容/重启后漂移。留空=不注册,
+      # 会话亲和退化为一致性哈希(见 docs/deployment-multi-instance.md 第 4.5 条)。
+      ENGINE_ADVERTISE_URL: ${ENGINE_ADVERTISE_URL:-}
+      # 模型密钥(ANTHROPIC_API_KEY/OPENAI_API_KEY/DEEPSEEK_API_KEY/LLM_API_KEY 等)
+      # 在 .env 中配置并在此透传,或经后台「系统设置」下发;详见 docs/deployment-multi-instance.md。
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - sandboxdata:/srv/chiron/sandbox
+      - plugindata:/srv/chiron/plugins
+    stop_grace_period: 30s
+    restart: unless-stopped
+    healthcheck:
+      # /readyz 检查 Redis(与 gateway 的 /ready 对齐);/healthz 仅为进程存活检查。
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/readyz')" ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+  milvus:
+    image: milvusdb/milvus:v2.4.17
+    restart: unless-stopped
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
+    volumes:
+      - milvusdata:/var/lib/milvus
+    depends_on:
+      - etcd
+    ports:
+      - "127.0.0.1:19530:19530"
+
+  minio:
+    image: minio/minio:RELEASE.2024-12-18T13-15-44Z
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
+    volumes:
+      - miniodata:/data
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.18
+    restart: unless-stopped
+    environment:
+      ETCD_AUTO_COMPACTION_MODE: revision
+      ETCD_AUTO_COMPACTION_RETENTION: "1000"
+      ETCD_QUOTA_BACKEND_BYTES: "4294967296"
+      ETCD_SNAPSHOT_COUNT: "50000"
+    volumes:
+      - etcddata:/etcd
+    command: etcd --advertise-client-urls=http://etcd:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+
+  frontend:
+    build:
+      context: frontend-vue
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      gateway:
+        condition: service_healthy
+    # 注意:VITE_API_URL/VITE_WS_URL 是构建期变量(vite build 内联),
+    # 在此设置运行时 environment 无效;而容器内 DNS 名 gateway 浏览器也无法解析。
+    # 前端默认 API_URL=''(见 src/api/index.ts)即同源相对路径,
+    # 由本容器 nginx.conf 反代到 gateway,无需配置对外地址。
+    healthcheck:
+      test: [ "CMD", "wget", "-qO-", "http://localhost/" ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    ports:
+      - "127.0.0.1:9090:9090"
+    environment:
+      # prometheus.yml 用 ${METRICS_TOKEN} 做环境变量替换,必须与 gateway 同值
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus_alerts.yml:/etc/prometheus/alerts.yml
+      - prometheusdata:/prometheus
+    depends_on:
+      gateway:
+        condition: service_healthy
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    ports:
+      - "127.0.0.1:9093:9093"
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml
+      - alertmanagerdata:/alertmanager
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  redisdata:
+  miniodata:
+  workspace:
+  sandboxdata:
+  plugindata:
+  etcddata:
+  milvusdata:
+  prometheusdata:
+  alertmanagerdata:

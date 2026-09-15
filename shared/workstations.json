@@ -1,0 +1,35 @@
+{
+  "$comment": "六大工作台的唯一事实源。运行时三端都不读本文件 —— 它是比对基准，不是配置源。三处声明各自手写，由 python-engine/tests/test_workstation_contract.py 读本文件与三端源码比对：Go 见 internal/model/workstation.go，TS 见 frontend-vue/src/types/workstation.ts，Python 见 python-engine/app/core/capabilities.py 的 WorkstationType。",
+  "workstations": [
+    {
+      "id": "dialogue",
+      "label": "对话",
+      "description": "智能对话助手"
+    },
+    {
+      "id": "agent",
+      "label": "Agent",
+      "description": "多智能体协同"
+    },
+    {
+      "id": "workflow",
+      "label": "工作流",
+      "description": "DAG 流程编排"
+    },
+    {
+      "id": "skill",
+      "label": "技能",
+      "description": "工具 MCP"
+    },
+    {
+      "id": "knowledge",
+      "label": "知识",
+      "description": "RAG 检索增强"
+    },
+    {
+      "id": "plugin",
+      "label": "插件",
+      "description": "扩展能力"
+    }
+  ]
+}

@@ -1,0 +1,2358 @@
+<script setup lang="ts">
+import { ref, computed, onMounted, onUnmounted, nextTick, watch, h } from 'vue'
+import { Button, Input, Modal, Checkbox, Alert, message, Dropdown } from 'ant-design-vue'
+import { MenuOutlined, CopyOutlined, LinkOutlined, CloseOutlined } from '@ant-design/icons-vue'
+import {
+  api, createSSEConnection, submitApproval, submitAnswer,
+  updateConversation, createShare, getActiveShare, revokeShare,
+  getChatSessionMessages, resolveMediaUrl, getSessionMode, setSessionMode, listModels,
+  createAgent, createGraph,
+} from '../api'
+import type { ShareInfo, LlmModel } from '../api'
+import { useAuthStore } from '../stores/auth'
+import { useThemeStore } from '../stores/theme'
+import { useRoute, useRouter } from 'vue-router'
+import ChatSidePanel from '../components/chat/ChatSidePanel.vue'
+import MessageList from '../components/chat/MessageList.vue'
+import MessageItem from '../components/chat/MessageItem.vue'
+import ChatEmptyHero from '../components/chat/ChatEmptyHero.vue'
+import ChatInput from '../components/chat/ChatInput.vue'
+import SaveToKnowledgeDialog from '../components/chat/SaveToKnowledgeDialog.vue'
+import SaveToMemoryDialog from '../components/chat/SaveToMemoryDialog.vue'
+import { CloudUploadOutlined } from '@ant-design/icons-vue'
+import { sessionToMarkdown } from '../utils/sessionMarkdown'
+import { sessionToGraph } from '../utils/sessionGraph'
+import { sessionToAgent, agentBindingsFromContext } from '../utils/sessionAgent'
+import ChatStatusBar from '../components/chat/ChatStatusBar.vue'
+import ChatDisplaySettings from '../components/chat/ChatDisplaySettings.vue'
+import AskCard from '../components/chat/AskCard.vue'
+import CallChainTimeline from '../components/CallChainTimeline.vue'
+import { HistoryOutlined, ExportOutlined, BulbOutlined, BulbFilled, MoreOutlined, FontSizeOutlined, SearchOutlined, PartitionOutlined, RobotOutlined, DatabaseOutlined } from '@ant-design/icons-vue'
+import { splitThinking, stripUserInputTag, formatClock, formatSize, countItemsAfter } from '../components/chat/chat-types'
+import { findMatches } from '../components/chat/transcriptSearch'
+import { describeApiError } from '../utils/apiError'
+import { buildWorkbenchContext, CONTEXT_QUERY_KEYS, parseContextQuery, type ContextChip } from '../components/chat/contextChips'
+import { buildPrefillText, setChatPrefill, takeChatPrefill } from '../components/chat/chatPrefill'
+import type { ChatItem, ChatSession, ChatAttachment, TurnStatsItem } from '../components/chat/chat-types'
+
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
+const authStore = useAuthStore()
+const themeStore = useThemeStore()
+const route = useRoute()
+const router = useRouter()
+
+// 工具条低频操作（导出/主题）收进溢出菜单：条上只留「会话/轨迹」两个高频入口。
+// 菜单项在渲染时求值，故与 themeStore 的初始化顺序无关。
+const toolbarMenuItems = computed(() => [
+  { key: 'export', label: t('导出为 Markdown'), icon: () => h(ExportOutlined), disabled: !items.value.length },
+  { key: 'save_kb', label: t('存入知识库'), icon: () => h(CloudUploadOutlined), disabled: !sessionMarkdown.value },
+  { key: 'save_memory', label: t('记住这条'), icon: () => h(DatabaseOutlined), disabled: !sessionMarkdown.value },
+  { key: 'save_workflow', label: t('另存为工作流'), icon: () => h(PartitionOutlined), disabled: !sessionMarkdown.value || savingWorkflow.value },
+  { key: 'save_agent', label: t('存为 Agent'), icon: () => h(RobotOutlined), disabled: !sessionMarkdown.value || savingAgent.value },
+  { type: 'divider' as const },
+  { key: 'display', label: t('显示设置'), icon: () => h(FontSizeOutlined) },
+  { key: 'theme', label: themeStore.isDark ? t('切换到亮色模式') : t('切换到暗色模式'), icon: () => h(themeStore.isDark ? BulbFilled : BulbOutlined) },
+])
+
+const displaySettingsOpen = ref(false)
+/** 存入知识库：把会话正文沉淀成知识库文档（弹窗里选目标知识库） */
+const saveToKbOpen = ref(false)
+/** 记住这条：把会话正文沉淀成长期记忆条目（后续对话会自动注入） */
+const saveToMemoryOpen = ref(false)
+/** 会话正文（Markdown；只取 text 项，思考与工具调用不写入知识库） */
+const sessionMarkdown = computed(() => sessionToMarkdown(items.value, activeSession.value?.title || ''))
+/** 另存为工作流：把整段对话沉淀成一个可重复执行的工作流图（单 llm 节点） */
+const savingWorkflow = ref(false)
+
+async function saveAsWorkflow() {
+  // 带上本对话挂的知识库：生成 input → knowledge → llm 链，让沉淀出的工作流
+  // 在每次运行时都先检索该知识库（见 utils/sessionGraph.ts 的说明）。
+  const graph = sessionToGraph(items.value, activeSession.value?.title || '', {
+    kbId: agentBindingsFromContext(buildContext()).kb_id,
+  })
+  if (!graph) {
+    message.warning(t('当前会话没有可沉淀的正文'))
+    return
+  }
+  savingWorkflow.value = true
+  try {
+    const saved = await createGraph({ name: graph.name, graph_json: graph.graph_json })
+    message.success(`已保存为工作流「${saved?.name || graph.name}」，可在工作流页打开调整`)
+  } catch (e) {
+    message.error('保存工作流失败: ' + describeApiError(e))
+  } finally {
+    savingWorkflow.value = false
+  }
+}
+
+/**
+ * 存为 Agent：把会话正文沉淀成 Agent 的人格（system_prompt）。
+ *
+ * 名字必须由用户确认 —— `sessionToAgent` 只给一个基于会话标题的默认值，
+ * 直接落库会积出一堆叫"对话记录"的条目。
+ */
+const saveAgentOpen = ref(false)
+const savingAgent = ref(false)
+const agentDraft = ref({ name: '', description: '', system_prompt: '' })
+
+function openSaveAsAgent() {
+  const draft = sessionToAgent(items.value, activeSession.value?.title || '')
+  if (!draft) {
+    message.warning(t('当前会话没有可沉淀的正文'))
+    return
+  }
+  agentDraft.value = draft
+  saveAgentOpen.value = true
+}
+
+async function saveAsAgent() {
+  const draft = agentDraft.value
+  const name = draft.name.trim()
+  if (!name) {
+    message.warning(t('请填写 Agent 名称'))
+    return
+  }
+  savingAgent.value = true
+  try {
+    // 连带把本对话挂的知识库/技能/插件写进新 Agent（见 utils/sessionAgent.ts 的
+    // agentBindingsFromContext）：只沉淀人格会让用户存完还得回各工作台重新装配一遍。
+    const bindings = agentBindingsFromContext(buildContext())
+    await createAgent({
+      name,
+      description: draft.description,
+      system_prompt: draft.system_prompt,
+      enabled: true,
+      ...bindings,
+    })
+    // 明确说出继承了哪些 —— 绑定是"沉默生效"的，不告诉用户就成幽灵行为
+    const inherited = [
+      bindings.kb_id ? '知识库' : '',
+      bindings.skills?.length ? `${bindings.skills.length} 个技能` : '',
+      bindings.plugins?.length ? `${bindings.plugins.length} 个插件` : '',
+    ].filter(Boolean)
+    message.success(
+      `已创建 Agent「${name}」${
+        inherited.length ? `，并继承本对话的 ${inherited.join('、')}` : ''
+      }，可在 Agents 页继续调整`,
+    )
+    saveAgentOpen.value = false
+  } catch (e) {
+    message.error('创建 Agent 失败: ' + describeApiError(e))
+  } finally {
+    savingAgent.value = false
+  }
+}
+
+function onToolbarMenu(info: { key: string | number }) {
+  if (info.key === 'export') exportMarkdown()
+  else if (info.key === 'save_kb') saveToKbOpen.value = true
+  else if (info.key === 'save_memory') saveToMemoryOpen.value = true
+  else if (info.key === 'save_workflow') void saveAsWorkflow()
+  else if (info.key === 'save_agent') openSaveAsAgent()
+  else if (info.key === 'display') displaySettingsOpen.value = true
+  else if (info.key === 'theme') themeStore.toggleTheme()
+}
+
+// 消息区「引用到输入框」：把选中文本交给输入框（ChatInput 暴露 insertText）
+const chatInputRef = ref<InstanceType<typeof ChatInput> | null>(null)
+
+function onQuoteText(text: string) {
+  chatInputRef.value?.insertText(text)
+}
+
+// ── 会话内检索（正文与思考；工具输出不进结果）────────────────────────────
+const searchOpen = ref(false)
+const searchQuery = ref('')
+const searchCursor = ref(0)
+const searchInputRef = ref<HTMLInputElement | null>(null)
+const searchMatches = computed(() => findMatches(items.value, searchQuery.value))
+watch(searchQuery, () => { searchCursor.value = 0 })
+
+function openSearch() {
+  searchOpen.value = true
+  nextTick(() => searchInputRef.value?.focus())
+}
+
+function closeSearch() {
+  searchOpen.value = false
+  searchQuery.value = ''
+}
+
+/** 循环跳转：命中项用既有的 focusToken 链路（含高亮闪烁与滚动归因） */
+function gotoMatch(delta: number) {
+  const hits = searchMatches.value
+  if (!hits.length) return
+  searchCursor.value = (searchCursor.value + delta + hits.length) % hits.length
+  trajectoryFocus.value = hits[searchCursor.value]!
+  trajectoryToken.value++
+}
+
+// 状态栏：最近一轮用量（turn_stats 由后端在回合结束时下发）
+const lastTurnStats = computed<TurnStatsItem | null>(() => {
+  for (let i = items.value.length - 1; i >= 0; i--) {
+    const item = items.value[i]
+    if (item?.kind === 'turn_stats') return item
+  }
+  return null
+})
+
+// 上下文占用环的分母：模型上限来自 /v1/models 的 context_window（拿不到就不显示比例）
+const availableModels = ref<LlmModel[]>([])
+const contextWindow = computed(() => {
+  const name = llmModel.value
+  if (!name) return null
+  return availableModels.value.find(m => m.name === name)?.context_window || null
+})
+listModels()
+  .then(models => { availableModels.value = models })
+  .catch(() => { availableModels.value = [] })
+
+// ── 会话状态 ──
+const sessions = ref<ChatSession[]>([])
+const activeSessionId = ref('')
+const activeSession = computed(() => sessions.value.find(s => s.id === activeSessionId.value) || null)
+const loading = ref(false)
+const items = ref<ChatItem[]>([])
+let activeSSE: EventSource | null = null
+// 每个会话最后收到的 SSE 事件 id（服务端 id: 行 → event.lastEventId）。
+// 跨轮重建 SSE 时回传（last_event_id），服务端从缓冲流补发上一轮断线缺口（见 api/index.ts createSSEConnection）
+const sseLastIdBySession = new Map<string, string>()
+
+// ── Trace ID (当前会话的链路追踪标识) ──
+const currentTraceId = ref('')  // SSE done 事件回传的 trace_id
+
+// 安全修复：待确认工具调用（三态栅栏"确认"态）
+interface PendingApproval {
+  id: string
+  toolName: string
+  arguments: string
+  /** 审批截止时间（ms）：与后端 300s 超时对齐，用于卡片倒计时与过期清理 */
+  expiresAt?: number
+}
+const pendingApprovals = ref<PendingApproval[]>([])
+// 审批卡片倒计时：approval 事件到达时记录截止时间（后端 _await_approval 默认 300s，
+// 超时按"拒绝"处理），前端展示剩余时间并在过期后移除卡片。
+const approvalTick = ref(0)
+const APPROVAL_TIMEOUT_MS = 300_000
+let approvalTimer: ReturnType<typeof setInterval> | null = null
+
+function approvalRemain(a: any): number {
+  void approvalTick.value // 依赖 tick 触发重算
+  if (!a?.expiresAt) return 0
+  return Math.max(0, Math.ceil((a.expiresAt - Date.now()) / 1000))
+}
+
+function ensureApprovalTimer() {
+  if (approvalTimer) return
+  approvalTimer = setInterval(() => {
+    approvalTick.value++
+    const now = Date.now()
+    pendingApprovals.value = pendingApprovals.value.filter(
+      (p) => !(p as any).expiresAt || (p as any).expiresAt > now,
+    )
+    if (pendingApprovals.value.length === 0 && approvalTimer) {
+      clearInterval(approvalTimer)
+      approvalTimer = null
+    }
+  }, 1000)
+}
+
+async function resolveApproval(a: PendingApproval, approved: boolean) {
+  try {
+    await submitApproval({
+      session_id: activeSessionId.value || '',
+      tool_call_id: a.id,
+      approved,
+    })
+  } catch {
+    // 静默失败
+  } finally {
+    pendingApprovals.value = pendingApprovals.value.filter(p => p.id !== a.id)
+  }
+}
+
+// ── 结构化提问（ask_user 工具）────────────────────────────────────────────
+// 与审批卡的分工：审批回传布尔（允许/拒绝），提问回传**答案文本**（选项值或自由输入），
+// 因此走独立的 /v1/agent/answer 通道而不是复用 approval。
+interface PendingQuestion {
+  id: string
+  question: string
+  options: string[]
+  allowFreeText: boolean
+}
+
+const pendingQuestions = ref<PendingQuestion[]>([])
+
+async function answerQuestion(question: PendingQuestion, answer: string) {
+  pendingQuestions.value = pendingQuestions.value.filter(item => item.id !== question.id)
+  try {
+    await submitAnswer({
+      session_id: activeSessionId.value || '',
+      tool_call_id: question.id,
+      answer,
+    })
+  } catch {
+    message.error(t('回答提交失败，请重试'))
+  }
+}
+
+// ── 工具授权模式（ask/auto/yolo）──────────────────────────────────────────
+// 与下方「对话模式」(mode: normal/minimal/ptc/creative) 是两个不同维度：
+// 本项控制**工具执行是否需要用户确认**，状态存后端 Redis（多副本一致），
+// 实际判定在 Python 侧 guards.py（模式读取失败会 fail-safe 到最严格的 ask）。
+const toolsMode = ref<'ask' | 'auto' | 'yolo'>('auto')
+const toolsModeOptions = [
+  { label: t('询问'), value: 'ask' },
+  { label: t('自动'), value: 'auto' },
+  { label: t('全自动'), value: 'yolo' },
+]
+
+async function loadToolsMode(sessionId: string) {
+  if (!sessionId) {
+    toolsMode.value = 'auto'
+    return
+  }
+  try {
+    const m = await getSessionMode(sessionId)
+    if (m === 'ask' || m === 'auto' || m === 'yolo') toolsMode.value = m
+  } catch {
+    // 读取失败：界面保持 auto；判定侧会按 fail-safe 取最严格模式
+  }
+}
+
+async function onToolsModeChange(v: any) {
+  const m = String(v) as 'ask' | 'auto' | 'yolo'
+  toolsMode.value = m
+  const sid = activeSessionId.value
+  if (!sid) {
+    message.warning(t('请先创建或选择会话，再设置工具授权模式'))
+    return
+  }
+  try {
+    await setSessionMode(sid, m)
+    message.success(
+      m === 'yolo'
+        ? '已切换为全自动：跳过工具确认（该操作会留审计）'
+        : `工具授权模式已设为「${toolsModeOptions.find(o => o.value === m)?.label || m}」`,
+    )
+  } catch {
+    message.error(t('工具授权模式保存失败'))
+  }
+}
+
+// 模式
+const modeOptions = [
+  { label: t('常规'), value: 'normal' },
+  { label: t('极简'), value: 'minimal' },
+  { label: 'PTC', value: 'ptc' },
+  { label: t('创意'), value: 'creative' },
+]
+const mode = ref('normal')
+
+// ── 模型路由：会话 llm_config.model（空 = 后端默认路由） ──
+const llmModel = ref('')
+
+// ── 对话模式预设（mode 对应 temperature/max_tokens；用户显式覆盖优先） ──
+const MODE_PRESETS: Record<string, { temperature: number; max_tokens: number; note?: string }> = {
+  normal: { temperature: 0.6, max_tokens: 4096 },
+  minimal: { temperature: 0.2, max_tokens: 1024, note: '简短回复' },
+  ptc: { temperature: 0.4, max_tokens: 4096, note: '分步思考' },
+  creative: { temperature: 1.0, max_tokens: 8192 },
+}
+
+/** 构建 llm_config：mode + 对应预设 temperature/max_tokens + 模型路由 model（base 已显式携带的字段优先保留） */
+function buildLlmConfig(base?: Record<string, any>): Record<string, any> {
+  const cfg: Record<string, any> = { mode: mode.value, ...(base || {}) }
+  // 模型路由：会话选定模型写入 llm_config（空 = 不携带，走后端默认路由）
+  if (llmModel.value) cfg.model = llmModel.value
+  const preset = MODE_PRESETS[mode.value]
+  if (preset) {
+    if (cfg.temperature === undefined) cfg.temperature = preset.temperature
+    if (cfg.max_tokens === undefined) cfg.max_tokens = preset.max_tokens
+  }
+  return cfg
+}
+
+/** 模型切换：更新 llmModel ref + 会话级持久化（SSE 模式已有会话时立即保存 llm_config） */
+function onModelChange(m: string) {
+  if (m === llmModel.value) return
+  llmModel.value = m
+  message.info(m ? `模型已切换：${m}（仅影响后续消息）` : t('模型已重置为默认（后端路由）'))
+  if (!unifiedMode.value && activeSessionId.value) {
+    void updateConversation(activeSessionId.value, { llm_config: buildLlmConfig() } as any).catch(() => {})
+  }
+}
+
+/** 模式切换：更新 mode ref + 提示（仅影响后续消息），会话级持久化（SSE 模式已有会话时立即保存 llm_config） */
+function onModeChange(m: string) {
+  if (m === mode.value) return
+  mode.value = m
+  const opt = modeOptions.find(o => o.value === m)
+  const preset = MODE_PRESETS[m]
+  message.info(`已切换到「${opt?.label || m}」模式${preset?.note ? `（${preset.note}）` : ''}，仅影响后续消息`)
+  if (!unifiedMode.value && activeSessionId.value) {
+    void updateConversation(activeSessionId.value, { llm_config: buildLlmConfig() } as any).catch(() => {})
+  }
+}
+
+/** 归一化后的 metadata（可能为 JSON 字符串或对象） */
+function normalizeMeta(raw: any): Record<string, any> | undefined {
+  if (!raw) return undefined
+  if (typeof raw === 'string') {
+    try { raw = JSON.parse(raw) } catch { return undefined }
+  }
+  return raw && typeof raw === 'object' ? raw : undefined
+}
+
+// ── 互联互通：统一任务模式 + 上下文芯片（与 SSE 流式并列的新路径） ──
+// 路由 query 约定（由 WorkstationNav / 各工作台入口发起）：
+//   ?task=<sessionId>          统一会话（拉历史 + 继续追问）
+//   ?task=&error=xxx           仅错误提示
+//   ?kb=<id> / ?agent=<id> / ?skill=<name> / ?workflow=<id|name>   上下文附加
+//   同名参数可重复（?kb=a&kb=b）=> 同类可多选
+//   ?mode=<auto|agent|workflow> 创建时模式（WorkflowView 为 workflow）
+const contextChips = ref<ContextChip[]>([])
+const errorBanner = ref('')          // query.error 提示
+const unifiedSessionId = ref('')     // 统一任务会话 id（query.task）
+const unifiedSubmitMode = ref('auto') // 会话创建时的 mode（shared_context.mode 优先）
+const unifiedMode = computed(() => !!unifiedSessionId.value)
+// 纯展示 flag：任务提交成功时，徽标短暂过渡到"完成"态后复位
+const unifiedJustFinished = ref(false)
+let unifiedDoneTimer: ReturnType<typeof setTimeout> | null = null
+function flashUnifiedDone() {
+  unifiedJustFinished.value = true
+  if (unifiedDoneTimer) clearTimeout(unifiedDoneTimer)
+  unifiedDoneTimer = setTimeout(() => { unifiedJustFinished.value = false }, 1600)
+}
+let appliedQueryKey = ''
+
+async function applyRouteQuery() {
+  const q = route.query
+  const key = JSON.stringify(q)
+  if (key === appliedQueryKey) return
+  appliedQueryKey = key
+
+  const task = typeof q.task === 'string' && q.task.trim() ? q.task.trim() : ''
+  // task 变更 / 退出统一模式时重置消息区（避免污染普通 SSE 会话）
+  if (task !== unifiedSessionId.value) {
+    unifiedSessionId.value = task
+    items.value = []
+    activeSessionId.value = ''
+    currentTraceId.value = ''
+    loading.value = false
+    stopTurnTimer()
+    if (activeSSE) { activeSSE.close(); activeSSE = null }
+    if (task) await loadUnifiedSession(task)
+  }
+  errorBanner.value = typeof q.error === 'string' && q.error ? q.error : ''
+  // 跨台活动直达：?session=<id> 时切到那个会话（"最近活动"里点对话记录会带它过来）。
+  // 统一任务模式（task）下不切，避免与 loadUnifiedSession 抢消息区。
+  const target = typeof q.session === 'string' ? q.session.trim() : ''
+  if (target && !task && target !== activeSessionId.value) {
+    try {
+      await switchSession(target)
+    } catch {
+      // 会话已删 / 非本人：留在当前会话，不打扰
+    }
+  }
+  await initContextChips(q)
+  void applyChatPrefill()
+}
+
+/**
+ * 「在对话中继续」的落地端：Agent 会话 / 工作流结果经 sessionStorage 投递到这里，
+ * 插入输入框（不自动发送）—— 用户可以先修改再发。
+ */
+async function applyChatPrefill() {
+  const prefill = takeChatPrefill()
+  if (!prefill) return
+  const text = buildPrefillText(prefill)
+  await nextTick()
+  if (chatInputRef.value?.insertText) {
+    chatInputRef.value.insertText(text)
+  } else {
+    // 输入框还没挂载（首帧）：把投递放回去，别让用户的那一次点击被静默吞掉
+    setChatPrefill(prefill)
+  }
+}
+
+async function initContextChips(q: Record<string, any>) {
+  // URL 约定与多值解析统一在 contextChips 模块里（同名参数可重复 => 可多选）
+  const chips = parseContextQuery(q)
+  const kb = chips.find(c => c.type === 'kb')?.value || ''
+  const agent = chips.find(c => c.type === 'agent')?.value || ''
+  const skill = chips.find(c => c.type === 'skill')?.value || ''
+  const workflow = chips.find(c => c.type === 'workflow')?.value || ''
+  contextChips.value = chips
+  // ── 尽力补全展示用的名称（失败则保留 id 占位；Agent 配置本身由网关按 id 补全）──
+  if (kb) {
+    try {
+      const res = await api.get(`/v1/kb/${encodeURIComponent(kb)}`)
+      const d = res.data?.data || res.data
+      if (d?.name) {
+        const c = contextChips.value.find(x => x.type === 'kb')
+        if (c) c.label = `知识库 ${d.name}`
+      }
+    } catch { /* 保留 id 占位 */ }
+  }
+  if (agent) {
+    try {
+      const res = await api.get('/v1/agents')
+      const list = res.data?.data || []
+      const a = list.find((x: any) => x.id === agent)
+      if (a?.name) {
+        const c = contextChips.value.find(x => x.type === 'agent')
+        if (c) c.label = `Agent ${a.name}`
+      }
+    } catch { /* 列表取不到就保留 id 占位 */ }
+  }
+  if (workflow) {
+    try {
+      const res = await api.get('/v1/graphs')
+      const list = res.data?.data || []
+      const rec = list.find((x: any) => x.id === workflow)
+      if (rec?.name) {
+        const c = contextChips.value.find(x => x.type === 'workflow')
+        if (c) c.label = `工作流 ${rec.name}`
+      }
+    } catch { /* 无列表时保留原文 */ }
+  }
+}
+
+/** 移除单个上下文芯片：本地 context 与路由 query 双源同步（侧栏上下文面板触发） */
+function removeContextChip(type: ContextChip['type'], value: string) {
+  contextChips.value = contextChips.value.filter(c => !(c.type === type && c.value === value))
+  const remaining = contextChips.value.filter(c => c.type === type).map(c => c.value)
+  const q: Record<string, any> = { ...route.query }
+  // 同类还有剩余值时改写该项（多值即数组），否则整项删除
+  if (remaining.length === 0) {
+    if (q[type] === undefined) return
+    delete q[type]
+  } else {
+    q[type] = remaining.length === 1 ? remaining[0] : remaining
+  }
+  void router.replace({ path: '/chat', query: q })
+  appliedQueryKey = JSON.stringify(q)
+}
+
+/** 清空全部上下文：本地 context 与路由 query 一并清除（键取 PARAMS 定义，避免新增类型时漏清） */
+function clearContext() {
+  contextChips.value = []
+  const q: Record<string, any> = { ...route.query }
+  let changed = false
+  for (const key of CONTEXT_QUERY_KEYS) {
+    if (q[key] !== undefined) { delete q[key]; changed = true }
+  }
+  if (changed) {
+    void router.replace({ path: '/chat', query: q })
+    appliedQueryKey = JSON.stringify(q)
+  }
+}
+
+/** 统一任务模式：清空当前消息区（保留会话与上下文，可继续追问） */
+function clearUnifiedMessages() {
+  items.value = []
+  currentTraceId.value = ''
+  message.info(t('已清空统一任务消息'))
+}
+
+/** 统一任务模式：退出（移除 task/error query；路由 watcher 触发 applyRouteQuery 重置消息区） */
+async function exitUnifiedMode() {
+  const q: Record<string, any> = { ...route.query }
+  delete q.task
+  delete q.error
+  await router.replace({ path: '/chat', query: q })
+}
+
+/** kb_hits 标签增强：跳转到引用的知识库详情 */
+function openKb(kbId: string) {
+  if (kbId) void router.push(`/knowledge/${encodeURIComponent(kbId)}`)
+}
+
+/** 组装发送时附带的 context（普通 SSE 模式与统一任务模式共用） */
+function buildContext(): Record<string, any> | undefined {
+  // 单值字段 + 多值数组的组装规则集中在 contextChips 模块（新旧后端都能工作）。
+  //
+  // Agent 只发 agent_id，配置由网关按 id 补全（internal/api/agents.go 的
+  // resolveAgentContext）。前端此前自己映射一份字段，且只映射了
+  // name / system_prompt / model / max_turns —— Agent 自带的 tools / kb_id / skills
+  // 全部丢失，用户选了 Agent 却发现"它不会用自己的工具"。把单一事实来源放回后端，
+  // 两端就不会各自漂移。
+  return buildWorkbenchContext(contextChips.value)
+}
+
+/** 安全改造：附件签名 URL 解析，/media/ 公开路径转短时效签名 URL；非 /media/ 前缀原样；失败回退原 url */
+async function resolveAttachmentUrls(attachments?: ChatAttachment[]): Promise<ChatAttachment[]> {
+  if (!attachments?.length) return []
+  return Promise.all(attachments.map(async a => {
+    if (!a.url || !a.url.startsWith('/media/')) return a
+    const url = await resolveMediaUrl({ id: a.id, file_url: a.url })
+    return url && url !== a.url ? { ...a, url } : a
+  }))
+}
+
+/** 拉取统一会话历史（GET /v1/chat/sessions/{id}/messages） */
+async function loadUnifiedSession(sessionId: string) {
+  loading.value = true
+  try {
+    const res = await getChatSessionMessages(sessionId)
+    const d = (res?.messages ? res : (res?.data || {})) as any
+    const list = Array.isArray(d.messages) ? d.messages : []
+    // 会话创建时的 mode（shared_context 优先，其次 query.mode，兜底 auto）
+    const sharedMode = d.shared_context?.mode
+    unifiedSubmitMode.value =
+      (typeof sharedMode === 'string' && sharedMode) ||
+      (typeof route.query.mode === 'string' && route.query.mode) ||
+      'auto'
+    items.value = buildUnifiedItems(list)
+  } catch {
+    errorBanner.value = errorBanner.value || '统一会话加载失败，可直接发送消息继续'
+  } finally {
+    loading.value = false
+    // 会话加载完成后自动滚到底部
+    await nextTick()
+    const listEl = document.querySelector<HTMLElement>('.message-list')
+    if (listEl) listEl.scrollTop = listEl.scrollHeight
+  }
+}
+
+/** 统一会话消息 → 现有 ChatItem（user/assistant 映射现有消息组件；metadata 含 kb 时插知识库引用标签） */
+function buildUnifiedItems(list: any[]): ChatItem[] {
+  const out: ChatItem[] = []
+  ;(list || []).forEach((m: any, idx: number) => {
+    if (!m || (m.role !== 'user' && m.role !== 'assistant')) return
+    const content = typeof m.content === 'string' ? m.content : ''
+    if (!content) return
+    const time = formatClock(m.timestamp || m.created_at)
+    if (m.role === 'user') {
+      out.push({ kind: 'text', role: 'user', content: stripUserInputTag(content), time, id: `uni_u_${idx}` })
+    } else {
+      const { reasoning, body } = splitThinking(content, { loose: true })
+      if (reasoning) out.push({ kind: 'reasoning', content: reasoning, time, id: `uni_r_${idx}` })
+      if (body) {
+        out.push({
+          kind: 'text', role: 'assistant', content: body, time, id: `uni_a_${idx}`,
+          metadata: normalizeMeta(m.metadata),
+        } as any)
+        const meta = normalizeMeta(m.metadata) || {}
+        const n = typeof meta.kb_hits === 'number' ? meta.kb_hits : meta.kb_id ? 1 : 0
+        if (meta.kb_id || n > 0) {
+          out.push({ kind: 'kb_hits', count: n, kb_id: meta.kb_id || '', id: `uni_k_${idx}` } as unknown as ChatItem)
+        }
+      }
+    }
+  })
+  return out
+}
+
+/** 统一任务模式发送：POST /v1/chat/submit，返回 output 追加为 assistant 消息 */
+async function sendUnified(text: string, attachments?: ChatAttachment[]) {
+  if (!unifiedSessionId.value) return
+  loading.value = true
+  startTurnTimer()
+  appendUserText(text, attachments)
+  const userItemId = items.value[items.value.length - 1]?.id
+  currentTraceId.value = ''
+  try {
+    // 安全改造：附件若为 /media/ 公开路径，先解析为签名 URL 再随消息发送（loading 期间发送已禁用）
+    const resolvedAtts = await resolveAttachmentUrls(attachments)
+    const res = await api.post('/v1/chat/submit', {
+      message: text,
+      session_id: unifiedSessionId.value,
+      mode: unifiedSubmitMode.value || 'auto',
+      context: buildContext(),
+      // 模型路由：统一任务发送同样携带 llm_config.model（空 = 后端默认）
+      llm_config: llmModel.value ? { model: llmModel.value } : {},
+      ...(resolvedAtts.length
+        ? { attachments: resolvedAtts.map(a => ({ id: a.id, name: a.name, mime_type: a.mimeType, url: a.url, is_image: a.isImage })) }
+        : {}),
+    })
+    const d = res.data?.data !== undefined ? res.data.data : (res.data || {})
+    if (d.success === false) throw new Error(d.error || '请求失败')
+    currentTraceId.value = d.trace_id || ''
+    appendAssistantWithKb(d.output || '', d.metadata || {})
+    flashUnifiedDone()
+  } catch (e: any) {
+    const reason = describeApiError(e)
+    markMessageFailed(userItemId, reason)
+    message.error(t('发送失败：') + reason)
+  } finally {
+    loading.value = false
+    stopTurnTimer()
+  }
+}
+
+/** 追加 assistant 消息；metadata 含 kb_hits/kb_id 时在其下显示"引用了知识库(×N)"小标签 */
+function appendAssistantWithKb(content: string, meta: any) {
+  // 统一任务模式的 output 同为引擎产出（可含多段 [thinking] 块）→ 用 loose 状态机解析
+  const { reasoning, body } = splitThinking(String(content), { loose: true })
+  if (reasoning) items.value.push({ kind: 'reasoning', content: reasoning, id: genItemId() })
+  if (body) {
+    items.value.push({
+      kind: 'text', role: 'assistant', content: body, id: genItemId(),
+      metadata: normalizeMeta(meta),
+    } as any)
+    const n = typeof meta.kb_hits === 'number' ? meta.kb_hits : meta.kb_id ? 1 : 0
+    if (meta.kb_id || n > 0) {
+      items.value.push({ kind: 'kb_hits', count: n, kb_id: meta.kb_id || '', id: genItemId() } as unknown as ChatItem)
+    }
+  }
+}
+
+// 统一任务模式：新消息后自动滚到底部
+watch(() => items.value.length, async () => {
+  if (!unifiedMode.value) return
+  await nextTick()
+  const el = document.querySelector<HTMLElement>('.unified-list')
+  if (el) el.scrollTop = el.scrollHeight
+})
+
+// 侧面板（主从时间线：轨迹 / 会话历史）；上下文面板：桌面端（>1025px）默认展开常驻，≤1024px 折叠为抽屉
+const panelOpen = ref(window.matchMedia('(min-width: 1025px)').matches)
+const panelView = ref<'trajectory' | 'sessions'>('trajectory')
+const trajectoryFocus = ref<number | null>(null)
+const trajectoryToken = ref(0)
+
+function onTrajectoryFocus(index: number) {
+  trajectoryFocus.value = index
+  trajectoryToken.value += 1
+}
+
+// 打开面板并直达指定视图；点击已激活的入口则收起
+function openPanel(view: 'trajectory' | 'sessions') {
+  if (panelOpen.value && panelView.value === view) {
+    panelOpen.value = false
+    return
+  }
+  panelView.value = view
+  panelOpen.value = true
+}
+
+/** ChatInput「上下文」快捷按钮：确保上下文面板展开（抽屉模式下亦然）并直达轨迹视图 */
+function openContextPanel() {
+  panelView.value = 'trajectory'
+  panelOpen.value = true
+}
+
+// turn 计时（deepseek turnStatusClock）
+const turnElapsed = ref(0)
+const connectionLost = ref(false)  // SSE 断线横幅（deepseek ConnectionBanner）
+let turnTimer: ReturnType<typeof setInterval> | null = null
+
+function startTurnTimer() {
+  turnElapsed.value = 0
+  if (turnTimer) clearInterval(turnTimer)
+  turnTimer = setInterval(() => { turnElapsed.value += 1 }, 1000)
+}
+
+function stopTurnTimer() {
+  if (turnTimer) { clearInterval(turnTimer); turnTimer = null }
+}
+
+function persistSessions() { localStorage.setItem('chat_sessions', JSON.stringify(sessions.value)) }
+
+// ── 会话 CRUD（保留原逻辑） ──
+onMounted(async () => {
+  // 互联互通：解析 /chat query（task / error / kb / agent / skill / workflow）
+  await applyRouteQuery()
+  await loadSessions()
+  // 统一任务模式不自动切换普通会话；其余保持原有行为
+  if (!unifiedMode.value && sessions.value.length > 0) {
+    await switchSession(sessions.value[0].id)
+  }
+  // 互联互通：同一路由下 query 变化（如 WorkstationNav 再次跳转）
+  watch(() => route.query, () => applyRouteQuery())
+  // 监听网络在线/离线状态
+  window.addEventListener('online', onOnline)
+  window.addEventListener('offline', onOffline)
+  // 全局键盘快捷键
+  window.addEventListener('keydown', onGlobalKeydown)
+})
+
+onUnmounted(() => {
+  stopTurnTimer()
+  if (activeSSE) { activeSSE.close(); activeSSE = null }
+  if (unifiedDoneTimer) { clearTimeout(unifiedDoneTimer); unifiedDoneTimer = null }
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
+  window.removeEventListener('online', onOnline)
+  window.removeEventListener('offline', onOffline)
+  window.removeEventListener('keydown', onGlobalKeydown)
+})
+
+// 离线监听 + 自动重连
+const isOnline = ref(navigator.onLine)
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+let reconnectAttempts = 0
+
+function onOffline() {
+  isOnline.value = false
+  connectionLost.value = true
+  // 离线时停止 SSE 重试
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
+}
+
+function onOnline() {
+  isOnline.value = true
+  // 上线后指数退避重连，恢复会话
+  if (reconnectTimer) clearTimeout(reconnectTimer)
+  reconnectAttempts = 0
+  attemptReconnect()
+}
+
+async function attemptReconnect() {
+  if (!isOnline.value) return
+  reconnectAttempts++
+  // 指数退避：1s, 2s, 4s, 8s, 16s（最大 16s）
+  const delay = Math.min(1000 * Math.pow(2, reconnectAttempts - 1), 16000)
+  if (reconnectAttempts > 1) {
+    await new Promise(r => setTimeout(r, delay))
+  }
+  if (!isOnline.value) return
+  try {
+    await api.get('/health', { timeout: 5000 })
+    connectionLost.value = false
+    reconnectAttempts = 0
+    if (activeSessionId.value) {
+      await switchSession(activeSessionId.value)
+    }
+  } catch {
+    if (reconnectAttempts < 5) {
+      reconnectTimer = setTimeout(attemptReconnect, delay)
+    }
+  }
+}
+
+// 导出当前会话为 Markdown 文件
+function exportMarkdown() {
+  if (!items.value.length) {
+    message.warning(t('当前没有可导出的消息'))
+    return
+  }
+  const session = sessions.value.find(s => s.id === activeSessionId.value)
+  const title = session?.title || '对话导出'
+  const lines: string[] = [`# ${title}`, '']
+  for (const it of items.value) {
+    if (it.kind !== 'text') continue
+    const role = it.role === 'user' ? '🧑 用户' : '🤖 助手'
+    lines.push(`## ${role}`, '')
+    lines.push(it.content || '(空消息)')
+    if (it.attachments?.length) {
+      lines.push('')
+      for (const a of it.attachments) {
+        if (a.isImage) lines.push(`![${a.name}](${a.url})`)
+        else lines.push(`- 📎 [${a.name}](${a.url}) (${formatSize(a.size)})`)
+      }
+    }
+    lines.push('')
+  }
+  const toolCalls = items.value.filter(i => i.kind === 'tool_call')
+  if (toolCalls.length) {
+    lines.push('---', '', '## 工具调用记录', '')
+    for (const tc of toolCalls) {
+      if (tc.kind !== 'tool_call') continue
+      lines.push(`### ${tc.name || 'tool'}`, '```json', tc.arguments || '{}', '```', '')
+    }
+  }
+  const md = lines.join('\n')
+  const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${title.replace(/[\\/:*?"<>|]/g, '_')}.md`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+  message.success(t('已导出 Markdown'))
+}
+
+// 斜杠命令处理
+function onSlashCommand(cmd: string) {
+  switch (cmd) {
+    case '/clear':
+      items.value = []
+      activeSessionId.value = ''
+      message.info(t('已清空当前对话'))
+      break
+    case '/export':
+      exportMarkdown()
+      break
+    case '/new':
+      items.value = []
+      activeSessionId.value = ''
+      panelOpen.value = false
+      message.info(t('已新建会话'))
+      break
+    case '/theme':
+      themeStore.toggleTheme()
+      message.success(themeStore.isDark ? t('已切换到暗色模式') : t('已切换到亮色模式'))
+      break
+    case '/stop':
+      stopGeneration()
+      break
+    default:
+      message.warning(`未知命令: ${cmd}`)
+  }
+}
+
+// 全局键盘快捷键
+function onGlobalKeydown(e: KeyboardEvent) {
+  // Ctrl/Cmd + K：打开侧边栏 + 切到会话历史视图
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault()
+    panelOpen.value = true
+    panelView.value = 'sessions'
+    nextTick(() => {
+      const searchInput = document.querySelector('.panel-search .search-input') as HTMLInputElement | null
+      searchInput?.focus()
+    })
+  }
+  // Esc 关闭侧边栏
+  if (e.key === 'Escape' && panelOpen.value) {
+    panelOpen.value = false
+  }
+}
+
+async function loadSessions() {
+  try {
+    const res = await api.get('/v1/conversations')
+    const apiSessions = res.data?.data || res.data || []
+    if (apiSessions.length > 0) { sessions.value = apiSessions; persistSessions() }
+    else { const raw = localStorage.getItem('chat_sessions'); sessions.value = raw ? JSON.parse(raw) : [] }
+  } catch {
+    const raw = localStorage.getItem('chat_sessions')
+    if (raw) sessions.value = JSON.parse(raw)
+  }
+  sortSessions()
+}
+
+async function createSession() {
+  let session: ChatSession | null = null
+  try {
+    const res = await api.post('/v1/conversations', { title: t('新对话'), llm_config: buildLlmConfig() })
+    const data = res.data?.data || res.data
+    if (data?.id) session = { id: data.id, title: data.title || t('新对话'), created_at: data.created_at, updated_at: data.updated_at }
+  } catch { /* fallback */ }
+  if (!session) {
+    const id = crypto.randomUUID()
+    session = { id, title: t('新对话'), created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+  }
+  sessions.value.unshift(session); persistSessions()
+  panelView.value = 'trajectory'
+  try { await switchSession(session.id) } catch { /* ignore */ }
+}
+
+async function switchSession(id: string) {
+  // 互联互通：从统一任务模式切到普通会话时，移除 task/error（保留 kb/agent/skill/workflow 上下文）
+  if (unifiedMode.value && unifiedSessionId.value) {
+    const q = { ...route.query }
+    delete q.task
+    delete q.error
+    await router.replace({ path: '/chat', query: q })
+    appliedQueryKey = JSON.stringify(q)
+    unifiedSessionId.value = ''
+  }
+  if (id === activeSessionId.value) return
+  const mySeq = ++switchSeq.value
+  activeSessionId.value = id; items.value = []; loading.value = true
+  // 工具授权模式是会话级状态（存后端 Redis）：切会话时同步拉取，避免沿用上一个会话的模式
+  void loadToolsMode(id)
+  hasMore.value = false; earliestCursor.value = ''; loadingEarlier.value = false
+  initialLoading.value = true
+  try {
+    const res = await api.get(`/v1/conversations/${id}?limit=${HISTORY_PAGE_SIZE}`)
+    if (mySeq !== switchSeq.value) return
+    const data = res.data?.data || res.data
+    if (data?.messages) {
+      items.value = mergeHistory(data.messages, data.tool_calls || [])
+      earliestCursor.value = data.cursor || ''
+      hasMore.value = !!data.has_more
+    }
+    let cfg: any = data?.llm_config
+    if (typeof cfg === 'string') { try { cfg = JSON.parse(cfg) } catch { cfg = undefined } }
+    const savedMode = cfg?.mode
+    if (typeof savedMode === 'string' && modeOptions.some(o => o.value === savedMode)) {
+      mode.value = savedMode
+    }
+    llmModel.value = typeof cfg?.model === 'string' ? cfg.model : ''
+  } catch { /* fallback */ } finally {
+    if (mySeq === switchSeq.value) {
+      loading.value = false
+      initialLoading.value = false
+      // 会话加载完成后自动滚到底部
+      await nextTick()
+      const listEl = document.querySelector<HTMLElement>('.message-list')
+      if (listEl) listEl.scrollTop = listEl.scrollHeight
+    }
+  }
+}
+
+// 性能优化：cursor 分页，触顶加载更早的消息（首屏只加载最新 HISTORY_PAGE_SIZE 条）
+const HISTORY_PAGE_SIZE = 50
+const hasMore = ref(false)
+const earliestCursor = ref('')
+const loadingEarlier = ref(false)
+const initialLoading = ref(false)
+const switchSeq = ref(0)
+
+function mergeHistory(messages: any[], toolCalls: any[]): ChatItem[] {
+  interface TimelineEntry { t: number; items: ChatItem[] }
+  const turnOf = (m: any): string | undefined => (m?.turn_id ? String(m.turn_id) : undefined)
+  const timeline: TimelineEntry[] = (messages || [])
+    .filter((m: any) => (m.role === 'user' || m.role === 'assistant') && m.content)
+    .map((m: any) => {
+      const clock = formatClock(m.created_at)
+      const turnId = turnOf(m)
+      const items: ChatItem[] = []
+      if (m.role === 'user') {
+        items.push({ kind: 'text', role: 'user', content: stripUserInputTag(m.content), time: clock, id: m.id, turnId })
+      } else {
+        const { reasoning, body } = splitThinking(m.content, { loose: true })
+        if (reasoning) items.push({ kind: 'reasoning', content: reasoning, time: clock, id: `${m.id}:r`, turnId })
+        if (body) items.push({
+          kind: 'text', role: 'assistant', content: body, time: clock, id: m.id, turnId,
+          metadata: normalizeMeta((m as any)?.metadata),
+        } as any)
+      }
+      return { t: new Date(m.created_at).getTime(), items }
+    })
+
+  const callsById = new Map<string, any>((toolCalls || []).map((tc: any) => [tc.id, tc]))
+  ;(messages || []).forEach((m: any) => {
+    if (m.role !== 'assistant' || !m.tool_calls || m.tool_calls === '[]') return
+    let inline: any[]
+    try { inline = typeof m.tool_calls === 'string' ? JSON.parse(m.tool_calls) : m.tool_calls } catch { return }
+    for (const tc of inline || []) {
+      if (!tc) continue
+      if (typeof tc === 'string') {
+        if (!callsById.has(tc)) {
+          callsById.set(tc, { id: tc, tool_name: 'tool', input: '', output: '', is_error: false, created_at: m.created_at, turn_id: m.turn_id })
+        }
+        continue
+      }
+      if (!tc.id) continue
+      const known = callsById.get(tc.id)
+      if (known) {
+        // 已有记录：只补回合身份，不覆盖落库的工具输出
+        if (!known.turn_id) known.turn_id = m.turn_id
+        continue
+      }
+      callsById.set(tc.id, {
+        id: tc.id,
+        tool_name: tc.function?.name ?? tc.name,
+        input: tc.function?.arguments ?? tc.arguments ?? '',
+        output: '',
+        is_error: false,
+        created_at: m.created_at,
+        turn_id: m.turn_id,
+      })
+    }
+  })
+
+  Array.from(callsById.values()).forEach((tc: any) => {
+    const turnId = turnOf(tc)
+    const callItems: ChatItem[] = [{
+      kind: 'tool_call', id: tc.id, name: tc.tool_name,
+      arguments: tc.input || '', status: 'done', turnId,
+    }]
+    if (tc.output) {
+      callItems.push({
+        kind: 'tool_result', toolCallId: tc.id, id: `${tc.id}:res`,
+        content: tc.output, isError: !!tc.is_error, turnId,
+      })
+    }
+    timeline.push({ t: new Date(tc.created_at).getTime(), items: callItems })
+  })
+  timeline.sort((a, b) => a.t - b.t)
+  const flat = timeline.flatMap(e => e.items)
+  const merged: ChatItem[] = []
+  let prevDay = ''
+  timeline.forEach((e, i) => {
+    const d = new Date(e.t)
+    const dayKey = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`
+    if (i > 0 && prevDay !== dayKey) {
+      merged.push({ kind: 'date_divider', content: `${d.getMonth() + 1}月${d.getDate()}日`, id: `date-${dayKey}-${i}` })
+    }
+    merged.push(...e.items)
+    prevDay = dayKey
+  })
+  return merged.length > flat.length ? merged : flat
+}
+
+async function loadEarlier() {
+  if (loadingEarlier.value || !hasMore.value || !activeSessionId.value || !earliestCursor.value) return
+  loadingEarlier.value = true
+  try {
+    const res = await api.get(
+      `/v1/conversations/${activeSessionId.value}?limit=${HISTORY_PAGE_SIZE}&before=${encodeURIComponent(earliestCursor.value)}`,
+    )
+    const data = res.data?.data || res.data
+    if (data?.messages?.length) {
+      const earlier = mergeHistory(data.messages, data.tool_calls || [])
+      // 头部插入后由 MessageList 按锚点还原视口（单写者），此处不碰 DOM
+      items.value = [...earlier, ...items.value]
+      earliestCursor.value = data.cursor || ''
+      hasMore.value = !!data.has_more
+    } else {
+      hasMore.value = false
+    }
+  } catch {
+    hasMore.value = false
+  } finally {
+    loadingEarlier.value = false
+  }
+}
+
+async function deleteSession(id: string) {
+  try { await api.delete(`/v1/conversations/${id}`) } catch { /* 保留本地删除 */ }
+  sessions.value = sessions.value.filter(s => s.id !== id); persistSessions()
+  if (activeSessionId.value === id) {
+    activeSessionId.value = ''; items.value = []
+    if (sessions.value.length > 0) await switchSession(sessions.value[0].id)
+  }
+}
+
+function requestDelete(id: string) {
+  const s = sessions.value.find(x => x.id === id)
+  Modal.confirm({
+    title: t('删除对话'),
+    content: `确定删除「${s?.title || t('新对话')}」？此操作不可恢复。`,
+    okText: t('删除'),
+    okButtonProps: { danger: true },
+    cancelText: t('取消'),
+    onOk: () => deleteSession(id),
+  })
+}
+
+// ── 重命名（deepseek session rename dialog：Modal + 行内输入框） ──
+const renameTarget = ref<ChatSession | null>(null)
+const renameDraft = ref('')
+const renaming = ref(false)
+
+function openRename(id: string, currentTitle: string) {
+  const s = sessions.value.find(x => x.id === id)
+  if (!s) return
+  renameTarget.value = s
+  renameDraft.value = currentTitle
+}
+
+async function confirmRename() {
+  const target = renameTarget.value
+  const title = renameDraft.value.trim()
+  if (!title || !target) return
+  renaming.value = true
+  try {
+    await updateConversation(target.id, { title, llm_config: buildLlmConfig() } as any)
+    const s = sessions.value.find(x => x.id === target.id)
+    if (s) s.title = title
+    persistSessions()
+    message.success(t('已重命名'))
+    renameTarget.value = null
+  } catch (e: any) {
+    message.error(t('重命名失败') + (e?.response?.data?.error || e?.message || t('网络错误')))
+  } finally {
+    renaming.value = false
+  }
+}
+
+// ── 置顶（列表排序：pinned DESC + updated_at DESC） ──
+function sortSessions() {
+  sessions.value = [...sessions.value].sort((a, b) => {
+    if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1
+    return new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime()
+  })
+}
+
+async function togglePin(id: string, pinned: boolean) {
+  const s = sessions.value.find(x => x.id === id)
+  if (!s) return
+  const prev = s.pinned
+  s.pinned = pinned
+  sortSessions(); persistSessions()
+  try {
+    await updateConversation(id, { pinned, llm_config: buildLlmConfig() } as any)
+  } catch {
+    s.pinned = prev
+    sortSessions(); persistSessions()
+    message.error(t('置顶操作失败'))
+  }
+}
+
+// 设置会话标签（DB 持久化：写 sessions.tag；失败回滚本地状态）
+// 注意：旧实现只写 localStorage，而 loadSessions 每次都用 API 数据覆盖 sessions 数组，
+// 刷新后标签必然丢失 —— 故必须落库。
+async function setSessionTag(id: string, tag: string) {
+  const s = sessions.value.find(x => x.id === id)
+  if (!s) return
+  const prev = s.tag
+  s.tag = tag || undefined
+  sortSessions(); persistSessions()
+  try {
+    // 空串表示清除标签（后端 NULLIF 写 NULL）
+    await updateConversation(id, { tag: tag || '' })
+    message.success(tag ? `已设置标签：${tag}` : t('已清除标签'))
+  } catch {
+    s.tag = prev
+    sortSessions(); persistSessions()
+    message.error(t('标签保存失败'))
+  }
+}
+
+// ── 分享（chat.deepseek.com/share/{id} 风格：选消息 → 生成链接 → 可取消） ──
+const shareOpen = ref(false)
+const shareTarget = ref<ChatSession | null>(null)
+const shareInfo = ref<ShareInfo | null>(null)
+const shareLoading = ref(false)
+const shareRevoking = ref(false)
+const shareError = ref('')
+const shareMessageIds = ref<string[]>([])
+
+const isGuest = computed(() => !authStore.user)
+
+// 分享候选：会话中所有文本消息（用户可勾选；工具调用/思考块不分享）
+const shareCandidates = computed(() => items.value
+  .filter((it): it is Extract<ChatItem, { kind: 'text' }> =>
+    it.kind === 'text' && (it.role === 'user' || it.role === 'assistant') && !!it.id)
+  .map(it => ({
+    id: it.id as string,
+    role: it.role,
+    preview: (it.content || '').replace(/\s+/g, ' ').trim().slice(0, 56),
+  })))
+
+async function openShare(id: string) {
+  const s = sessions.value.find(x => x.id === id)
+  if (!s) return
+  if (id !== activeSessionId.value) {
+    await switchSession(id)
+  }
+  shareTarget.value = s
+  shareInfo.value = null
+  shareError.value = ''
+  shareMessageIds.value = shareCandidates.value.map(c => c.id)
+  if (!isGuest.value) {
+    try { shareInfo.value = await getActiveShare(s.id) } catch { /* 无活跃分享 */ }
+  }
+  shareOpen.value = true
+}
+
+function toggleShareMessage(id: string) {
+  const i = shareMessageIds.value.indexOf(id)
+  if (i >= 0) shareMessageIds.value.splice(i, 1)
+  else shareMessageIds.value.push(id)
+}
+
+async function generateShare() {
+  if (!shareTarget.value) return
+  if (shareMessageIds.value.length === 0) { message.warning('请至少选择一条要分享的消息'); return }
+  shareLoading.value = true
+  shareError.value = ''
+  try {
+    shareInfo.value = await createShare(shareTarget.value.id, shareMessageIds.value)
+  } catch (e: any) {
+    shareError.value = e?.response?.data?.error || '生成分享链接失败'
+  } finally {
+    shareLoading.value = false
+  }
+}
+
+async function revokeCurrentShare() {
+  if (!shareTarget.value || !shareInfo.value) return
+  shareRevoking.value = true
+  try {
+    await revokeShare(shareTarget.value.id)
+    shareInfo.value = null
+    message.success(t('分享已取消，链接已失效'))
+  } catch {
+    message.error(t('取消分享失败'))
+  } finally {
+    shareRevoking.value = false
+  }
+}
+
+function shareUrl(): string {
+  return `${window.location.origin}/share/${shareInfo.value?.share_id || ''}`
+}
+
+async function copyShareLink() {
+  try {
+    await navigator.clipboard.writeText(shareUrl())
+    message.success(t('链接已复制'))
+  } catch {
+    message.error(t('复制失败'))
+  }
+}
+
+// ── SSE 编排：事件 → ChatItem ──
+// 流式缓冲：累加 assistant 原始文本后整体重算（让 chunk 中的 [thinking] 标签正确配对）
+let streamBuf = ''
+let streamTextId = ''
+let streamReasonId = ''
+
+function resetStreamState() {
+  streamBuf = ''
+  streamTextId = ''
+  streamReasonId = ''
+}
+
+function appendUserText(text: string, attachments?: ChatAttachment[]) {
+  items.value.push({ kind: 'text', role: 'user', content: text, id: genItemId(), attachments })
+}
+
+// 性能/正确性：稳定 id（虚拟列表 key + 流式定位，loadEarlier 头部插入不错位）
+let itemIdSeq = 0
+function genItemId() {
+  return `msg_${Date.now().toString(36)}_${itemIdSeq++}`
+}
+
+function onTextChunk(text: string) {
+  streamBuf += text
+  // 引擎按 ~80 字分段下发 "[thinking]片段[/thinking]"，用 loose 状态机解析：
+  // 多段思考全部归 reasoning，正文不再残留 [/thinking][thinking] 标签。
+  const { reasoning, body } = splitThinking(streamBuf, { loose: true })
+  if (reasoning) {
+    const existing = items.value.find(it => it.id === streamReasonId)
+    if (existing?.kind === 'reasoning') {
+      existing.content = reasoning
+    } else {
+      const id = genItemId()
+      streamReasonId = id
+      items.value.push({ kind: 'reasoning', content: reasoning, streaming: true, id })
+    }
+  }
+  if (body) {
+    const existing = items.value.find(it => it.id === streamTextId)
+    if (existing?.kind === 'text' && existing.role === 'assistant') {
+      existing.content = body
+    } else {
+      const id = genItemId()
+      streamTextId = id
+      items.value.push({ kind: 'text', role: 'assistant', content: body, streaming: true, id })
+    }
+  }
+}
+
+function flushStreamingFlags() {
+  for (const it of items.value) {
+    if (it.kind === 'text' && it.streaming) it.streaming = false
+    if (it.kind === 'reasoning' && it.streaming) it.streaming = false
+    if (it.kind === 'tool_call' && it.status === 'running') it.status = 'done'
+  }
+  resetStreamState()
+}
+
+function onSSEMessage(raw: any) {
+  const type = raw?.type
+  const d = raw?.data || {}
+  if (type === 'text') {
+    const text = d?.content ?? raw?.content ?? ''
+    if (!text) return
+    onTextChunk(text)
+  } else if (type === 'tool_call') {
+    items.value.push({
+      kind: 'tool_call', id: d?.id ?? String(Date.now()), name: d?.name ?? 'tool',
+      arguments: d?.arguments ?? '', status: 'running',
+    })
+  } else if (type === 'tool_result') {
+    const callId = d?.tool_call_id ?? d?.id ?? ''
+    const call = items.value.find(it => it.kind === 'tool_call' && it.id === callId)
+    if (call && call.kind === 'tool_call') call.status = 'done'
+    const content = d?.content ?? d?.result ?? ''
+    if (content) {
+      items.value.push({
+        kind: 'tool_result', toolCallId: callId, id: `${callId}:res`,
+        content: typeof content === 'string' ? content : JSON.stringify(content),
+        isError: !!d?.error,
+      })
+    }
+  } else if (type === 'done') {
+    flushStreamingFlags()
+    loading.value = false
+    stopTurnTimer()
+    activeSSE?.close(); activeSSE = null
+    currentTraceId.value = d?.trace_id || ''
+    const doneMeta = normalizeMeta(d?.metadata)
+    if (doneMeta && Object.keys(doneMeta).length && streamTextId) {
+      const streamItem = items.value.find(x => x.id === streamTextId)
+      if (streamItem?.kind === 'text' && streamItem.role === 'assistant') {
+        ;(streamItem as any).metadata = { ...((streamItem as any).metadata || {}), ...doneMeta }
+      }
+    }
+    const it = d?.input_tokens ?? 0
+    const ot = d?.output_tokens ?? 0
+    if (it || ot) {
+      items.value.push({
+        kind: 'turn_stats', inputTokens: it, outputTokens: ot,
+        durationSec: turnElapsed.value,
+      })
+    }
+  } else if (type === 'approval') {
+    const callId = d?.id ?? d?.tool_call_id ?? String(Date.now())
+    pendingApprovals.value.push({
+      id: callId,
+      toolName: d?.name ?? 'tool',
+      arguments: d?.arguments ?? '',
+      // 倒计时：与后端 _await_approval 的 300s 超时对齐（超时按拒绝处理）
+      expiresAt: Date.now() + APPROVAL_TIMEOUT_MS,
+    } as PendingApproval)
+    ensureApprovalTimer()
+  } else if (type === 'ask') {
+    // 后端 ask_user 工具在等答案：卡片按 tool_call_id 回填
+    pendingQuestions.value.push({
+      id: d?.id ?? d?.tool_call_id ?? String(Date.now()),
+      question: d?.question ?? d?.content ?? '需要你的确认',
+      options: Array.isArray(d?.options) ? d.options.map((option: unknown) => String(option)) : [],
+      allowFreeText: d?.allow_free_text !== false,
+    })
+  } else if (type === 'guardrail_blocked') {
+    flushStreamingFlags()
+    loading.value = false
+    stopTurnTimer()
+    activeSSE?.close(); activeSSE = null
+    message.warning(d?.content || t('请求被安全策略拦截'))
+  } else if (type === 'error') {
+    flushStreamingFlags()
+    loading.value = false
+    stopTurnTimer()
+    activeSSE?.close(); activeSSE = null
+    message.error(d?.content || d?.error || t('请求失败'))
+  }
+}
+
+async function sendMessage(text: string, attachments?: ChatAttachment[]) {
+  // 互联互通：统一任务模式 → POST /v1/chat/submit（与 SSE 流式并列的新路径）
+  if (unifiedMode.value && unifiedSessionId.value) {
+    await sendUnified(text, attachments)
+    return
+  }
+  loading.value = true
+  startTurnTimer()
+  resetStreamState()
+  connectionLost.value = false
+  appendUserText(text, attachments)
+  const userItemId = items.value[items.value.length - 1]?.id
+  const sessionId = activeSessionId.value || crypto.randomUUID()
+  currentTraceId.value = ''
+  try {
+    if (activeSSE) { activeSSE.close(); activeSSE = null }
+    activeSSE = createSSEConnection(
+      sessionId,
+      onSSEMessage,
+      () => {
+        loading.value = false
+        stopTurnTimer()
+        connectionLost.value = true
+        activeSSE?.close(); activeSSE = null
+        markMessageFailed(userItemId, '连接已断开')
+      },
+      {
+        // 携带上一连接的最后事件 id：服务端按 last_event_id 从缓冲流补发断线缺口
+        initialLastEventId: sseLastIdBySession.get(sessionId) || '',
+        // 单轮流式进行中断线时交由浏览器原生自动重连（重连自动带 Last-Event-ID 头，无感续传）
+        autoReconnect: true,
+        onLastEventId: (id) => { sseLastIdBySession.set(sessionId, id) },
+      },
+    )
+    const body: any = { content: text, session_id: sessionId, llm_config: buildLlmConfig() }
+    const ctx = buildContext()
+    if (ctx) body.context = ctx
+    const resolvedAtts = await resolveAttachmentUrls(attachments)
+    if (resolvedAtts.length) {
+      body.attachments = resolvedAtts.map(a => ({ id: a.id, name: a.name, mime_type: a.mimeType, url: a.url, is_image: a.isImage }))
+    }
+    await api.post('/submit', body)
+    activeSessionId.value = sessionId
+  } catch (e: any) {
+    if (activeSSE) { activeSSE.close(); activeSSE = null }
+    loading.value = false
+    stopTurnTimer()
+    flushStreamingFlags()
+    const reason = describeApiError(e)
+    markMessageFailed(userItemId, reason)
+    message.error(t('发送失败：') + reason)
+  }
+}
+
+// ── 失败消息标记 ──
+function markMessageFailed(itemId: string | undefined, errorMsg: string) {
+  if (!itemId) return
+  const it = items.value.find(i => i.id === itemId)
+  if (it && it.kind === 'text') {
+    it.error = true
+    it.errorMsg = errorMsg
+  }
+}
+
+// ── 消息重试/重新生成 ──
+/** 删除指定 itemId 及其后所有消息，返回被删除的用户消息文本（如有） */
+function truncateFrom(itemId: string): { text?: string; attachments?: ChatAttachment[] } {
+  const idx = items.value.findIndex(i => i.id === itemId)
+  if (idx < 0) return {}
+  const removed = items.value.slice(idx)
+  items.value = items.value.slice(0, idx)
+  const userMsg = removed.find(i => i.kind === 'text' && i.role === 'user') as any
+  return userMsg ? { text: userMsg.content, attachments: userMsg.attachments } : {}
+}
+
+/** 指定消息之后还有多少条（不含自身）：重发会连带删除，先让用户知道代价 */
+function messagesAfter(itemId: string): number {
+  return countItemsAfter(items.value, itemId)
+}
+
+/**
+ * 删除类操作前的确认。
+ *
+ * `truncateFrom` 是**不可逆**的（后续消息直接从前端状态里消失，后端也没有回滚接口），
+ * 而「重发 / 重新生成」是消息操作栏里的高频按钮 —— 误点一次就丢掉整段后续内容。
+ * 代价为 0 时（消息已在末尾）不打扰。
+ */
+function confirmDestructive(removeCount: number, action: string, run: () => void) {
+  if (removeCount <= 0) {
+    run()
+    return
+  }
+  Modal.confirm({
+    title: `这会删除后面的 ${removeCount} 条消息`,
+    content: `${action}需要截断到这条消息，其后 ${removeCount} 条消息（含助手回复）会被删除，且无法恢复。`,
+    okText: t('删除并继续'),
+    okType: 'danger',
+    cancelText: t('取消'),
+    onOk: () => { run() },
+  })
+}
+
+/** 用户消息编辑后重发：删除该消息及之后所有，用新文本重发 */
+function retryFromUserMessage(itemId: string, newText: string) {
+  confirmDestructive(messagesAfter(itemId), '重发', () => {
+    truncateFrom(itemId)
+    sendMessage(newText)
+  })
+}
+
+/** 助手消息重新生成：删除该消息及之后所有，取上一条用户消息重发 */
+function regenerateAssistant(itemId: string) {
+  const idx = items.value.findIndex(i => i.id === itemId)
+  if (idx < 0) return
+  let userMsg: any = null
+  for (let i = idx - 1; i >= 0; i--) {
+    const it = items.value[i]
+    if (it.kind === 'text' && it.role === 'user') { userMsg = it; break }
+  }
+  if (!userMsg) {
+    message.warning(t('未找到对应的用户消息，无法重新生成'))
+    return
+  }
+  confirmDestructive(messagesAfter(itemId), '重新生成', () => {
+    truncateFrom(itemId)
+    sendMessage(userMsg.content, userMsg.attachments)
+  })
+}
+
+/** 失败消息重试：清除错误状态，用原文本重发 */
+function retryFailedMessage(itemId: string) {
+  const idx = items.value.findIndex(i => i.id === itemId)
+  if (idx < 0) return
+  const it = items.value[idx]
+  if (it.kind !== 'text') return
+  const text = it.content
+  const attachments = it.attachments
+  confirmDestructive(messagesAfter(itemId), '重试', () => {
+    truncateFrom(itemId)
+    sendMessage(text, attachments)
+  })
+}
+
+function stopGeneration() {
+  stopTurnTimer()
+  if (activeSSE) { activeSSE.close(); activeSSE = null }
+  loading.value = false
+  flushStreamingFlags()
+  const last = items.value[items.value.length - 1]
+  if (last && last.kind === 'text' && last.role === 'assistant') {
+    last.stopped = true
+  }
+}
+
+// 继续生成（停止后）
+function continueGeneration() {
+  const last = items.value[items.value.length - 1]
+  if (last && last.kind === 'text' && last.role === 'assistant' && last.stopped) {
+    regenerateAssistant(last.id!)
+  }
+}
+</script>
+
+<template>
+  <div class="chat-layout">
+    <div class="chat-main">
+      <div
+        v-if="connectionLost"
+        class="connection-banner"
+      >
+        {{ isOnline ? '与服务器的连接已断开，正在尝试重连...' : '网络已断开，请检查网络连接' }}
+      </div>
+      <div class="chat-body">
+        <!-- 内容区工具条 -->
+        <div class="chat-toolbar">
+          <div
+            class="toolbar-side"
+            aria-hidden="true"
+          />
+          <div class="toolbar-center">
+            <span class="toolbar-title">{{ unifiedMode ? '统一任务' : (activeSession?.title || 'Chiron') }}</span>
+            <span class="toolbar-mode">{{ unifiedMode ? (unifiedSubmitMode || 'auto') : (modeOptions.find(o => o.value === mode)?.label || '常规') }}</span>
+          </div>
+          <div class="toolbar-side toolbar-actions">
+            <Button
+              type="text"
+              size="small"
+              class="toolbar-btn"
+              :class="{ active: panelOpen && panelView === 'sessions' }"
+              :title="panelOpen && panelView === 'sessions' ? '收起会话列表' : '会话历史'"
+              @click="openPanel('sessions')"
+            >
+              <template #icon>
+                <MenuOutlined />
+              </template>
+              <span class="toolbar-label">{{ $t('会话') }}</span>
+            </Button>
+            <Button
+              type="text"
+              size="small"
+              class="toolbar-btn"
+              :class="{ active: panelOpen && panelView === 'trajectory' }"
+              :title="panelOpen && panelView === 'trajectory' ? '收起轨迹' : '查看历史提问'"
+              @click="openPanel('trajectory')"
+            >
+              <template #icon>
+                <HistoryOutlined />
+              </template>
+              <span class="toolbar-label">{{ $t('轨迹') }}</span>
+            </Button>
+            <Button
+              type="text"
+              size="small"
+              class="toolbar-btn"
+              :class="{ active: searchOpen }"
+              :title="searchOpen ? '关闭搜索' : '在本会话中搜索（正文与思考）'"
+              @click="searchOpen ? closeSearch() : openSearch()"
+            >
+              <template #icon>
+                <SearchOutlined />
+              </template>
+              <span class="toolbar-label">{{ $t('搜索') }}</span>
+            </Button>
+            <Dropdown
+              :menu="{ items: toolbarMenuItems, onClick: onToolbarMenu }"
+              :trigger="['click']"
+              placement="bottomRight"
+            >
+              <Button
+                type="text"
+                size="small"
+                class="toolbar-btn"
+                :title="$t('更多操作')"
+              >
+                <template #icon>
+                  <MoreOutlined />
+                </template>
+              </Button>
+            </Dropdown>
+          </div>
+        </div>
+
+        <!-- 会话内检索条：Enter/↓ 下一个、Shift+Enter/↑ 上一个、Esc 关闭 -->
+        <div
+          v-if="searchOpen"
+          class="chat-search"
+        >
+          <SearchOutlined class="chat-search-icon" />
+          <input
+            ref="searchInputRef"
+            v-model="searchQuery"
+            class="chat-search-input"
+            type="text"
+            :placeholder="$t('在本会话中搜索正文与思考（Enter 下一个，Esc 关闭）')"
+            @keydown.enter.exact.prevent="gotoMatch(1)"
+            @keydown.enter.shift.prevent="gotoMatch(-1)"
+            @keydown.esc.prevent="closeSearch"
+          >
+          <span class="chat-search-count">
+            {{ searchQuery.trim() ? (searchMatches.length ? `${searchCursor + 1} / ${searchMatches.length}` : '无匹配') : '' }}
+          </span>
+          <div class="chat-search-actions">
+            <button
+              class="chat-search-btn"
+              type="button"
+              :title="$t('上一个')"
+              :disabled="!searchMatches.length"
+              @click="gotoMatch(-1)"
+            >
+              ↑
+            </button>
+            <button
+              class="chat-search-btn"
+              type="button"
+              :title="$t('下一个')"
+              :disabled="!searchMatches.length"
+              @click="gotoMatch(1)"
+            >
+              ↓
+            </button>
+            <button
+              class="chat-search-btn"
+              type="button"
+              :title="$t('关闭')"
+              @click="closeSearch"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        <!-- 互联互通：错误提示条（query.error） -->
+        <div
+          v-if="errorBanner"
+          class="unified-error-banner"
+        >
+          <span class="ueb-text">{{ errorBanner }}</span>
+          <CloseOutlined
+            class="ueb-close"
+            :title="$t('关闭')"
+            @click="errorBanner = ''"
+          />
+        </div>
+
+        <!-- 互联互通：统一任务模式 -->
+        <template v-if="unifiedMode">
+          <div class="unified-bar">
+            <span
+              class="ub-badge"
+              :class="{ running: loading, done: unifiedJustFinished }"
+            >
+              {{ loading ? '编排中' : unifiedJustFinished ? '完成' : '统一任务' }}
+            </span>
+            <span class="ub-mode">{{ unifiedSubmitMode || 'auto' }}</span>
+            <span class="ub-spacer" />
+            <button
+              type="button"
+              class="ub-btn"
+              :disabled="!items.length"
+              @click="clearUnifiedMessages"
+            >
+              {{ $t('清空') }}
+            </button>
+            <button
+              type="button"
+              class="ub-btn exit"
+              :title="$t('退出统一任务模式')"
+              @click="exitUnifiedMode"
+            >
+              {{ $t('退出') }}
+            </button>
+          </div>
+          <div
+            v-if="loading"
+            class="unified-exec-hint"
+          >
+            <span class="ueh-dot" />{{ $t('正在编排/执行子任务...') }}<template v-if="turnElapsed >= 2">
+              &nbsp;·&nbsp;{{ turnElapsed }}s
+            </template>
+          </div>
+          <div
+            v-if="!items.length && !loading"
+            class="unified-empty"
+          >
+            {{ $t('统一任务会话已就绪，直接发送消息即可继续追问') }}
+          </div>
+          <div class="unified-list">
+            <template
+              v-for="(it, i) in items"
+              :key="it.id ?? i"
+            >
+              <MessageItem
+                v-if="it.kind === 'text' || it.kind === 'reasoning'"
+                :item="it"
+                @retry-from="retryFromUserMessage"
+                @regenerate="regenerateAssistant"
+                @continue="continueGeneration"
+                @retry-failed="retryFailedMessage"
+              />
+              <div
+                v-else-if="(it as any).kind === 'kb_hits'"
+                class="kb-hits-tag"
+              >
+                <span class="kb-hits-text">引用了知识库（×{{ (it as any).count || 1 }}）</span>
+                <a
+                  v-if="(it as any).kb_id"
+                  class="kb-hits-link"
+                  href="#"
+                  :title="$t('查看引用的知识库')"
+                  @click.prevent="openKb((it as any).kb_id)"
+                >{{ $t('查看知识库') }}</a>
+              </div>
+            </template>
+          </div>
+          <CallChainTimeline
+            v-if="currentTraceId && !loading"
+            :trace-id="currentTraceId"
+            :tenant-id="authStore.user?.tenant_id || ''"
+          />
+        </template>
+
+        <!-- 原有 SSE 流式模式 -->
+        <ChatEmptyHero
+          v-else-if="items.length === 0 && !loading"
+          @suggest="sendMessage"
+        />
+        <template v-else>
+          <div
+            v-if="loading"
+            class="turn-status"
+          >
+            {{ $t('思考中') }}<template v-if="turnElapsed >= 2">
+              &nbsp;·&nbsp;{{ turnElapsed }}s
+            </template>
+          </div>
+          <MessageList
+            :items="items"
+            :loading="loading"
+            :initial-loading="initialLoading"
+            :focus-index="trajectoryFocus"
+            :focus-token="trajectoryToken"
+            :has-more="hasMore"
+            :loading-earlier="loadingEarlier"
+            :session-key="activeSessionId"
+            @load-earlier="loadEarlier"
+            @quote-text="onQuoteText"
+            @retry-from="retryFromUserMessage"
+            @regenerate="regenerateAssistant"
+            @continue="continueGeneration"
+            @retry-failed="retryFailedMessage"
+          />
+          <CallChainTimeline
+            v-if="currentTraceId && !loading"
+            :trace-id="currentTraceId"
+            :tenant-id="authStore.user?.tenant_id || ''"
+          />
+        </template>
+      </div>
+
+      <!-- 工具授权模式（ask/auto/yolo）：与「对话模式」(normal/minimal/ptc/creative) 是
+           两个不同维度 —— 本项控制工具执行是否需要用户确认，故独立成行不与之混放 -->
+      <div class="tools-mode-bar">
+        <span class="tools-mode-label">{{ $t('工具授权') }}</span>
+        <a-segmented
+          :value="toolsMode"
+          :options="toolsModeOptions"
+          size="small"
+          @change="onToolsModeChange"
+        />
+        <span class="tools-mode-hint">{{ $t('询问=写类工具需确认 · 自动=仅危险工具 · 全自动=跳过确认') }}</span>
+      </div>
+
+      <div
+        v-if="pendingApprovals.length"
+        class="approval-zone"
+      >
+        <div
+          v-for="a in pendingApprovals"
+          :key="a.id"
+          class="approval-card"
+        >
+          <div class="approval-info">
+            <span class="approval-tag">{{ $t('工具确认') }}</span>
+            <span class="approval-name">{{ a.toolName }}</span>
+            <span
+              v-if="approvalRemain(a) > 0"
+              class="approval-countdown"
+            >{{ approvalRemain(a) }}s 后自动拒绝</span>
+          </div>
+          <div class="approval-args">
+            {{ a.arguments }}
+          </div>
+          <div class="approval-actions">
+            <button
+              class="approval-btn danger"
+              type="button"
+              @click="resolveApproval(a, false)"
+            >
+              {{ $t('拒绝') }}
+            </button>
+            <button
+              class="approval-btn allow"
+              type="button"
+              @click="resolveApproval(a, true)"
+            >
+              {{ $t('允许执行') }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div
+        v-if="pendingQuestions.length"
+        class="ask-zone"
+      >
+        <AskCard
+          v-for="q in pendingQuestions"
+          :key="q.id"
+          :question="q.question"
+          :options="q.options"
+          :allow-free-text="q.allowFreeText"
+          @answer="(value: string) => answerQuestion(q, value)"
+        />
+      </div>
+
+      <ChatInput
+        ref="chatInputRef"
+        :loading="loading"
+        :mode="mode"
+        :mode-options="modeOptions"
+        :model="llmModel"
+        :session-id="unifiedMode ? unifiedSessionId : activeSessionId"
+        @send="sendMessage"
+        @stop="stopGeneration"
+        @update:mode="onModeChange"
+        @model-change="onModelChange"
+        @command="onSlashCommand"
+        @open-panel="openContextPanel"
+      />
+
+      <ChatStatusBar
+        :model="llmModel"
+        :stats="lastTurnStats"
+        :context-used="lastTurnStats?.inputTokens ?? null"
+        :context-limit="contextWindow"
+        :online="isOnline && !connectionLost"
+      />
+
+      <ChatDisplaySettings v-model:open="displaySettingsOpen" />
+      <SaveToKnowledgeDialog
+        v-model:open="saveToKbOpen"
+        :content="sessionMarkdown"
+        :default-title="activeSession?.title || '对话记录'"
+      />
+      <SaveToMemoryDialog
+        v-model:open="saveToMemoryOpen"
+        :content="sessionMarkdown"
+        :default-key="activeSession?.title || ''"
+      />
+
+      <!-- 存为 Agent：名字由用户确认（会话正文作为人格 system_prompt） -->
+      <Modal
+        :open="saveAgentOpen"
+        :title="$t('存为 Agent')"
+        :confirm-loading="savingAgent"
+        :ok-text="$t('创建')"
+        :cancel-text="$t('取消')"
+        @ok="saveAsAgent"
+        @cancel="saveAgentOpen = false"
+      >
+        <div class="save-agent-form">
+          <label class="save-agent-label">{{ $t('名称') }}</label>
+          <Input
+            v-model:value="agentDraft.name"
+            :maxlength="60"
+            :placeholder="$t('如：技术评审')"
+          />
+          <label class="save-agent-label">{{ $t('描述') }}</label>
+          <Input
+            v-model:value="agentDraft.description"
+            :maxlength="200"
+            :placeholder="$t('一句话说明职责（可留空）')"
+          />
+          <p class="save-agent-hint">
+            会话正文（{{ agentDraft.system_prompt.length }} 字符）会作为它的系统提示词；
+            创建后可在 Agents 页继续调整提示词、工具与工作台绑定。
+          </p>
+        </div>
+      </Modal>
+    </div>
+
+    <!-- 侧面板 -->
+    <Transition name="overlay-fade">
+      <div
+        v-if="panelOpen"
+        class="panel-overlay"
+        @click="panelOpen = false"
+      />
+    </Transition>
+    <ChatSidePanel
+      :open="panelOpen"
+      :view="panelView"
+      :items="items"
+      :selected-index="trajectoryFocus"
+      :sessions="sessions"
+      :active-session-id="activeSessionId"
+      :user-name="authStore.user?.name"
+      :context-chips="contextChips"
+      @update:view="(v: 'trajectory' | 'sessions') => (panelView = v)"
+      @focus="onTrajectoryFocus"
+      @close="panelOpen = false"
+      @create="createSession"
+      @switch="switchSession"
+      @delete="requestDelete"
+      @rename="openRename"
+      @pin="togglePin"
+      @share="openShare"
+      @tag="setSessionTag"
+      @remove-context="removeContextChip"
+      @clear-context="clearContext"
+    />
+
+    <!-- 重命名对话框 -->
+    <Modal
+      :open="!!renameTarget"
+      :title="$t('重命名对话')"
+      :confirm-loading="renaming"
+      :ok-text="$t('保存')"
+      :cancel-text="$t('取消')"
+      @ok="confirmRename"
+      @cancel="renameTarget = null"
+    >
+      <Input
+        v-model:value="renameDraft"
+        :placeholder="$t('输入新的对话名称')"
+        :maxlength="120"
+        @press-enter="confirmRename"
+      />
+    </Modal>
+
+    <!-- 分享对话框 -->
+    <Modal
+      :open="shareOpen"
+      :title="`分享「${shareTarget?.title || '新对话'}」`"
+      :footer="null"
+      width="560px"
+      @cancel="shareOpen = false"
+    >
+      <Alert
+        type="warning"
+        show-icon
+        class="share-risk"
+        message="分享链接对任何获得链接的人可见"
+        :description="$t('请勿分享包含敏感或隐私信息的内容。你可以随时取消分享，取消后链接立即失效。')"
+      />
+
+      <template v-if="isGuest">
+        <div class="share-guest-tip">
+          {{ $t('登录后即可生成分享链接。') }}
+        </div>
+      </template>
+
+      <template v-else-if="shareInfo">
+        <div class="share-link-row">
+          <Input
+            :model-value="shareUrl()"
+            readonly
+            class="share-link-input"
+          >
+            <template #prefix>
+              <LinkOutlined />
+            </template>
+          </Input>
+          <Button
+            type="primary"
+            @click="copyShareLink"
+          >
+            <template #icon>
+              <CopyOutlined />
+            </template>
+            {{ $t('复制链接') }}
+          </Button>
+        </div>
+        <div class="share-manage">
+          <span class="share-manage-hint">{{ $t('链接已公开，任何获得链接的人均可查看。') }}</span>
+          <Button
+            danger
+            :loading="shareRevoking"
+            @click="revokeCurrentShare"
+          >
+            {{ $t('取消分享') }}
+          </Button>
+        </div>
+      </template>
+
+      <template v-else>
+        <div class="share-select-title">
+          选择要分享的消息（{{ shareMessageIds.length }}/{{ shareCandidates.length }}）
+        </div>
+        <div class="share-select-list">
+          <label
+            v-for="c in shareCandidates"
+            :key="c.id"
+            class="share-select-item"
+            @click.prevent="toggleShareMessage(c.id)"
+          >
+            <Checkbox
+              :checked="shareMessageIds.includes(c.id)"
+              @click.stop
+            />
+            <span
+              class="share-select-role"
+              :class="c.role"
+            >{{ c.role === 'user' ? '用户' : 'AI' }}</span>
+            <span class="share-select-preview">{{ c.preview || '（空消息）' }}</span>
+          </label>
+        </div>
+        <div
+          v-if="shareError"
+          class="share-error"
+        >
+          {{ shareError }}
+        </div>
+        <div class="share-actions">
+          <Button
+            type="primary"
+            :loading="shareLoading"
+            @click="generateShare"
+          >
+            {{ $t('生成分享链接') }}
+          </Button>
+        </div>
+      </template>
+    </Modal>
+  </div>
+</template>
+
+<style scoped>
+.chat-layout { position: relative; display: flex; height: 100%; background: var(--bg-page); overflow: hidden; }
+.chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.chat-body { position: relative; flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.chat-toolbar {
+  flex: none;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  height: 40px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border);
+}
+.toolbar-side { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.toolbar-center {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  justify-content: center;
+}
+.toolbar-title {
+  max-width: 40vw;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.toolbar-mode { flex: none; font-size: 11px; color: var(--text-tertiary); background: var(--bg-secondary); padding: 2px 8px; border-radius: var(--radius-full); }
+.toolbar-actions { justify-content: flex-end; gap: 2px; }
+.toolbar-btn { color: var(--text-secondary); border-radius: var(--radius-md); }
+.toolbar-btn:hover { color: var(--text-primary) !important; background: var(--bg-hover) !important; }
+.toolbar-btn.active { color: var(--primary); background: var(--primary-bg); }
+.toolbar-btn:not(:disabled):active { transform: scale(0.94); }
+
+/* 会话内检索条：贴在工具条下方，不占用消息区高度（无结果时只显示输入框） */
+.chat-search {
+  flex: none;
+  display: flex; align-items: center; gap: 8px;
+  margin: 8px 16px 0; padding: 5px 10px;
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  background: var(--bg-card);
+}
+.chat-search-icon { flex: none; font-size: 13px; color: var(--text-tertiary); }
+.chat-search-input { flex: 1; min-width: 0; border: none; background: none; outline: none; color: var(--text-primary); font-size: 13px; }
+.chat-search-input::placeholder { color: var(--text-quaternary); }
+.chat-search-count { flex: none; font-size: 11px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.chat-search-actions { flex: none; display: flex; gap: 2px; }
+.chat-search-btn { border: none; background: none; color: var(--text-secondary); font-size: 12px; line-height: 18px; padding: 2px 6px; border-radius: var(--radius-sm); cursor: pointer; }
+.chat-search-btn:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
+.chat-search-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.chat-search-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+@media (max-width: 576px) { .chat-search { margin: 6px 12px 0; } .chat-search-input { font-size: 12px; } }
+@media (max-width: 1024px) {
+  .chat-toolbar { padding: 0 10px; }
+  .toolbar-title { max-width: 32vw; }
+}
+@media (max-width: 768px) {
+  .chat-toolbar { padding: 0 8px; }
+  .toolbar-actions { gap: 0; }
+  .toolbar-btn.ant-btn { height: 36px; min-width: 36px; padding: 0 8px; }
+  .toolbar-label { display: none; }
+}
+@media (max-width: 576px) {
+  .chat-toolbar { padding: 0 6px; }
+  .toolbar-title { max-width: 24vw; font-size: 12px; }
+  .toolbar-mode { display: none; }
+  .approval-zone { padding: 0 12px 8px; }
+  .turn-status { margin: 8px auto 0; padding: 0 12px; }
+}
+.approval-zone { padding: 0 20px 8px; display: flex; flex-direction: column; gap: 8px; }
+/* 结构化提问卡片区：与审批卡同样贴输入区上方 */
+.ask-zone { padding: 0 20px 8px; display: flex; flex-direction: column; gap: 8px; }
+.approval-card { background: var(--bg-card); border: 1px solid var(--border); border-left: 3px solid var(--primary); border-radius: 10px; padding: 10px 14px; }
+/* 工具授权模式栏（与「对话模式」并列但语义独立的第二个维度） */
+.tools-mode-bar { display: flex; align-items: center; gap: 10px; padding: 6px 20px 0; flex-wrap: wrap; }
+.tools-mode-label { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.tools-mode-hint { font-size: 11px; color: var(--text-muted); }
+@media (max-width: 576px) { .tools-mode-bar { padding: 6px 12px 0; } .tools-mode-hint { display: none; } }
+.approval-countdown { margin-left: auto; font-size: 11px; color: var(--warning, #f59e0b); }
+.approval-info { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.approval-tag { font-size: 11px; color: var(--primary); background: var(--primary-bg); padding: 2px 8px; border-radius: 10px; }
+.approval-name { font-weight: 600; font-size: 13px; color: var(--text-primary); }
+.approval-args { font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); word-break: break-all; margin-bottom: 8px; }
+.approval-actions { display: flex; gap: 8px; }
+.approval-btn { border: none; border-radius: 8px; padding: 6px 16px; font-size: 13px; cursor: pointer; transition: transform 0.1s ease, opacity 0.15s ease, background 0.15s ease; }
+.approval-btn:active { transform: scale(0.97); }
+.approval-btn.allow { background: var(--primary); color: #fff; }
+.approval-btn.allow:hover { opacity: 0.9; }
+.approval-btn.danger { background: var(--bg-hover); color: var(--text-primary); }
+.approval-btn.danger:hover { background: var(--danger-bg, rgba(239,68,68,.12)); color: var(--danger, #ef4444); }
+.connection-banner {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  padding: 4px 12px; text-align: center;
+  font-size: 12px; line-height: 18px;
+  background: var(--error); color: #fff;
+}
+.share-risk { margin-bottom: 14px; }
+.share-guest-tip { padding: 20px 0; text-align: center; color: var(--text-secondary); font-size: 14px; }
+.share-link-row { display: flex; gap: 10px; margin-top: 14px; }
+.share-link-input { flex: 1; }
+.share-manage { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
+.share-manage-hint { font-size: 12px; color: var(--text-tertiary); }
+.share-select-title { font-size: 13px; font-weight: 600; color: var(--text-primary); margin: 14px 0 8px; }
+.share-select-list { display: flex; flex-direction: column; gap: 2px; max-height: 260px; overflow-y: auto; width: 100%; }
+.share-select-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 8px; border-radius: 8px; cursor: pointer;
+  transition: background 0.15s ease;
+}
+.share-select-item:hover { background: var(--bg-hover); }
+.share-select-role { flex: none; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 10px; }
+.share-select-role.user { color: var(--primary); background: var(--primary-bg); }
+.share-select-role.assistant { color: var(--text-secondary); background: var(--bg-secondary); }
+.share-select-preview { flex: 1; min-width: 0; font-size: 13px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.share-error { margin-top: 10px; font-size: 12px; color: var(--error); }
+.share-actions { display: flex; justify-content: flex-end; margin-top: 14px; }
+.turn-status {
+  align-self: flex-start; margin: 10px auto 0; max-width: min(var(--chat-content-width), 92%); padding: 0 24px;
+  height: 26px; display: inline-flex; align-items: center;
+  font-size: 13px; font-weight: 600; white-space: nowrap;
+  background: linear-gradient(90deg, var(--primary) 0%, var(--primary) 40%, var(--accent) 50%, var(--primary) 60%, var(--primary) 100%);
+  background-position: 100% 0; background-size: 250% 100%; background-clip: text; -webkit-background-clip: text;
+  color: transparent; -webkit-text-fill-color: transparent;
+  animation: turnStatusShimmer 1.8s linear infinite;
+  font-variant-numeric: tabular-nums;
+}
+@keyframes turnStatusShimmer { to { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .turn-status { background-position: 0 0; background-size: 100% 100%; animation: none; }
+}
+.panel-overlay {
+  position: fixed; inset: 0; z-index: 110;
+  background: rgba(10, 10, 12, 0.35);
+}
+@media (min-width: 1025px) { .panel-overlay { display: none; } }
+.overlay-fade-enter-active, .overlay-fade-leave-active { transition: opacity 0.2s ease; }
+.overlay-fade-enter-from, .overlay-fade-leave-to { opacity: 0; }
+
+.unified-error-banner {
+  flex: none; display: flex; align-items: center; gap: 8px;
+  margin: 8px 20px 0; padding: 8px 12px;
+  background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: 10px; color: var(--danger, #ef4444); font-size: 13px;
+}
+.ueb-text { flex: 1; min-width: 0; line-height: 1.5; }
+.ueb-close { flex: none; cursor: pointer; opacity: 0.7; font-size: 12px; }
+.ueb-close:hover { opacity: 1; }
+
+.unified-bar {
+  flex: none; display: flex; align-items: center; gap: 8px;
+  margin: 8px 20px 0; padding: 6px 10px;
+  border: 1px solid var(--border); border-radius: 10px;
+  background: var(--bg-card);
+}
+.ub-badge {
+  flex: none; display: inline-flex; align-items: center; gap: 6px;
+  padding: 1px 10px; border-radius: 10px;
+  background: var(--primary); color: #fff;
+  font-size: 11px; font-weight: 600; line-height: 18px;
+  transition: background 0.3s ease;
+}
+.ub-badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, 0.85); }
+.ub-badge.running::before {
+  animation: uehPulse 1.1s ease-in-out infinite;
+  box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.5);
+}
+.ub-badge.running { animation: uehPulse 1.1s ease-in-out infinite; }
+.ub-badge.done { background: var(--success); }
+.ub-badge.done::before { animation: none; }
+.ub-mode {
+  flex: none; font-size: 11px; color: var(--text-secondary);
+  background: var(--bg-secondary); padding: 1px 8px; border-radius: 10px; line-height: 18px;
+}
+.ub-spacer { flex: 1; }
+.ub-btn {
+  flex: none; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg-card); color: var(--text-secondary);
+  font-size: 11px; line-height: 18px; padding: 1px 10px; cursor: pointer;
+  transition: all 0.15s ease;
+}
+.ub-btn:focus-visible,
+.ueb-close:focus-visible,
+.approval-btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.ueb-close:focus-visible { border-radius: 4px; }
+.ub-btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+.ub-btn.exit:hover:not(:disabled) { border-color: var(--danger, #ef4444); color: var(--danger, #ef4444); }
+.ub-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.unified-exec-hint {
+  flex: none; display: inline-flex; align-items: center; gap: 6px;
+  align-self: center; margin: 10px auto 0;
+  font-size: 12px; color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.ueh-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--primary);
+  animation: uehPulse 1.2s ease-in-out infinite;
+}
+@keyframes uehPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) { .ueh-dot { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .ub-badge.running,
+  .ub-badge.running::before { animation: none; }
+  .ub-badge { transition: none; }
+}
+
+.unified-list { flex: 1; overflow-y: auto; padding: 12px 0 24px; scrollbar-width: thin; scrollbar-color: var(--text-disabled) transparent; }
+.unified-empty { padding: 40px 20px; text-align: center; color: var(--text-muted); font-size: 13px; }
+.kb-hits-tag {
+  display: flex; align-items: center;
+  max-width: min(var(--chat-content-width), 92%); margin: 2px auto 6px;
+  padding: 2px 10px; border-radius: 10px;
+  background: var(--primary-bg); color: var(--primary);
+  font-size: 11px; line-height: 18px;
+}
+.kb-hits-text { flex: 1; min-width: 0; }
+.kb-hits-link {
+  flex: none; margin-left: auto; padding-left: 12px;
+  color: var(--primary); font-weight: 600; white-space: nowrap;
+  text-decoration: none;
+}
+.kb-hits-link:hover { text-decoration: underline; }
+@media (max-width: 576px) {
+  .unified-error-banner { margin: 6px 12px 0; }
+  .unified-bar { margin: 6px 12px 0; }
+  .kb-hits-tag { max-width: 88%; }
+}
+
+/* ── 存为 Agent 弹窗 ── */
+.save-agent-form { display: flex; flex-direction: column; gap: 6px; }
+.save-agent-label { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.save-agent-hint { margin: 8px 0 0; font-size: 12px; line-height: 1.6; color: var(--text-secondary); }
+</style>

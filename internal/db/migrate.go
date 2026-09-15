@@ -1,0 +1,240 @@
+package db
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+
+	"github.com/athenavi/chiron/config"
+)
+
+// versionLock represents the data/version.lock file
+type versionLock struct {
+	DB string `json:"db"`
+}
+
+// versionLockPath returns the path to version.lock under the data directory.
+func versionLockPath() string {
+	return filepath.Join(config.GetDefaultDataDir(), "version.lock")
+}
+
+// alembicConfigPath returns the path to alembic.ini.
+// Can be overridden via ALEMBIC_CONFIG env var; defaults to project root.
+func alembicConfigPath() string {
+	if v := os.Getenv("ALEMBIC_CONFIG"); v != "" {
+		return v
+	}
+	return "alembic.ini"
+}
+
+// dotEnvPath returns the path to .env file in the project root.
+// Can be overridden via DOT_ENV_PATH env var.
+func dotEnvPath() string {
+	if v := os.Getenv("DOT_ENV_PATH"); v != "" {
+		return v
+	}
+	return ".env"
+}
+
+// getExpectedRevision reads the expected db revision from version.lock
+func getExpectedRevision() (string, error) {
+	data, err := os.ReadFile(versionLockPath())
+	if err != nil {
+		return "", err
+	}
+	var lock versionLock
+	if err := json.Unmarshal(data, &lock); err != nil {
+		return "", err
+	}
+	return lock.DB, nil
+}
+
+// getCurrentRevision runs "alembic current" to get the database's actual revision
+func getCurrentRevision(python string) (string, error) {
+	cmd := exec.Command(python, "-m", "alembic", "--config", alembicConfigPath(), "current")
+	cmd.Dir = "."
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("alembic current failed: %w: %s", err, string(output))
+	}
+	// Output format: "xxx (head)" - extract revision ID
+	trimmed := strings.TrimSpace(string(output))
+	parts := strings.Fields(trimmed)
+	if len(parts) == 0 {
+		return "", fmt.Errorf("alembic current returned empty output")
+	}
+	return parts[0], nil
+}
+
+// updateVersionLockDB updates version.lock with the given revision
+func updateVersionLockDB(revision string) error {
+	lock := versionLock{DB: revision}
+	data, err := json.MarshalIndent(lock, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(versionLockPath(), data, 0o644)
+}
+
+// listMigrationFiles returns a list of migration file names in the given directory
+func listMigrationFiles(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	var files []string
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".py") {
+			files = append(files, e.Name())
+		}
+	}
+	return files, nil
+}
+
+// findNewFile returns the first file in after that is not in before
+func findNewFile(before, after []string) string {
+	beforeSet := make(map[string]bool)
+	for _, f := range before {
+		beforeSet[f] = true
+	}
+	for _, f := range after {
+		if !beforeSet[f] {
+			return f
+		}
+	}
+	return ""
+}
+
+// isEmptyMigration checks if a migration file contains only empty upgrade/downgrade
+func isEmptyMigration(filePath string) (bool, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return false, err
+	}
+	// Simple heuristic: if the file does not contain "op." it's probably empty
+	// Better: check for "pass" in upgrade/downgrade functions
+	content := string(data)
+	// Look for typical empty migration patterns
+	if strings.Contains(content, "def upgrade():\n    pass") &&
+		strings.Contains(content, "def downgrade():\n    pass") {
+		return true, nil
+	}
+	// Also check if there are no operations
+	if !strings.Contains(content, "op.") {
+		return true, nil
+	}
+	return false, nil
+}
+
+// resolvePythonBinary 返回可用的 Python 解释器：
+// 依次尝试 CHIRON_PYTHON / PYTHON 环境变量，再尝试 python、python3。
+// 找不到时返回可操作的错误（应用镜像刻意不装 Python，见 requirements-migrate.txt）。
+func resolvePythonBinary() (string, error) {
+	candidates := []string{
+		os.Getenv("CHIRON_PYTHON"),
+		os.Getenv("PYTHON"),
+		"python",
+		"python3",
+	}
+	for _, c := range candidates {
+		if c == "" {
+			continue
+		}
+		if resolved, err := exec.LookPath(c); err == nil {
+			return resolved, nil
+		}
+	}
+	return "", errors.New(
+		"no Python interpreter found (tried CHIRON_PYTHON, PYTHON, python, python3): " +
+			"migrations need Python + alembic (`pip install -r requirements-migrate.txt`, " +
+			"then `alembic upgrade head` from the repository root). The application image " +
+			"intentionally ships without Python — run migrations as a separate release step",
+	)
+}
+
+// RunMigrations 执行 Alembic 数据库迁移（alembic upgrade head）
+// dsn 为 PostgreSQL 连接串，通过环境变量 DATABASE_DSN 传递给 Alembic
+func RunMigrations(dsn string) error {
+	// Normalize DSN: postgres:// -> postgresql:// for Alembic
+	dsn = strings.Replace(dsn, "postgres://", "postgresql://", 1)
+	os.Setenv("DATABASE_DSN", dsn)
+
+	// 前置检测（fail loud）：应用镜像（alpine）通常没有 python/alembic，旧实现会在此
+	// 静默失败（只 slog.Warn），造成"代码已升级、迁移未跑"。这里显式解析解释器与
+	// alembic.ini，缺失即返回可操作的错误，由调用方决定阻断或提示。
+	pythonBin, err := resolvePythonBinary()
+	if err != nil {
+		return err
+	}
+	if _, statErr := os.Stat(alembicConfigPath()); statErr != nil {
+		return fmt.Errorf(
+			"alembic config not found at %q: run migrations from the repository root "+
+				"or set ALEMBIC_CONFIG (see requirements-migrate.txt)",
+			alembicConfigPath(),
+		)
+	}
+
+	// Ensure APP_SECRET is written to .env for Alembic
+	// Preserve other configuration entries (e.g., DATABASE_DSN) in the file.
+	if appSecret := os.Getenv("APP_SECRET"); appSecret != "" {
+		var existingLines []string
+		if data, err := os.ReadFile(dotEnvPath()); err == nil {
+			lines := strings.Split(string(data), "\n")
+			for _, line := range lines {
+				// Skip old APP_SECRET line and comment header
+				if strings.HasPrefix(line, "APP_SECRET=") || line == "# Generated by install wizard" {
+					continue
+				}
+				if strings.TrimSpace(line) != "" {
+					existingLines = append(existingLines, line)
+				}
+			}
+		}
+
+		// Build new .env content
+		var content strings.Builder
+		content.WriteString("# Generated by install wizard\n")
+		content.WriteString(fmt.Sprintf("APP_SECRET=%s\n", appSecret))
+
+		// Append other existing configurations
+		for _, line := range existingLines {
+			content.WriteString(line + "\n")
+		}
+
+		if err := os.WriteFile(dotEnvPath(), []byte(content.String()), 0o600); err != nil {
+			return fmt.Errorf("failed to write .env: %w", err)
+		}
+	}
+
+	os.Setenv("PYTHONUTF8", "1")
+	// 解释器已由上面的 resolvePythonBinary() 前置检测确定（pythonBin）
+
+	// ── 迁移执行（多实例安全） ──
+	// 数据库 revision 以 alembic_version 表为唯一事实源；启动只执行幂等的
+	// `alembic upgrade head`。不再 autogenerate、不再依赖本地 version.lock：
+	// 多网关实例并发启动时以 PostgreSQL advisory lock 串行化，避免重复生成
+	// 迁移文件与并发 DDL。新表结构变更通过显式提交的 migration 文件交付。
+	const migrationLockKey = 819470606 // "CHRN"
+	if Pool != nil {
+		if _, err := Pool.Exec(context.Background(), "SELECT pg_advisory_lock($1)", migrationLockKey); err != nil {
+			return fmt.Errorf("acquire migration advisory lock: %w", err)
+		}
+		defer func() { _, _ = Pool.Exec(context.Background(), "SELECT pg_advisory_unlock($1)", migrationLockKey) }()
+	}
+
+	upgradeCmd := exec.Command(pythonBin, "-m", "alembic", "--config", alembicConfigPath(), "upgrade", "head")
+	upgradeCmd.Dir = "."
+	upgradeCmd.Stdout = os.Stdout
+	upgradeCmd.Stderr = os.Stderr
+
+	if err := upgradeCmd.Run(); err != nil {
+		return fmt.Errorf("alembic upgrade head failed: %w", err)
+	}
+	fmt.Printf("Migration completed successfully\n")
+	return nil
+}

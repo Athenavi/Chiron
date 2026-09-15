@@ -1,0 +1,350 @@
+"""MCP Client — connects to MCP servers over stdio, discovers and calls tools.
+
+Mirrors Go internal/mcp/client.go with multi-server support.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import ipaddress
+import json
+import logging
+import socket
+from dataclasses import dataclass, field
+from typing import Any, Optional
+
+import httpx
+
+# MCP protocol version
+MCP_PROTOCOL_VERSION = "2025-03-26"
+
+logger = logging.getLogger(__name__)
+
+
+def _is_private_ip(host: str) -> bool:
+    """Check if a host resolves to a private/reserved IP address (SSRF protection)."""
+    try:
+        addr = ipaddress.ip_address(host)
+        return addr.is_private or addr.is_loopback or addr.is_link_local
+    except ValueError:
+        pass
+    try:
+        addrinfos = socket.getaddrinfo(host, None, socket.AI_ADDRCONFIG)
+        for family, _, _, _, sockaddr in addrinfos:
+            ip_str = sockaddr[0] if family in (socket.AF_INET, socket.AF_INET6) else None
+            if ip_str:
+                try:
+                    addr = ipaddress.ip_address(ip_str)
+                    if addr.is_private or addr.is_loopback or addr.is_link_local:
+                        return True
+                except ValueError:
+                    continue
+    except (socket.gaierror, OSError):
+        pass
+    return False
+
+
+@dataclass
+class ServerDef:
+    """MCP server configuration."""
+
+    name: str
+    command: str
+    args: list[str] = field(default_factory=list)
+    env: dict[str, str] = field(default_factory=dict)
+    transport: str = "stdio"  # "stdio" | "http_sse"
+    url: str = ""  # HTTP SSE endpoint URL (used when transport="http_sse")
+
+
+@dataclass
+class MCPTool:
+    """A tool provided by an MCP server."""
+
+    name: str  # Namespaced: {server_name}_{tool_name}
+    description: str
+    input_schema: dict[str, Any]
+    server_name: str
+    local_name: str  # Original tool name on the server
+
+
+class HTTPSSEConnection:
+    """Connection to an MCP server over HTTP SSE transport."""
+
+    def __init__(self, url: str, name: str):
+        self.url = url.rstrip("/")
+        self.name = name
+        self._req_id = 0
+        self._lock = asyncio.Lock()
+        self._client = httpx.AsyncClient(timeout=30.0)
+        self._session_id: str | None = None
+
+        # P0 安全修复：SSRF 防护 — 检查 URL 主机构是否为私有地址
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        host = parsed.hostname
+        if host and _is_private_ip(host):
+            raise ValueError(
+                f"SSRF protection: connecting to private/restricted IP is forbidden "
+                f"(host={host}, server={name})"
+            )
+
+    async def send_jsonrpc(
+        self, method: str, params: Optional[dict] = None
+    ) -> dict[str, Any]:
+        """Send a JSON-RPC request via HTTP POST and read the response."""
+        self._req_id += 1
+        req = {
+            "jsonrpc": "2.0",
+            "id": self._req_id,
+            "method": method,
+            "params": params or {},
+        }
+        headers = {"Content-Type": "application/json"}
+        if self._session_id:
+            headers["Mcp-Session-Id"] = self._session_id
+
+        async with self._lock:
+            resp = await self._client.post(
+                f"{self.url}/messages",
+                json=req,
+                headers=headers,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+            # Extract session ID from SSE response headers
+            session_id = resp.headers.get("Mcp-Session-Id")
+            if session_id:
+                self._session_id = session_id
+
+        if "error" in data and data["error"]:
+            raise RuntimeError(f"MCP error: {data['error'].get('message', 'unknown')}")
+        return data.get("result", {})
+
+    async def close(self):
+        await self._client.aclose()
+
+
+class ServerConnection:
+    """Connection to a single MCP server process."""
+
+    def __init__(self, proc: asyncio.subprocess.Process, name: str):
+        self.proc = proc
+        self.name = name
+        self._req_id = 0
+        self._lock = asyncio.Lock()
+        # 异步读取 stderr 并记录到日志，避免 DEVNULL 丢弃错误信息
+        self._stderr_task = asyncio.ensure_future(self._read_stderr())
+
+    async def _read_stderr(self):
+        """异步读取 MCP 服务器 stderr 并记录到日志。"""
+        try:
+            async for line in self.proc.stderr:
+                if line.strip():
+                    logger.warning(
+                        "MCP stderr [%s]: %s", self.name, line.decode().rstrip()
+                    )
+        except Exception:
+            pass
+
+    async def send_jsonrpc(
+        self, method: str, params: Optional[dict] = None
+    ) -> dict[str, Any]:
+        """Send a JSON-RPC request and read the response."""
+        self._req_id += 1
+        req = {
+            "jsonrpc": "2.0",
+            "id": self._req_id,
+            "method": method,
+            "params": params,
+        }
+        req_line = json.dumps(req) + "\n"
+
+        async with self._lock:
+            self.proc.stdin.write(req_line.encode())
+            await self.proc.stdin.drain()
+
+            response_line = await asyncio.wait_for(
+                self.proc.stdout.readline(), timeout=30.0
+            )
+            if not response_line:
+                raise ConnectionError(f"No response from MCP server {self.name}")
+
+        resp = json.loads(response_line)
+        if "error" in resp and resp["error"]:
+            raise RuntimeError(f"MCP error: {resp['error'].get('message', 'unknown')}")
+        return resp.get("result", {})
+
+    async def close(self):
+        """Kill the server process."""
+        if self.proc and self.proc.returncode is None:
+            try:
+                self.proc.terminate()
+                await asyncio.wait_for(self.proc.wait(), timeout=5.0)
+            except (asyncio.TimeoutError, ProcessLookupError):
+                self.proc.kill()
+
+
+class MCPClient:
+    """Manages connections to multiple MCP servers and their tools."""
+
+    def __init__(self, servers: list[ServerDef]):
+        self._servers = servers
+        self._conns: dict[str, ServerConnection] = {}
+        self._tools: list[MCPTool] = []
+
+    async def start(self):
+        """Connect to all configured MCP servers and discover their tools."""
+        for server in self._servers:
+            try:
+                await self._connect_server(server)
+            except Exception as e:
+                logger.error("MCP connect %s failed: %s", server.name, e)
+                raise
+
+    async def _connect_server(self, server: ServerDef):
+        """Connect to a single MCP server and discover its tools."""
+        if server.transport == "http_sse":
+            await self._connect_http_sse(server)
+        elif server.transport == "stdio":
+            await self._connect_stdio(server)
+        else:
+            raise ValueError(f"Unsupported MCP transport: {server.transport}")
+
+    async def _connect_http_sse(self, server: ServerDef):
+        """Connect to an MCP server via HTTP SSE."""
+        if not server.url:
+            raise ValueError("HTTP SSE transport requires 'url' in ServerDef")
+        conn = HTTPSSEConnection(server.url, server.name)
+        self._conns[server.name] = conn
+
+        # Initialize
+        result = await conn.send_jsonrpc(
+            "initialize",
+            {
+                "protocolVersion": MCP_PROTOCOL_VERSION,
+                "clientInfo": {"name": "chiron-python", "version": "3.0.0"},
+                "capabilities": {},
+            },
+        )
+
+        # List tools
+        tools_result = await conn.send_jsonrpc("tools/list", None)
+        raw_tools = tools_result.get("tools", [])
+        self._register_tools(server, raw_tools)
+        logger.info("MCP server %s connected (HTTP SSE): %d tools", server.name, len(raw_tools))
+
+    async def _connect_stdio(self, server: ServerDef):
+        """Connect to an MCP server via stdio (subprocess)."""
+        # 安全修复（P0-S7）：仅允许 PLUGIN_COMMAND_ALLOWLIST 白名单内的命令被拉起
+        from app.tools.ssrf import command_allowed
+
+        if not command_allowed(server.command):
+            raise PermissionError(
+                f"MCP server command {server.command!r} not allowed: "
+                "set PLUGIN_COMMAND_ALLOWLIST (comma-separated basenames) to enable"
+            )
+        env = None
+        if server.env:
+            # 安全修复：使用 sandboxed_env 清理宿主环境变量，
+            # 仅传递基础 PATH/HOME 和 server.env 白名单覆盖，
+            # 防止 MCP 子进程读取 JWT_SECRET/INTERNAL_TOKEN 等敏感密钥
+            from app.tools.sandbox import sandboxed_env
+            env = {**sandboxed_env(), **server.env}
+
+        proc = await asyncio.create_subprocess_exec(
+            server.command,
+            *server.args,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=env,
+        )
+        conn = ServerConnection(proc, server.name)
+        self._conns[server.name] = conn
+
+        # Initialize
+        await conn.send_jsonrpc(
+            "initialize",
+            {
+                "protocolVersion": MCP_PROTOCOL_VERSION,
+                "clientInfo": {"name": "chiron-python", "version": "3.0.0"},
+            },
+        )
+
+        # List tools
+        result = await conn.send_jsonrpc("tools/list", None)
+        raw_tools = result.get("tools", [])
+        self._register_tools(server, raw_tools)
+        logger.info("MCP server %s connected (stdio): %d tools", server.name, len(raw_tools))
+
+    def _register_tools(self, server: ServerDef, raw_tools: list[dict]):
+        """Register tools from a server response."""
+        for i, t in enumerate(raw_tools):
+            tool = MCPTool(
+                name=f"{server.name}_{t.get('name', f'unnamed_{i}')}",
+                description=t.get("description", ""),
+                input_schema=t.get("inputSchema", {}),
+                server_name=server.name,
+                local_name=t.get("name", f"unnamed_{i}"),
+            )
+            self._tools.append(tool)
+            logger.info("MCP tool discovered: %s (%s)", tool.name, server.name)
+
+    @property
+    def tools(self) -> list[MCPTool]:
+        return self._tools
+
+    async def call_tool(
+        self, tool_name: str, arguments: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Call a tool on the appropriate MCP server."""
+        for server in self._servers:
+            prefix = f"{server.name}_"
+            if tool_name.startswith(prefix):
+                local_name = tool_name[len(prefix) :]
+                conn = self._conns.get(server.name)
+                if not conn:
+                    return {"error": f"MCP server {server.name} not connected"}
+                result = await conn.send_jsonrpc(
+                    "tools/call",
+                    {
+                        "name": local_name,
+                        "arguments": arguments,
+                    },
+                )
+                return result
+        return {"error": f"Tool {tool_name} not found on any MCP server"}
+
+    async def close(self):
+        """Shut down all MCP server connections."""
+        for name, conn in self._conns.items():
+            try:
+                await conn.close()
+            except Exception as e:
+                logger.warning("Error closing MCP server %s: %s", name, e)
+        self._conns.clear()
+
+
+async def load_mcp_config(config_path: str) -> list[ServerDef]:
+    """Load MCP server definitions from a JSON config file."""
+    from pathlib import Path
+
+    p = Path(config_path)
+    if not p.exists():
+        return []
+
+    data = json.loads(p.read_text(encoding="utf-8"))
+    servers = []
+    for s in data.get("mcp_servers", []):
+        servers.append(
+            ServerDef(
+                name=s["name"],
+                command=s["command"],
+                args=s.get("args", []),
+                env=s.get("env", {}),
+                transport=s.get("transport", "stdio"),
+                url=s.get("url", ""),
+            )
+        )
+    return servers
